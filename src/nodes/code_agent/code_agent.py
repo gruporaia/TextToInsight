@@ -7,8 +7,9 @@ O agente de código é responsável por:
 - Gerar código Python funcional
 """
 
-from ..state import EstadoTextToInsight
+# Vou remover esse arquivo, já que a geração será dividida entre a classificação, geração e inserção do código
 
+from ...state import EstadoTextToInsight
 
 def nos_nodo_agente_codigo(estado: EstadoTextToInsight) -> dict:
     """

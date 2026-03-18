@@ -14,7 +14,7 @@ Nós disponíveis:
 
 from .planner import nos_nodo_planejador
 from .schema import nos_nodo_esquema
-from .code_agent import nos_nodo_agente_codigo
+from .code_agent.code_agent import nos_nodo_agente_codigo
 from .sandbox import nos_nodo_sandbox
 from .critic import nos_nodo_critico
 

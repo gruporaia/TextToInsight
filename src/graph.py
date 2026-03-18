@@ -19,12 +19,19 @@ from .state import EstadoTextToInsight
 from .nodes import (
     nos_nodo_planejador,
     nos_nodo_esquema,
-    nos_nodo_agente_codigo,
     nos_nodo_sandbox,
     nos_nodo_critico,
 )
-from .routers import roteador_sandbox, roteador_planejador
 
+from .nodes.code_agent import (
+    query_classify,
+    easy_query,
+    nested_complex_query,
+    non_nested_complex_query,
+    nos_nodo_agente_codigo #vou remover esse nó, deixei só pra testar a funcionalidade do grafo
+)
+
+from .routers import roteador_sandbox, roteador_planejador
 
 def construir_grafo_text_to_insight() -> StateGraph:
     """
@@ -65,9 +72,6 @@ def construir_grafo_text_to_insight() -> StateGraph:
     # Após agente_codigo sempre vai para sandbox
     construtor_grafo.add_edge("agente_codigo", "sandbox")
     
-    # Fim é um ponto terminal (END)
-    construtor_grafo.add_edge("fim", END)
-    
     # ============================================================
     # 3. ARESTAS CONDICIONAIS
     # ============================================================
@@ -90,7 +94,7 @@ def construir_grafo_text_to_insight() -> StateGraph:
             "esquema": "esquema",
             "agente_codigo": "agente_codigo",
             "critico": "critico",
-            "fim": "fim",
+            "fim": END,
         }
     )
     
@@ -114,7 +118,7 @@ def construir_grafo_text_to_insight() -> StateGraph:
         roteador_critico,
         {
             "planejador": "planejador",
-            "fim": "fim",
+            "fim": END,
         }
     )
     
@@ -161,7 +165,7 @@ if __name__ == "__main__":
     print("\nExecutando grafo...\n")
     
     # Invocar o grafo
-    # resultado = grafo_text_to_insight.invoke(estado_inicial)
+    resultado = grafo_text_to_insight.invoke(estado_inicial)
     
-    # print("\nEstado final:")
-    # print(resultado)
+    print("\nEstado final:")
+    print(resultado)
