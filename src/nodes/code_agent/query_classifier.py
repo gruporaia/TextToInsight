@@ -8,6 +8,6 @@ def query_classify(estado: EstadoTextToInsight) -> dict:
     contexto = estado.get("contexto_schema", "")
     tentativas = estado.get("tentativas_loop", 0)
 
-    print("[AGENTE_CODIGO] Query classificada!")
+    print("[AGENTE_CODIGO-QC] Query classificada!")
     
     return estado
