@@ -137,3 +137,6 @@ Thumbs.db
 *.db
 *.sqlite
 config_local.py
+
+# data 
+data/
