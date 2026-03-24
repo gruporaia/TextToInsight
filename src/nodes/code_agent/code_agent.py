@@ -1,89 +1,90 @@
 """
 Nó Agente de Código do grafo de agentes Text-to-Insight.
 
-O agente de código é responsável por:
-- Processar a pergunta do usuário
-- Usar o contexto do schema
-- Gerar código Python funcional
+Responsabilidade única: gerar SQL executável a partir da pergunta do usuário,
+do contexto do schema e de feedback anterior (se houver), usando Gemini.
 """
 
-# Vou remover esse arquivo, já que a geração será dividida entre a classificação, geração e inserção do código
+import os
+import re
+
+from dotenv import load_dotenv
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 from ...state import EstadoTextToInsight
 
+load_dotenv()
+
+llm = ChatGoogleGenerativeAI(
+    model="gemini-2.0-flash",
+    google_api_key=os.getenv("GOOGLE_API_KEY"),
+)
+
+PROMPT_TEMPLATE = """Você é um especialista em SQL para bancos SQLite.
+
+Sua tarefa: gerar UMA única consulta SQL SELECT que responda à pergunta do usuário,
+usando o schema do banco de dados fornecido abaixo.
+
+Regras:
+- Gere APENAS uma consulta SELECT (ou WITH/CTE seguido de SELECT).
+- NÃO use INSERT, UPDATE, DELETE, DROP, ALTER ou qualquer comando de escrita.
+- NÃO inclua explicações, apenas a SQL pura.
+- Use nomes de tabelas e colunas EXATAMENTE como aparecem no schema.
+- Se a pergunta for ambígua, faça a interpretação mais razoável.
+
+=== SCHEMA DO BANCO ===
+{schema}
+
+=== PERGUNTA DO USUÁRIO ===
+{pergunta}
+
+{feedback_section}
+
+Responda APENAS com a consulta SQL, sem markdown, sem explicação."""
+
+
+def _extrair_sql(resposta: str) -> str:
+    """Extrai SQL pura da resposta do LLM, removendo markdown e texto extra."""
+    # Remove blocos de código markdown
+    match = re.search(r"```(?:sql)?\s*\n?(.*?)```", resposta, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    # Se não tem markdown, retorna a resposta limpa
+    return resposta.strip()
+
+
 def nos_nodo_agente_codigo(estado: EstadoTextToInsight) -> dict:
     """
-    Nó Agente de Código: Escreve código Python baseado no plano do planejador.
-    
-    Utiliza:
-    - A pergunta do usuário
-    - O contexto do schema
-    - A história de tentativas anteriores
-    
-    Para gerar código Python que:
-    - Consulte o banco de dados conforme necessário
-    - Processe os dados
-    - Retorne uma resposta à pergunta
-    
-    Args:
-        estado (EstadoTextToInsight): Estado atual do grafo.
-    
-    Returns:
-        dict: Dicionário com atualizações do estado.
-              - codigo_gerado: String com código Python gerado
-              - status: 'codigo_gerado'
+    Nó Agente de Código: usa Gemini para gerar SQL a partir da pergunta + schema.
     """
-    
     pergunta = estado.get("pergunta_usuario", "")
-    contexto = estado.get("contexto_schema", "")
+    schema = estado.get("contexto_schema", "")
+    feedback = estado.get("feedback_critico", "")
     tentativas = estado.get("tentativas_loop", 0)
-    
-    print(f"[AGENTE_CODIGO] Gerando código (tentativa {tentativas + 1})...")
-    print(f"[AGENTE_CODIGO] Pergunta: {pergunta[:50]}...")
-    
-    # Código simulado em Python
-    codigo_simulado = f'''
-import sqlite3
 
-def executar_consulta():
-    """
-    Executa a consulta para responder à pergunta do usuário.
-    
-    Pergunta original: {pergunta}
-    
-    Contexto utilizado:
-    - Schema de banco de dados
-    - Relacionamentos entre tabelas
-    """
-    
-    # Simular conexão ao banco
-    # conn = sqlite3.connect("banco_dados.db")
-    # cursor = conn.cursor()
-    
-    # Simular execução de query
-    # cursor.execute("""
-    #     SELECT * FROM USUARIOS
-    #     WHERE data_criacao > '2024-01-01'
-    # """)
-    
-    # Simular resultado
-    resultado = {{
-        "total_registros": 42,
-        "processado": True,
-        "timestamp": "2026-03-18T10:30:00Z"
-    }}
-    
-    return resultado
+    print(f"[AGENTE_CODIGO] Gerando SQL (tentativa {tentativas + 1})...")
 
-if __name__ == "__main__":
-    resultado = executar_consulta()
-    print(f"Resultado: {{resultado}}")
-'''
-    
-    print("[AGENTE_CODIGO] Código gerado com sucesso!")
-    
+    feedback_section = ""
+    if feedback:
+        feedback_section = f"""=== FEEDBACK DO CRÍTICO (corrija os problemas apontados) ===
+{feedback}
+
+=== SQL ANTERIOR (que foi reprovada) ===
+{estado.get('sql_gerada', '')}"""
+
+    prompt = PROMPT_TEMPLATE.format(
+        schema=schema,
+        pergunta=pergunta,
+        feedback_section=feedback_section,
+    )
+
+    resposta = llm.invoke(prompt)
+    sql = _extrair_sql(resposta.content)
+
+    print(f"[AGENTE_CODIGO] SQL gerada: {sql[:100]}...")
+
     return {
-        "codigo_gerado": codigo_simulado,
-        "status": "codigo_gerado",
+        "sql_gerada": sql,
+        "status": "sql_gerada",
         "tentativas_loop": tentativas + 1,
     }
