@@ -7,6 +7,8 @@ code agent → executor → critic → resposta.
 
 import os
 import sys
+import time
+
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -19,6 +21,13 @@ def grafo():
     """Retorna o grafo compilado."""
     from src.graph import grafo_text_to_insight
     return grafo_text_to_insight
+
+
+@pytest.fixture(autouse=True)
+def rate_limit_delay():
+    """Espera entre testes para respeitar rate limit da API."""
+    yield
+    time.sleep(15)
 
 
 def _estado_inicial(pergunta: str) -> dict:
