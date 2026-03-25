@@ -5,19 +5,9 @@ Responsabilidade única: interpretar a pergunta do usuário e o contexto atual
 para decidir a próxima etapa do fluxo (status de roteamento).
 """
 
-import os
-
-from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from ..state import EstadoTextToInsight
-
-load_dotenv()
-
-llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
-    google_api_key=os.getenv("GOOGLE_API_KEY"),
-)
 
 PROMPT_PLANNER = """Você é o planejador de um sistema que transforma perguntas em consultas SQL.
 
@@ -39,7 +29,7 @@ Decida a próxima ação respondendo com EXATAMENTE uma das opções abaixo:
 Responda APENAS com uma das opções acima, sem explicação."""
 
 
-def nos_nodo_planejador(estado: EstadoTextToInsight) -> dict:
+def nos_nodo_planejador(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -> dict:
     """
     Nó Planejador: decide a próxima etapa do fluxo.
 

@@ -5,20 +5,10 @@ Responsabilidade única: gerar SQL executável a partir da pergunta do usuário,
 do contexto do schema e de feedback anterior (se houver), usando Gemini.
 """
 
-import os
 import re
-
-from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from ...state import EstadoTextToInsight
-
-load_dotenv()
-
-llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
-    google_api_key=os.getenv("GOOGLE_API_KEY"),
-)
 
 PROMPT_TEMPLATE = """Você é um especialista em SQL para bancos SQLite.
 
@@ -53,7 +43,7 @@ def _extrair_sql(resposta: str) -> str:
     return resposta.strip()
 
 
-def nos_nodo_agente_codigo(estado: EstadoTextToInsight) -> dict:
+def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -> dict:
     """
     Nó Agente de Código: usa Gemini para gerar SQL a partir da pergunta + schema.
     """
@@ -67,10 +57,10 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight) -> dict:
     feedback_section = ""
     if feedback:
         feedback_section = f"""=== FEEDBACK DO CRÍTICO (corrija os problemas apontados) ===
-{feedback}
+        {feedback}
 
-=== SQL ANTERIOR (que foi reprovada) ===
-{estado.get('sql_gerada', '')}"""
+        === SQL ANTERIOR (que foi reprovada) ===
+        {estado.get('sql_gerada', '')}"""
 
     prompt = PROMPT_TEMPLATE.format(
         schema=schema,

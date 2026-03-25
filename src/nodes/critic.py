@@ -5,19 +5,9 @@ Responsabilidade única: avaliar se a SQL gerada e seus resultados
 respondem corretamente à pergunta original do usuário.
 """
 
-import os
-
-from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from ..state import EstadoTextToInsight
-
-load_dotenv()
-
-llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
-    google_api_key=os.getenv("GOOGLE_API_KEY"),
-)
 
 PROMPT_CRITIC = """Você é um revisor de qualidade para consultas SQL geradas por IA.
 
@@ -49,7 +39,7 @@ VEREDITO: APROVADO ou REPROVADO
 FEEDBACK: <sua avaliação em 1-3 frases>"""
 
 
-def nos_nodo_critico(estado: EstadoTextToInsight) -> dict:
+def nos_nodo_critico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -> dict:
     """
     Nó Crítico: usa Gemini para avaliar qualidade do resultado.
     """

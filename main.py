@@ -4,10 +4,14 @@ Script principal para demonstração do grafo Text-to-Insight.
 """
 
 import sys
-from src.graph import grafo_text_to_insight
+import os
+from dotenv import load_dotenv
+from langgraph.graph import StateGraph
+from src.graph import Graph
 
+load_dotenv()
 
-def executar_consulta(pergunta: str) -> dict:
+def executar_consulta(grafo: StateGraph, pergunta: str) -> dict:
     """Executa uma consulta através do grafo Text-to-Insight."""
     estado_inicial = {
         "pergunta_usuario": pergunta,
@@ -27,7 +31,7 @@ def executar_consulta(pergunta: str) -> dict:
     print(f"\nPergunta: {pergunta}\n")
     print("=" * 70)
 
-    resultado_final = grafo_text_to_insight.invoke(estado_inicial)
+    resultado_final = grafo.invoke(estado_inicial)
     return resultado_final
 
 
@@ -81,7 +85,11 @@ def main():
         pergunta = "Quantos pedidos existem no banco?"
         print(f"Nenhuma pergunta fornecida. Usando exemplo: '{pergunta}'\n")
 
-    resultado = executar_consulta(pergunta)
+    api_key = os.getenv("GOOGLE_API_KEY")
+
+    grafo = Graph(api_key)
+
+    resultado = executar_consulta(grafo, pergunta)
     exibir_resultado(resultado)
 
 

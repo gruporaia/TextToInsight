@@ -10,17 +10,24 @@ import sys
 import time
 
 import pytest
+from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "olist_relational.db")
 
+load_dotenv()
 
 @pytest.fixture
 def grafo():
     """Retorna o grafo compilado."""
-    from src.graph import grafo_text_to_insight
-    return grafo_text_to_insight
+    api_key = os.getenv("GOOGLE_API_KEY") #como estamos usando vcr, não haverá mais requisição direta, apenas repetição
+                                          #do primeiro resultado da requisição, é possível verificar isso em test/cassettes
+    if not api_key:
+        pytest.skip("Variável GOOGLE_API_KEY não encontrada. Pulando testes de integração.")
+
+    from src.graph import Graph
+    return Graph(api_key)
 
 
 @pytest.fixture(autouse=True)
@@ -49,6 +56,7 @@ def test_grafo_compila(grafo):
     assert grafo is not None
 
 
+@pytest.mark.vcr
 @pytest.mark.timeout(120)
 def test_pergunta_simples(grafo):
     """Pergunta simples percorre o grafo e chega ao status aprovado."""
@@ -60,6 +68,7 @@ def test_pergunta_simples(grafo):
     assert resultado["total_linhas_resultado"] >= 1
 
 
+@pytest.mark.vcr
 @pytest.mark.timeout(120)
 def test_pergunta_com_ranking(grafo):
     """Pergunta com ranking retorna múltiplas linhas."""
@@ -72,6 +81,7 @@ def test_pergunta_com_ranking(grafo):
     assert len(resultado.get("linhas_resultado_preview", [])) > 0
 
 
+@pytest.mark.vcr
 @pytest.mark.timeout(120)
 def test_estado_final_completo(grafo):
     """Estado final tem todos os campos-chave preenchidos."""

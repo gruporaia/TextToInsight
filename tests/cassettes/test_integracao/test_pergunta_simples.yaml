@@ -1,0 +1,173 @@
+interactions:
+- request:
+    body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 um especialista em
+      SQL para bancos SQLite.\n\nSua tarefa: gerar UMA \u00fanica consulta SQL SELECT
+      que responda \u00e0 pergunta do usu\u00e1rio,\nusando o schema do banco de dados
+      fornecido abaixo.\n\nRegras:\n- Gere APENAS uma consulta SELECT (ou WITH/CTE
+      seguido de SELECT).\n- N\u00c3O use INSERT, UPDATE, DELETE, DROP, ALTER ou qualquer
+      comando de escrita.\n- N\u00c3O inclua explica\u00e7\u00f5es, apenas a SQL pura.\n-
+      Use nomes de tabelas e colunas EXATAMENTE como aparecem no schema.\n- Se a pergunta
+      for amb\u00edgua, fa\u00e7a a interpreta\u00e7\u00e3o mais razo\u00e1vel.\n\n===
+      SCHEMA DO BANCO ===\n=== SCHEMA SQLITE (INTROSPECCAO REAL) ===\n\nTabela: customers\n-
+      customer_id: TEXT (PK)\n- customer_unique_id: TEXT\n- customer_zip_code_prefix:
+      INTEGER\n- customer_city: TEXT\n- customer_state: TEXT\n\nTabela: geolocation\n-
+      geolocation_zip_code_prefix: INTEGER\n- geolocation_lat: REAL\n- geolocation_lng:
+      REAL\n- geolocation_city: TEXT\n- geolocation_state: TEXT\n\nTabela: order_items\n-
+      order_id: TEXT (PK)\n- order_item_id: INTEGER (PK)\n- product_id: TEXT\n- seller_id:
+      TEXT\n- shipping_limit_date: TEXT\n- price: REAL\n- freight_value: REAL\n  Foreign
+      keys:\n  - seller_id -> sellers.seller_id (on_update=NO ACTION, on_delete=NO
+      ACTION)\n  - product_id -> products.product_id (on_update=NO ACTION, on_delete=NO
+      ACTION)\n  - order_id -> orders.order_id (on_update=NO ACTION, on_delete=NO
+      ACTION)\n\nTabela: order_payments\n- order_id: TEXT (PK)\n- payment_sequential:
+      INTEGER (PK)\n- payment_type: TEXT\n- payment_installments: INTEGER\n- payment_value:
+      REAL\n  Foreign keys:\n  - order_id -> orders.order_id (on_update=NO ACTION,
+      on_delete=NO ACTION)\n\nTabela: order_reviews\n- review_id: TEXT (PK)\n- order_id:
+      TEXT\n- review_score: INTEGER\n- review_comment_title: TEXT\n- review_comment_message:
+      TEXT\n- review_creation_date: TEXT\n- review_answer_timestamp: TEXT\n  Foreign
+      keys:\n  - order_id -> orders.order_id (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela:
+      orders\n- order_id: TEXT (PK)\n- customer_id: TEXT\n- order_status: TEXT\n-
+      order_purchase_timestamp: TEXT\n- order_approved_at: TEXT\n- order_delivered_carrier_date:
+      TEXT\n- order_delivered_customer_date: TEXT\n- order_estimated_delivery_date:
+      TEXT\n  Foreign keys:\n  - customer_id -> customers.customer_id (on_update=NO
+      ACTION, on_delete=NO ACTION)\n\nTabela: products\n- product_id: TEXT (PK)\n-
+      product_category_name: TEXT\n- product_name_length: REAL\n- product_description_length:
+      REAL\n- product_photos_qty: REAL\n- product_weight_g: REAL\n- product_length_cm:
+      REAL\n- product_height_cm: REAL\n- product_width_cm: REAL\n\nTabela: sellers\n-
+      seller_id: TEXT (PK)\n- seller_zip_code_prefix: INTEGER\n- seller_city: TEXT\n-
+      seller_state: TEXT\n\n\n=== PERGUNTA DO USU\u00c1RIO ===\nQuantos pedidos existem
+      no banco?\n\n\n\nResponda APENAS com a consulta SQL, sem markdown, sem explica\u00e7\u00e3o."}],
+      "role": "user"}], "safetySettings": [], "generationConfig": {"temperature":
+      0.7, "candidateCount": 1}}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '3054'
+      Content-Type:
+      - application/json
+      Host:
+      - generativelanguage.googleapis.com
+      User-Agent:
+      - google-genai-sdk/1.68.0 gl-python/3.10.12
+      x-goog-api-client:
+      - google-genai-sdk/1.68.0 gl-python/3.10.12
+    method: POST
+    uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAC/2WQUUvDMBSF3/srQp4UVpnFwfRN2oqKc2OLIohIWO7aYJvU5k4npf/dtF23VPMQ
+        kntO7sn9Ko8QuuZKSMERDL0ir7ZCSNXujaYVgkIr9CVbLHiJR2+3KudsLQi75hFdxQ9xyEg4f3pk
+        J7oUUL5LcUpulvMZaa+GOg/rw/ltdIwrdQZNr1wLyHp73RvoRipp0iVwo1UbyeYLelClErCz5bHX
+        B7St6dbwBGaA3A7OD+PRotR5gUx/gAr1th18OrnoujmgBobLvYwaeTZUgvPRv74msqkycwE6bO2Q
+        PJP400zC4hdGHRD451s9Cs8hRjHV2yTF4RcnU2+PrKP4bMHLDlcCuQXoB2cTf5Nxk7aBtARTaGXg
+        TjSe2y8W8Q1bR8aHTzSL8X2wSq6/qVd7v0+rnsJCAgAA
+    headers:
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=UTF-8
+      Date:
+      - Wed, 25 Mar 2026 14:41:38 GMT
+      Server:
+      - scaffolding on HTTPServer2
+      Server-Timing:
+      - gfet4t7; dur=4384
+      Transfer-Encoding:
+      - chunked
+      Vary:
+      - Origin
+      - X-Origin
+      - Referer
+      X-Content-Type-Options:
+      - nosniff
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Gemini-Service-Tier:
+      - standard
+      X-XSS-Protection:
+      - '0'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 um revisor de qualidade
+      para consultas SQL geradas por IA.\n\nSua tarefa: avaliar se a consulta SQL
+      e seus resultados respondem adequadamente\n\u00e0 pergunta original do usu\u00e1rio.\n\n===
+      PERGUNTA DO USU\u00c1RIO ===\nQuantos pedidos existem no banco?\n\n=== SQL GERADA
+      ===\nSELECT COUNT(order_id) FROM orders\n\n=== RESULTADO DA EXECU\u00c7\u00c3O
+      ===\nStatus: exec_ok\nTotal de linhas: 1\nAmostra dos resultados (primeiras
+      linhas):\n[{''COUNT(order_id)'': 99441}]\n\n=== ERROS (se houver) ===\nNenhum\n\nAvalie:\n1.
+      A SQL responde \u00e0 pergunta do usu\u00e1rio?\n2. Os resultados fazem sentido?\n3.
+      H\u00e1 algum erro l\u00f3gico ou de interpreta\u00e7\u00e3o?\n\nResponda no
+      formato:\nVEREDITO: APROVADO ou REPROVADO\nFEEDBACK: <sua avalia\u00e7\u00e3o
+      em 1-3 frases>"}], "role": "user"}], "safetySettings": [], "generationConfig":
+      {"temperature": 0.7, "candidateCount": 1}}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '933'
+      Content-Type:
+      - application/json
+      Host:
+      - generativelanguage.googleapis.com
+      User-Agent:
+      - google-genai-sdk/1.68.0 gl-python/3.10.12
+      x-goog-api-client:
+      - google-genai-sdk/1.68.0 gl-python/3.10.12
+    method: POST
+    uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAC/2VSwW7bMAy9+ysInZMgaNd26C2rPcBYA6epEQzohkWtWFubLRmSPHQL8i8tdugH
+        9Narf2yUPSdOl0NAk0+Pj4/cBADsjishBXdo2TncUAZg0/77mlYOlaNCn6JkxY3bY7vfZhATxOGD
+        f8RW0TIK4zQ5h9limaxmYfJFfYyi8MPs4hPlgPhtXTgO11eXkKHhgoNBW2klEIQ06HhJ/RGaR6jQ
+        ZLUirNBQ27p5MlKPPIOjATQFZg/XoJrXEo0G4llrI9B8k2INioPjt1jwf0m7nkBifUuvQmgLtvmj
+        W1nS+snR0kcJfK8UiZogefMEaAy9KJqXTN5RoGvfTdIjU3kpzTMBJ2zgzHYXfx3t/TS6QG9WqQUW
+        PXzbA9i9VNLmS+RWKw+7TpMF21UlOfVA6WnQN2ipWW15hnNSQZvlu/2xyuiycqn+gepC1+1mj6bv
+        O7bBJRwATvq6044XB6XT6enoP2IbUltZDE9kcD00JS+k++VHSaPPKRs44d7o6r0IBpYxl+s6y92h
+        xuN33oDWtM7HFS1XdoZlWJKF46PJyfi+4DZvO7LuzCzGwmPin2nI8Sy+nB9//30WL8ZzlWdXcxZs
+        g7+8QGIFJQMAAA==
+    headers:
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=UTF-8
+      Date:
+      - Wed, 25 Mar 2026 14:41:41 GMT
+      Server:
+      - scaffolding on HTTPServer2
+      Server-Timing:
+      - gfet4t7; dur=2611
+      Transfer-Encoding:
+      - chunked
+      Vary:
+      - Origin
+      - X-Origin
+      - Referer
+      X-Content-Type-Options:
+      - nosniff
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Gemini-Service-Tier:
+      - standard
+      X-XSS-Protection:
+      - '0'
+    status:
+      code: 200
+      message: OK
+version: 1

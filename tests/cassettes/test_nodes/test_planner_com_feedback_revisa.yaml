@@ -1,0 +1,75 @@
+interactions:
+- request:
+    body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 o planejador de um
+      sistema que transforma perguntas em consultas SQL.\n\nSeu papel: analisar a
+      situa\u00e7\u00e3o atual e decidir a pr\u00f3xima a\u00e7\u00e3o.\n\nContexto
+      atual:\n- Pergunta do usu\u00e1rio: \"Quantos pedidos existem no banco?\"\n-
+      Schema dispon\u00edvel: Sim\n- Feedback do cr\u00edtico: A SQL retornou dados
+      incorretos, faltou filtrar por status.\n- Tentativas realizadas: 1\n- Status
+      atual: reprovado\n- Erro anterior: Nenhum\n\nDecida a pr\u00f3xima a\u00e7\u00e3o
+      respondendo com EXATAMENTE uma das op\u00e7\u00f5es abaixo:\n- \"pronto_codificacao\"
+      \u2192 se temos schema e devemos gerar/regenerar SQL\n- \"revisando_estrategia\"
+      \u2192 se o cr\u00edtico reprovou e devemos tentar uma abordagem diferente\n-
+      \"aprovado\" \u2192 se o resultado j\u00e1 foi aprovado pelo cr\u00edtico\n\nResponda
+      APENAS com uma das op\u00e7\u00f5es acima, sem explica\u00e7\u00e3o."}], "role":
+      "user"}], "safetySettings": [], "generationConfig": {"temperature": 0.7, "candidateCount":
+      1}}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '1045'
+      Content-Type:
+      - application/json
+      Host:
+      - generativelanguage.googleapis.com
+      User-Agent:
+      - google-genai-sdk/1.68.0 gl-python/3.10.12
+      x-goog-api-client:
+      - google-genai-sdk/1.68.0 gl-python/3.10.12
+    method: POST
+    uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAC/2WQQU/DMAyF7/kVVc4b2qAwwQ0xDjvAxqgQ0oSQ1bhtRJtUjTdtVP3vJC3tUsgh
+        ivxebL+vZkHAY1BCCiA0/C7Y2UoQ1O3tNK0IFVmhL9liCRWdvd2pvbe1EB7dJ15WtoH+jLWQiYwh
+        Bs09YzO8Pybn9pXO0f0ttMC8tze9gSdSSZNtEYxWzvYarTd8UKUSeLTlGesHtK353kCKT0hgg8IQ
+        x+1XlBTpL1QPet8Gnd/edN08MCNDL5MmyMdKeDX519cs7VSZ+8A8ljYk5JJOLkn0+B5xDwT9WatH
+        wTxinDK9TzMarxiGc/bLrMP4hpWRHa8UC0twenlxPU1yMFk7kVdoSq0MroTzwCFaQnJaPK8PL9+L
+        1Uah2hb3M84a9gNSojPHMwIAAA==
+    headers:
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=UTF-8
+      Date:
+      - Wed, 25 Mar 2026 14:42:53 GMT
+      Server:
+      - scaffolding on HTTPServer2
+      Server-Timing:
+      - gfet4t7; dur=2955
+      Transfer-Encoding:
+      - chunked
+      Vary:
+      - Origin
+      - X-Origin
+      - Referer
+      X-Content-Type-Options:
+      - nosniff
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Gemini-Service-Tier:
+      - standard
+      X-XSS-Protection:
+      - '0'
+    status:
+      code: 200
+      message: OK
+version: 1
