@@ -57,3 +57,4 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     feedback_critico: str
     status: StatusExecucao
     tentativas_loop: int
+    resposta_natural: str

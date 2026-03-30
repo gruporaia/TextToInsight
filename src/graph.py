@@ -22,6 +22,7 @@ from .nodes import (
     nos_nodo_agente_codigo,
     nos_nodo_sandbox,
     nos_nodo_critico,
+    nos_nodo_resposta,
 )
 from .routers import roteador_sandbox, roteador_planejador
 
@@ -47,6 +48,7 @@ class Graph:
         construtor_grafo.add_node("agente_codigo", partial(nos_nodo_agente_codigo, llm=self.llm))
         construtor_grafo.add_node("sandbox", nos_nodo_sandbox)
         construtor_grafo.add_node("critico", partial(nos_nodo_critico, llm=self.llm))
+        construtor_grafo.add_node("resposta", partial(nos_nodo_resposta, llm=self.llm))
 
         # 2. ARESTAS FIXAS
         construtor_grafo.add_edge(START, "planejador")
@@ -76,8 +78,9 @@ class Graph:
 
         def roteador_critico(estado: EstadoTextToInsight) -> str:
             status = estado.get("status", "")
+            # Se aprovado, enviar para nó de resposta; senão retornar ao planejador
             if status == "aprovado":
-                return "fim"
+                return "resposta"
             return "planejador"
 
         construtor_grafo.add_conditional_edges(
@@ -85,9 +88,12 @@ class Graph:
             roteador_critico,
             {
                 "planejador": "planejador",
-                "fim": END,
+                "resposta": "resposta",
             }
         )
+
+        # Após gerar a resposta final, encerrar o grafo
+        construtor_grafo.add_edge("resposta", END)
 
         return construtor_grafo
 

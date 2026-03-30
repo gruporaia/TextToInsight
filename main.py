@@ -75,6 +75,13 @@ def exibir_resultado(resultado: dict) -> None:
     feedback = resultado.get("feedback_critico", "").strip()
     print(feedback if feedback else "[Nenhum feedback]")
 
+    # Se o nó de resposta final gerou uma resposta em linguagem natural, exibi-la
+    resposta_natural = resultado.get("resposta_natural", "").strip()
+    print("\n" + "-" * 70)
+    print("RESPOSTA NATURAL AO USUARIO:")
+    print("-" * 70)
+    print(resposta_natural)
+
     print("\n" + "=" * 70 + "\n")
 
 
