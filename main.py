@@ -3,44 +3,13 @@
 Script principal para demonstração do grafo Text-to-Insight.
 """
 
-import csv
-from datetime import datetime
 import time
 import sys
 import os
 from dotenv import load_dotenv
 from langgraph.graph import StateGraph
 from src.graph import Graph
-
-
-def salvar_metricas_csv(resultado: dict, latencia: float, arquivo_csv="data/metricas_execucao.csv"):
-    """Salva as métricas de uma execução em um arquivo CSV."""
-    arquivo_existe = os.path.isfile(arquivo_csv)
-    
-    # Colunas 
-    dados = {
-        "data_hora": datetime.now(),
-        "pergunta": resultado.get("pergunta_usuario", ""),
-        "status_final": resultado.get("status", ""),
-        "tentativas": resultado.get("tentativas_loop", 0),
-        "tokens_input": resultado.get("tokens_input", 0),
-        "tokens_output": resultado.get("tokens_output", 0),
-        "tokens_total": resultado.get("tokens_total", 0),
-        "latencia_segundos": round(latencia,2),
-        "erro": resultado.get("erro_execucao", "")
-    }
-
-    # Garante que o diretório existe
-    os.makedirs(os.path.dirname(arquivo_csv), exist_ok=True)
-
-    with open(arquivo_csv, mode="a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=dados.keys())
-        
-        if not arquivo_existe:
-            writer.writeheader() # Escreve o cabeçalho na primeira vez
-            
-        writer.writerow(dados)
-    print(f"[MÉTRICAS] Salvas com sucesso em {arquivo_csv}")
+from src.utils import salvar_metricas_csv
 
 load_dotenv()
 
