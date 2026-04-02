@@ -233,3 +233,14 @@ def test_roteador_planejador_aprovado():
 
     estado = {"contexto_schema": "tabelas...", "status": "aprovado"}
     assert roteador_planejador(estado) == "fim"
+
+def test_roteador_planejador_espera_humana():
+    """Roteador planejador direciona para espera_humana se a flag esperar_usuario for True."""
+    from src.routers.edges import roteador_planejador
+
+    estado = {
+        "espera_humana": True,
+        "contexto_schema": "tabelas...", 
+        "status": "aguardando_input"
+    }
+    assert roteador_planejador(estado) == "espera_humana"

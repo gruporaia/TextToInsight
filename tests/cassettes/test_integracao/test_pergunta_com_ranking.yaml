@@ -1,5 +1,84 @@
 interactions:
 - request:
+    body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 o planejador de um
+      sistema que transforma perguntas em consultas SQL.\n\nSeu papel: analisar a
+      situa\u00e7\u00e3o atual e decidir a pr\u00f3xima a\u00e7\u00e3o.\n\nContexto
+      atual:\n- Pergunta do usu\u00e1rio: \"Quais sao as 5 categorias de produtos
+      mais vendidos por quantidade?\"\n- Schema dispon\u00edvel: Sim\n- Feedback do
+      cr\u00edtico: Nenhum\n- Tentativas realizadas: 0\n- Status atual: schema_obtido\n-
+      Erro anterior: Nenhum\n\nAVALIA\u00c7\u00c3O CR\u00cdTICA:\nVerifique se a \"Pergunta
+      do usu\u00e1rio\" pode ser respondida com as tabelas e colunas do Schema.\nSe
+      houver ambiguidade, conceitos n\u00e3o mapeados no banco de dados, ou se a inten\u00e7\u00e3o
+      do usu\u00e1rio n\u00e3o estiver clara, voc\u00ea DEVE pedir mais informa\u00e7\u00f5es.\n\nResponda
+      EXATAMENTE no formato JSON abaixo, sem formata\u00e7\u00e3o markdown (```json):\n{\n    \"decisao\":
+      \"escolha_uma_opcao\",\n    \"pergunta_ao_usuario\": \"escreva a pergunta aqui
+      se precisar de ajuda, ou deixe vazio se n\u00e3o precisar\"\n}\n\nOp\u00e7\u00f5es
+      v\u00e1lidas para ''decis\u00e3o'':\n- \"pronto_codificacao\" \u2192 se temos
+      schema, a pergunta faz sentido e devemos gerar/regenerar SQL\n- \"revisando_estrategia\"
+      \u2192 se o cr\u00edtico reprovou e devemos tentar uma abordagem diferente\n-
+      \"necessita_ajuda\" \u2192 a pergunta n\u00e3o \u00e9 clara, n\u00e3o faz sentido,
+      falta contexto ou n\u00e3o h\u00e1 dados no schema para responder.\n"}], "role":
+      "user"}], "safetySettings": [], "generationConfig": {"temperature": 0.7, "candidateCount":
+      1}}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '1585'
+      Content-Type:
+      - application/json
+      Host:
+      - generativelanguage.googleapis.com
+      User-Agent:
+      - google-genai-sdk/1.68.0 gl-python/3.10.12
+      x-goog-api-client:
+      - google-genai-sdk/1.68.0 gl-python/3.10.12
+    method: POST
+    uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAC/2WRa0vDMBSGv/dXlHzeZG66i1+9QAXZpkUFK+PYnLXBNinJKWyW/neTdt06baAk
+        73lzLk8qz/dZDJILDoSG3fgfVvH9qvm7mJKEkmygk6xYgKaTt/2q3t5aCHfuEqsi6c4R4xgLAyqy
+        YsQKbdOqTay42IoYYqcPOmeBOiklwQbUpjQlaHG4ZZesWa9Ofdx/Dk7daZWhK50rjllnrzsD2wop
+        TPqMYJR0tpdwuWLHqJAcd1YeeV2BJjUrDST4hASWExxpuEHygkL1jfJWlQ2nyXjSZutxPTOMF4c4
+        KYLsLLSYXg7+JTZ3tqzI+sB7b2GnhEzQ3o0S3r+HrEeC/vTVsfB6yBilqkxSOu9xOlp4B2gtx1fU
+        RrTAEswtwuH44nq4zcCkTUWm0RRKGgy48zwGsyXg8O2B9sHPLFjNv/L1fH3FvNr7BWhmkwNzAgAA
+    headers:
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=UTF-8
+      Date:
+      - Thu, 02 Apr 2026 15:41:27 GMT
+      Server:
+      - scaffolding on HTTPServer2
+      Server-Timing:
+      - gfet4t7; dur=3466
+      Transfer-Encoding:
+      - chunked
+      Vary:
+      - Origin
+      - X-Origin
+      - Referer
+      X-Content-Type-Options:
+      - nosniff
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Gemini-Service-Tier:
+      - standard
+      X-XSS-Protection:
+      - '0'
+    status:
+      code: 200
+      message: OK
+- request:
     body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 um especialista em
       SQL para bancos SQLite.\n\nSua tarefa: gerar UMA \u00fanica consulta SQL SELECT
       que responda \u00e0 pergunta do usu\u00e1rio,\nusando o schema do banco de dados
@@ -35,9 +114,9 @@ interactions:
       REAL\n- product_height_cm: REAL\n- product_width_cm: REAL\n\nTabela: sellers\n-
       seller_id: TEXT (PK)\n- seller_zip_code_prefix: INTEGER\n- seller_city: TEXT\n-
       seller_state: TEXT\n\n\n=== PERGUNTA DO USU\u00c1RIO ===\nQuais sao as 5 categorias
-      de produtos mais vendidas?\n\n\n\nResponda APENAS com a consulta SQL, sem markdown,
-      sem explica\u00e7\u00e3o."}], "role": "user"}], "safetySettings": [], "generationConfig":
-      {"temperature": 0.7, "candidateCount": 1}}'
+      de produtos mais vendidos por quantidade?\n\n\n\nResponda APENAS com a consulta
+      SQL, sem markdown, sem explica\u00e7\u00e3o."}], "role": "user"}], "safetySettings":
+      [], "generationConfig": {"temperature": 0.7, "candidateCount": 1}}'
     headers:
       Accept:
       - '*/*'
@@ -46,7 +125,7 @@ interactions:
       Connection:
       - keep-alive
       Content-Length:
-      - '3073'
+      - '3088'
       Content-Type:
       - application/json
       Host:
@@ -60,14 +139,14 @@ interactions:
   response:
     body:
       string: !!binary |
-        H4sIAAAAAAAC/31S0U7CMBR931c0fdIECRAEYuKDbtPMwDZHMRhnSKUXaNxaXEuiEv7dbmMwNHEP
-        TXPP6Tn3nruthRCeU8E4oxoUvkIvpoLQtjhzTAoNQhugKpnimmb6yC2/be1uKBo+80d47A5dm8QC
-        IdJprjPJNnM9mxuvpcy+ZoKmEIu7KBghmTHIZlxDqtDNGJF2LDzfdyP0EHg+2r8soU4uF/iGc1Dk
-        DF3XHTiLxX0UTEJ0+/y/eRA5xqRk2cHEJ2cnsufIccd2LIbeyCPoEtem3B3ur41jNplMIB88lQyS
-        ir6rCHjBBVerCKiSosiHBCE+oFww+DTlllUZFNJ4o+gSRqCp2RI97AKbNtO1JvIdhC03xZYGvVap
-        VtvqCaHf3eNaapqcQO1Wu9f4o6wc48uT+r5rv4IZkyZcf+WzEHdKcC0K/auxKgyrlhnWK7lZrvRp
-        k4OOtQ+tzPEJMsXLwJaQmggvOs3Li0VC1aowxBmotRQKPJZz/JA49LnX9cK+/O574fsbn348DrC1
-        s34Augg2yfECAAA=
+        H4sIAAAAAAAC/31SXWvCMBR9768Iedpgig51MtjDVutQ1Lhaxz46JJirBtuka1KmiP99abUa97A8
+        hHDPuefee252DkJ4TgXjjGpQ+B59mghCu+LOMSk0CG2AMmSCCU31mXs4O+ttKBo2eRKeeAPPDUKB
+        UFJNUsmyuZ7NTamlTLczQWMIRdcnQyRTBumMa4gVepwgyUPRJ70ROuYUwSSXISMDnqQ4Qw+WMmeh
+        ePbJdIye3v+tSfyO5x9JLpmOgqsL0WvU8SZuKAa9YS9ATWzNtj+9v27OjqQygnzcWDKISvq+JOAF
+        F1ytfKBKisKVgIzxCeWCwcaEa05ZoJDGmaJLGIKmZjf0tAFs2owTHcg1CFdmxW7arfpBzdrlBaHV
+        OuJaahpdQPVavUy2lFXH1OWRvWXrA5gxacT1Np8l8N4CbFmh/zRWmuFYnmG9ktlypS+bbDeco2kH
+        H18hVfxg2BJiY2HlttqsLCKqVkVBnIJKpFDQYzmn37gj9CMjRHa631qN44W7/nlpYGfv/AJstiMM
+        5wIAAA==
     headers:
       Alt-Svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
@@ -76,11 +155,11 @@ interactions:
       Content-Type:
       - application/json; charset=UTF-8
       Date:
-      - Wed, 25 Mar 2026 14:41:57 GMT
+      - Thu, 02 Apr 2026 15:41:29 GMT
       Server:
       - scaffolding on HTTPServer2
       Server-Timing:
-      - gfet4t7; dur=1633
+      - gfet4t7; dur=1451
       Transfer-Encoding:
       - chunked
       Vary:
@@ -102,20 +181,20 @@ interactions:
     body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 um revisor de qualidade
       para consultas SQL geradas por IA.\n\nSua tarefa: avaliar se a consulta SQL
       e seus resultados respondem adequadamente\n\u00e0 pergunta original do usu\u00e1rio.\n\n===
-      PERGUNTA DO USU\u00c1RIO ===\nQuais sao as 5 categorias de produtos mais vendidas?\n\n===
-      SQL GERADA ===\nSELECT\n  T2.product_category_name\nFROM order_items AS T1\nINNER
-      JOIN products AS T2\n  ON T1.product_id = T2.product_id\nGROUP BY\n  T2.product_category_name\nORDER
-      BY\n  COUNT(T1.product_id) DESC\nLIMIT 5\n\n=== RESULTADO DA EXECU\u00c7\u00c3O
-      ===\nStatus: exec_ok\nTotal de linhas: 5\nAmostra dos resultados (primeiras
-      linhas):\n[{''product_category_name'': ''cama_mesa_banho''}, {''product_category_name'':
-      ''beleza_saude''}, {''product_category_name'': ''esporte_lazer''}, {''product_category_name'':
-      ''moveis_decoracao''}, {''product_category_name'': ''informatica_acessorios''}]\n\n===
-      ERROS (se houver) ===\nNenhum\n\nAvalie:\n1. A SQL responde \u00e0 pergunta
-      do usu\u00e1rio?\n2. Os resultados fazem sentido?\n3. H\u00e1 algum erro l\u00f3gico
-      ou de interpreta\u00e7\u00e3o?\n\nResponda no formato:\nVEREDITO: APROVADO ou
-      REPROVADO\nFEEDBACK: <sua avalia\u00e7\u00e3o em 1-3 frases>"}], "role": "user"}],
-      "safetySettings": [], "generationConfig": {"temperature": 0.7, "candidateCount":
-      1}}'
+      PERGUNTA DO USU\u00c1RIO ===\nQuais sao as 5 categorias de produtos mais vendidos
+      por quantidade?\n\n=== SQL GERADA ===\nSELECT\n  p.product_category_name\nFROM
+      order_items AS oi\nJOIN products AS p\n  ON oi.product_id = p.product_id\nGROUP
+      BY\n  p.product_category_name\nORDER BY\n  COUNT(oi.product_id) DESC\nLIMIT
+      5\n\n=== RESULTADO DA EXECU\u00c7\u00c3O ===\nStatus: exec_ok\nTotal de linhas:
+      5\nAmostra dos resultados (primeiras linhas):\n[{''product_category_name'':
+      ''cama_mesa_banho''}, {''product_category_name'': ''beleza_saude''}, {''product_category_name'':
+      ''esporte_lazer''}, {''product_category_name'': ''moveis_decoracao''}, {''product_category_name'':
+      ''informatica_acessorios''}]\n\n=== ERROS (se houver) ===\nNenhum\n\nAvalie:\n1.
+      A SQL responde \u00e0 pergunta do usu\u00e1rio?\n2. Os resultados fazem sentido?\n3.
+      H\u00e1 algum erro l\u00f3gico ou de interpreta\u00e7\u00e3o?\n\nResponda no
+      formato:\nVEREDITO: APROVADO ou REPROVADO\nFEEDBACK: <sua avalia\u00e7\u00e3o
+      em 1-3 frases>"}], "role": "user"}], "safetySettings": [], "generationConfig":
+      {"temperature": 0.7, "candidateCount": 1}}'
     headers:
       Accept:
       - '*/*'
@@ -124,7 +203,7 @@ interactions:
       Connection:
       - keep-alive
       Content-Length:
-      - '1330'
+      - '1335'
       Content-Type:
       - application/json
       Host:
@@ -138,15 +217,15 @@ interactions:
   response:
     body:
       string: !!binary |
-        H4sIAAAAAAAC/2VSS27bQAzd6xTErB3Djesazc6NFMDoR44jGAXaophYtDStNBRmRkFaw3dp0EUP
-        0CPoYuVIka2kXhgj8vE98pH7AEBspU5VKh1acQGfOAKwb/99jrRD7TjRhzhYSeNO2O63H7wZ4vDe
-        F4lNtI7CZRJfwGK1jjeLMP6sr6IofLO4fMsxYH5bF07CzfU7MGgr0ily1Bh0smRlhOYXVGiyWjMq
-        Jaht3TwYRSNQKefVTvn+CaSFGWx5ioyM4g+mqQyltSMLpVQW7rAd0zJ7CbfSImjp9Z3MsPRwxZPa
-        McTWN+KbSrl0R0bjlgG+8MTOnaKRzDYC5ml+E+TNA6AxXFI0fzO15QfVLS0PYSo/T/PHA1lV3pJJ
-        vexYDGw7HN9fRiezDRXonSwpxaKHH3qA2CmtbL5GaUl72E0Sr8Qxq9jNew5Pgl6gpRa1ZfX33BKv
-        XR6XK9iwsnIJfUd9SXW79un0dcc2OJMngFfTx7wjJ4snqReT+Wz0H7MNWVcVwwMa3BaPKQvlfvhZ
-        kuhjIgZWuGeN9WYEA8+Ey6nOcvesyfk0eHStM3KDxqrOMV4De3h2Pp6d7Qpp81ZRdLdocZl6zIe7
-        JJQypKuvq+uf8+XqPP6Gk8VLERyCf4WOOSVDAwAA
+        H4sIAAAAAAAC/11S227TQBB991eM9rmNmlZRQ99CYqRQkNPEikDAw5CdJAv2rtlLVIjyL0U88R35
+        MWbtOnWwZGs958zMmbOzTwDECrVUEj05cQefOAKwr78RM9qT9gy0IQ5WaP0Lt3n2nTNTPD3GJLFM
+        5+lkmmd3MJrNs+Vokn3Wb9J08no0vucYcH0XCo+weHgHllxltCSOWkseS+5McHyCiuwmaGZJA8GF
+        42+rzAUoybhaq6jfADoYwIqn2Bir+IfLVNbI4I2DEpWDHdVjOqiMhR8BOVcis9Bb3B3/cgZGOR43
+        VJ5la34Vu9DUJC5iepC5KDdKlwy74x/DyWSjYgdctGKUf7CMwjqyeESyyDJ6ouPY4XT+cvHiszUF
+        RRNLI6lo6YeWINZKK7edEzqjI22RZzNxQhUb+cjhq6RtUJcWwfGA79ldvnE83avgacvK5+Y76bEJ
+        9Y3f3Fw31TobckYYDJ9xbzwWZ1B/cNWCncpuwn1V0d2dzlrxmFgo/zPOkqcfctGxwv8nrDUj6Xgm
+        /NaEzdafi+z3+8Pk2bbGySVZpxrL+KrZxMvr3uByXaDb1i1Fs4eOpjJy7j/eZrhahLfh67dft9PZ
+        7tVsHB6GIjkk/wASEdTJPwMAAA==
     headers:
       Alt-Svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
@@ -155,11 +234,11 @@ interactions:
       Content-Type:
       - application/json; charset=UTF-8
       Date:
-      - Wed, 25 Mar 2026 14:42:02 GMT
+      - Thu, 02 Apr 2026 15:41:35 GMT
       Server:
       - scaffolding on HTTPServer2
       Server-Timing:
-      - gfet4t7; dur=4015
+      - gfet4t7; dur=5972
       Transfer-Encoding:
       - chunked
       Vary:

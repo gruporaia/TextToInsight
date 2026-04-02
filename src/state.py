@@ -56,5 +56,7 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     saida_terminal: str
     feedback_critico: str
     status: StatusExecucao
+    espera_humana: bool
+    pergunta_ao_usuario: str
     tentativas_loop: int
     resposta_natural: str

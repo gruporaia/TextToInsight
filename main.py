@@ -13,6 +13,7 @@ load_dotenv()
 
 def executar_consulta(grafo: StateGraph, pergunta: str) -> dict:
     """Executa uma consulta através do grafo Text-to-Insight."""
+    config = {"configurable": {"thread_id": "sessao_usuario_1"}}
     estado_inicial = {
         "pergunta_usuario": pergunta,
         "contexto_schema": "",
@@ -23,6 +24,7 @@ def executar_consulta(grafo: StateGraph, pergunta: str) -> dict:
         "status": "iniciado",
         "tentativas_loop": 0,
         "db_path": "data/olist_relational.db",
+        "espera_humana": False,
     }
 
     print("=" * 70)
@@ -31,10 +33,27 @@ def executar_consulta(grafo: StateGraph, pergunta: str) -> dict:
     print(f"\nPergunta: {pergunta}\n")
     print("=" * 70)
 
-    resultado_final = grafo.invoke(estado_inicial)
-    return resultado_final
+    while True:
+        for evento in grafo.grafo_text_to_insight.stream(estado_inicial, config, stream_mode="values"):
+            pass
 
+        snapshot = grafo.grafo_text_to_insight.get_state(config)
 
+        if not snapshot.next:
+            return snapshot.values
+        
+        if "espera_humana" in snapshot.next:
+            pergunta_agente = snapshot.values.get("pergunta_ao_usuario", "Pode confirmar o prosseguimento?")
+            pergunta_original = snapshot.values.get("pergunta_usuario", "")
+            print(f"\n[HITL]: {pergunta_agente}")
+
+            resposta = input("Resposta: ")
+
+            grafo.grafo_text_to_insight.update_state(config, {f"pergunta_usuario": f"{pergunta_original}.\n[Contexto Adicional do Usuário]: {resposta}", 
+                                            "espera_humana": False})
+
+            estado_inicial = None
+            
 def exibir_resultado(resultado: dict) -> None:
     """Exibe o resultado final da execução de forma formatada."""
     print("\n" + "=" * 70)

@@ -12,6 +12,8 @@ import time
 import pytest
 from dotenv import load_dotenv
 
+from src.nodes.schema import _formatar_schema_sqlite
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "olist_relational.db")
@@ -60,7 +62,8 @@ def test_grafo_compila(grafo):
 @pytest.mark.timeout(120)
 def test_pergunta_simples(grafo):
     """Pergunta simples percorre o grafo e chega ao status aprovado."""
-    resultado = grafo.invoke(_estado_inicial("Quantos pedidos existem no banco?"))
+    config = {"configurable": {"thread_id": "teste_simples"}}
+    resultado = grafo.grafo_text_to_insight.invoke(_estado_inicial("Quantos pedidos existem no banco?"), config)
 
     assert resultado["status"] == "aprovado"
     assert resultado["sql_gerada"] != ""
@@ -72,8 +75,9 @@ def test_pergunta_simples(grafo):
 @pytest.mark.timeout(120)
 def test_pergunta_com_ranking(grafo):
     """Pergunta com ranking retorna múltiplas linhas."""
-    resultado = grafo.invoke(
-        _estado_inicial("Quais sao as 5 categorias de produtos mais vendidas?")
+    config = {"configurable": {"thread_id": "teste_simples"}}
+    resultado = grafo.grafo_text_to_insight.invoke(
+        _estado_inicial("Quais sao as 5 categorias de produtos mais vendidos por quantidade?"), config
     )
 
     assert resultado["status"] == "aprovado"
@@ -85,8 +89,9 @@ def test_pergunta_com_ranking(grafo):
 @pytest.mark.timeout(120)
 def test_estado_final_completo(grafo):
     """Estado final tem todos os campos-chave preenchidos."""
-    resultado = grafo.invoke(
-        _estado_inicial("Qual o valor medio dos pedidos?")
+    config = {"configurable": {"thread_id": "teste_estado"}}
+    resultado = grafo.grafo_text_to_insight.invoke(
+        _estado_inicial("Qual o valor medio dos pedidos?"), config
     )
 
     # Campos que devem estar preenchidos ao final

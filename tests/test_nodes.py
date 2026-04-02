@@ -106,9 +106,33 @@ def test_planner_com_feedback_revisa(llm):
     }
     resultado = nos_nodo_planejador(estado, llm)
 
-    assert resultado["status"] in ("pronto_codificacao", "revisando_estrategia")
+    assert resultado["status"] in ("pronto_codificacao", "revisando_estrategia", "aguardando_input")
     print(f"  → Planner decidiu: {resultado['status']}")
 
+@pytest.mark.vcr
+@pytest.mark.timeout(60)
+def test_planner_pergunta_fora_de_escopo(llm):
+    """Planner deve detectar pergunta fora de escopo e levantar a flag de HITL."""
+    from src.nodes.planner import nos_nodo_planejador
+
+    time.sleep(5)  # rate limit
+    schema = _obter_schema_real()
+    estado = {
+        "pergunta_usuario": "Quantas vezes a Ahri ganhou o CBLOL?", 
+        "contexto_schema": schema,
+        "feedback_critico": "",
+        "status": "schema_obtido",
+        "tentativas_loop": 0,
+        "erro_execucao": "",
+    }
+    
+    resultado = nos_nodo_planejador(estado, llm)
+
+    assert resultado.get("espera_humana") is True
+    assert resultado.get("status") == "aguardando_input"
+    assert "pergunta_ao_usuario" in resultado
+    assert len(resultado["pergunta_ao_usuario"]) > 5
+    print(f"  → Agente bloqueou com sucesso: {resultado['pergunta_ao_usuario']}")
 
 # ============================================================
 # CODE AGENT — com API
@@ -148,7 +172,7 @@ def test_code_agent_com_feedback_regenera(llm):
     """Code Agent com feedback do crítico → gera SQL diferente."""
     from src.nodes.code_agent.code_agent import nos_nodo_agente_codigo
 
-    time.sleep(5)  # rate limit
+    time.sleep(5)  
     schema = _obter_schema_real()
     estado = {
         "pergunta_usuario": "Quais as 5 categorias de produtos mais vendidas?",

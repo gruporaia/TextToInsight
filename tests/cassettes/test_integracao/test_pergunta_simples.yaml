@@ -1,5 +1,84 @@
 interactions:
 - request:
+    body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 o planejador de um
+      sistema que transforma perguntas em consultas SQL.\n\nSeu papel: analisar a
+      situa\u00e7\u00e3o atual e decidir a pr\u00f3xima a\u00e7\u00e3o.\n\nContexto
+      atual:\n- Pergunta do usu\u00e1rio: \"Quantos pedidos existem no banco?\"\n-
+      Schema dispon\u00edvel: Sim\n- Feedback do cr\u00edtico: Nenhum\n- Tentativas
+      realizadas: 0\n- Status atual: schema_obtido\n- Erro anterior: Nenhum\n\nAVALIA\u00c7\u00c3O
+      CR\u00cdTICA:\nVerifique se a \"Pergunta do usu\u00e1rio\" pode ser respondida
+      com as tabelas e colunas do Schema.\nSe houver ambiguidade, conceitos n\u00e3o
+      mapeados no banco de dados, ou se a inten\u00e7\u00e3o do usu\u00e1rio n\u00e3o
+      estiver clara, voc\u00ea DEVE pedir mais informa\u00e7\u00f5es.\n\nResponda
+      EXATAMENTE no formato JSON abaixo, sem formata\u00e7\u00e3o markdown (```json):\n{\n    \"decisao\":
+      \"escolha_uma_opcao\",\n    \"pergunta_ao_usuario\": \"escreva a pergunta aqui
+      se precisar de ajuda, ou deixe vazio se n\u00e3o precisar\"\n}\n\nOp\u00e7\u00f5es
+      v\u00e1lidas para ''decis\u00e3o'':\n- \"pronto_codificacao\" \u2192 se temos
+      schema, a pergunta faz sentido e devemos gerar/regenerar SQL\n- \"revisando_estrategia\"
+      \u2192 se o cr\u00edtico reprovou e devemos tentar uma abordagem diferente\n-
+      \"necessita_ajuda\" \u2192 a pergunta n\u00e3o \u00e9 clara, n\u00e3o faz sentido,
+      falta contexto ou n\u00e3o h\u00e1 dados no schema para responder.\n"}], "role":
+      "user"}], "safetySettings": [], "generationConfig": {"temperature": 0.7, "candidateCount":
+      1}}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '1551'
+      Content-Type:
+      - application/json
+      Host:
+      - generativelanguage.googleapis.com
+      User-Agent:
+      - google-genai-sdk/1.68.0 gl-python/3.10.12
+      x-goog-api-client:
+      - google-genai-sdk/1.68.0 gl-python/3.10.12
+    method: POST
+    uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAC/12RUU/CMBSF3/crlj6DAUQIvgoxPBhQp9E4s9ysl61xtEt7Z9Bl/912Y1DckqU9
+        5/Te3m91EIYsBckFB0LDbsMPq4Rh3X6dpyShJGv0khVL0HTOdk/trW2E8OAOsTqWbh8zjqkwoGIr
+        xqzUtqxKUsXFTqSQOn3QJ0vUWSUJElBJZSrQ4njKvrJhXp/mtP4cnG+nVYGu9V5xLPp40wfYTkhh
+        8icEo6SLPUebLTu5QnI8WHkU9A3a0qwykOEDElhOcKLhBtmXFKkvlHeqajldj2ddNY/rRWCyOPqk
+        CIoLaz7rPa+wWdq2ovCBe//CTgmFoB83SrR6i5hHgv7dq2cReMgY5arKcrq843QyDY7QOo6vqI3o
+        gGW4twiHk6ub4a4Ak7cdmUZTKmlwzV1m+R5tAJLxavH98jtfbxfDezN6VCxogj/pnKO9cwIAAA==
+    headers:
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=UTF-8
+      Date:
+      - Thu, 02 Apr 2026 14:58:23 GMT
+      Server:
+      - scaffolding on HTTPServer2
+      Server-Timing:
+      - gfet4t7; dur=2624
+      Transfer-Encoding:
+      - chunked
+      Vary:
+      - Origin
+      - X-Origin
+      - Referer
+      X-Content-Type-Options:
+      - nosniff
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Gemini-Service-Tier:
+      - standard
+      X-XSS-Protection:
+      - '0'
+    status:
+      code: 200
+      message: OK
+- request:
     body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 um especialista em
       SQL para bancos SQLite.\n\nSua tarefa: gerar UMA \u00fanica consulta SQL SELECT
       que responda \u00e0 pergunta do usu\u00e1rio,\nusando o schema do banco de dados
@@ -60,12 +139,12 @@ interactions:
   response:
     body:
       string: !!binary |
-        H4sIAAAAAAAC/2WQUUvDMBSF3/srQp4UVpnFwfRN2oqKc2OLIohIWO7aYJvU5k4npf/dtF23VPMQ
-        kntO7sn9Ko8QuuZKSMERDL0ir7ZCSNXujaYVgkIr9CVbLHiJR2+3KudsLQi75hFdxQ9xyEg4f3pk
-        J7oUUL5LcUpulvMZaa+GOg/rw/ltdIwrdQZNr1wLyHp73RvoRipp0iVwo1UbyeYLelClErCz5bHX
-        B7St6dbwBGaA3A7OD+PRotR5gUx/gAr1th18OrnoujmgBobLvYwaeTZUgvPRv74msqkycwE6bO2Q
-        PJP400zC4hdGHRD451s9Cs8hRjHV2yTF4RcnU2+PrKP4bMHLDlcCuQXoB2cTf5Nxk7aBtARTaGXg
-        TjSe2y8W8Q1bR8aHTzSL8X2wSq6/qVd7v0+rnsJCAgAA
+        H4sIAAAAAAAC/2WQUUvDMBSF3/srQp4UVpHhsPNNaoWCs3NmoohINHdtNEtKcyvTsf9u2q5bpn0o
+        yb3n3pPzrQNC6DvXQgqOYOkFeXYVQtbtv+kZjaDRNfqSK5a8wr22+9be2UkQVs0QvU9ukpiROJvf
+        siNTCahepTgm17NsQtqrpd7gZnd+GeztKqOg2bU0AlQv3/QCupBa2mIG3BrdWrJsSnddqQWsXPk0
+        6A3a1bS2PIcJIHfB+S4eLSuzLJGZT9Cxqdvg0eis2+aBOhCMt200yNXhaBQN/u21V85VKh+gx9aF
+        5Erid5OEJY+MeiDwz7N6FIFHjGJh6rzAwycOR8EWWUfxwYGXHa4clg5gODwZhQvFbdEa0gpsabSF
+        VDSaJGUZfwrVZfj28XOeTr/G07i+i2iwCX4BO0FHyUICAAA=
     headers:
       Alt-Svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
@@ -74,11 +153,11 @@ interactions:
       Content-Type:
       - application/json; charset=UTF-8
       Date:
-      - Wed, 25 Mar 2026 14:41:38 GMT
+      - Thu, 02 Apr 2026 14:58:24 GMT
       Server:
       - scaffolding on HTTPServer2
       Server-Timing:
-      - gfet4t7; dur=4384
+      - gfet4t7; dur=839
       Transfer-Encoding:
       - chunked
       Vary:
@@ -131,15 +210,14 @@ interactions:
   response:
     body:
       string: !!binary |
-        H4sIAAAAAAAC/2VSwW7bMAy9+ysInZMgaNd26C2rPcBYA6epEQzohkWtWFubLRmSPHQL8i8tdugH
-        9Narf2yUPSdOl0NAk0+Pj4/cBADsjishBXdo2TncUAZg0/77mlYOlaNCn6JkxY3bY7vfZhATxOGD
-        f8RW0TIK4zQ5h9limaxmYfJFfYyi8MPs4hPlgPhtXTgO11eXkKHhgoNBW2klEIQ06HhJ/RGaR6jQ
-        ZLUirNBQ27p5MlKPPIOjATQFZg/XoJrXEo0G4llrI9B8k2INioPjt1jwf0m7nkBifUuvQmgLtvmj
-        W1nS+snR0kcJfK8UiZogefMEaAy9KJqXTN5RoGvfTdIjU3kpzTMBJ2zgzHYXfx3t/TS6QG9WqQUW
-        PXzbA9i9VNLmS+RWKw+7TpMF21UlOfVA6WnQN2ipWW15hnNSQZvlu/2xyuiycqn+gepC1+1mj6bv
-        O7bBJRwATvq6044XB6XT6enoP2IbUltZDE9kcD00JS+k++VHSaPPKRs44d7o6r0IBpYxl+s6y92h
-        xuN33oDWtM7HFS1XdoZlWJKF46PJyfi+4DZvO7LuzCzGwmPin2nI8Sy+nB9//30WL8ZzlWdXcxZs
-        g7+8QGIFJQMAAA==
+        H4sIAAAAAAAC/2VSwU7bQBC9+ytGe04iQLQp3AJ2pUArh2BFlSgSUzyxLewda3ctAVH+pVX/otf8
+        WGftOjHUB2s08/bNvDezCQDUI+q0SNGRVedwJxmATfv3NdaOtJNCn5JkjcYdsN23GcQCcfTsH6lV
+        tIzCeRKfw2yxjFezMP6uP0dReDG7vJYcCL9tSodwe/MFMjKYIhiyNeuUIC0MOaykP8HuJ9RkskYL
+        NmVobLP7ZQoeeQYnAlgCc4Az6N2figyD8NQk+tiCRnD4g0qEBzYpGfswgdj6fn4Ej7C730JUopGY
+        YI2vVIEVQnk+gjUbTY/kezE4dliCTOpn5okayN/u4/vRwTTDJXlHKk6p7OHbHqDWhS5sviS0rD3s
+        NokXal8txI5nSR8FfYOWWjUWM/oqqmV9uF+Sqg1XtUv4ifQlN+36To4+dWyDdb8BnJ79q7fK3pSm
+        x9PRf8Q2lLZFObyDwYmISiwL9+KlJNG3RA2ccO/m6r0IBpYpl3OT5e7djB+9Aa1pnY8rWWLRGZZR
+        JRaOTyYfxusSbd52VN0tWZqnHhPJJSK+nMbjMH+dzhdnV01d3TypYBv8BcYwIfgKAwAA
     headers:
       Alt-Svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
@@ -148,11 +226,11 @@ interactions:
       Content-Type:
       - application/json; charset=UTF-8
       Date:
-      - Wed, 25 Mar 2026 14:41:41 GMT
+      - Thu, 02 Apr 2026 14:58:27 GMT
       Server:
       - scaffolding on HTTPServer2
       Server-Timing:
-      - gfet4t7; dur=2611
+      - gfet4t7; dur=2951
       Transfer-Encoding:
       - chunked
       Vary:

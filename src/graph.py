@@ -14,6 +14,7 @@ from functools import partial
 
 from langgraph.graph import StateGraph, START, END
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langgraph.checkpoint.memory import MemorySaver
 
 from .state import EstadoTextToInsight
 from .nodes import (
@@ -26,6 +27,10 @@ from .nodes import (
 )
 from .routers import roteador_sandbox, roteador_planejador
 
+def nos_nodo_espera_humana(estado: EstadoTextToInsight):
+    """Nó estrutural: serve apenas como breakpoint para o HITL."""
+    return estado
+
 class Graph:
     def __init__(self, api_key): #Essa definição do grafo pode mudar pro caso de utilizarmos diferentes modelos
 
@@ -34,6 +39,7 @@ class Graph:
                                       #um campo pro usuário utilizar mais modelos no futuro
             google_api_key=api_key
             )
+        self.memory = MemorySaver()
         self.grafo_text_to_insight = self._compilar_grafo()
 
     def _construir_grafo_text_to_insight(self) -> StateGraph:
@@ -44,6 +50,7 @@ class Graph:
 
         # 1. ADICIONAR NÓS
         construtor_grafo.add_node("planejador", partial(nos_nodo_planejador, llm=self.llm))
+        construtor_grafo.add_node("espera_humana", nos_nodo_espera_humana)
         construtor_grafo.add_node("esquema", nos_nodo_esquema)
         construtor_grafo.add_node("agente_codigo", partial(nos_nodo_agente_codigo, llm=self.llm))
         construtor_grafo.add_node("sandbox", nos_nodo_sandbox)
@@ -52,9 +59,10 @@ class Graph:
 
         # 2. ARESTAS FIXAS
         construtor_grafo.add_edge(START, "planejador")
-        construtor_grafo.add_edge("esquema", "agente_codigo")
+        construtor_grafo.add_edge("espera_humana", "planejador")
+        construtor_grafo.add_edge("esquema", "planejador")
         construtor_grafo.add_edge("agente_codigo", "sandbox")
-
+        
         # 3. ARESTAS CONDICIONAIS
         construtor_grafo.add_conditional_edges(
             "sandbox",
@@ -69,9 +77,11 @@ class Graph:
             "planejador",
             roteador_planejador,
             {
+                "espera_humana": "espera_humana",
                 "esquema": "esquema",
                 "agente_codigo": "agente_codigo",
                 "critico": "critico",
+                "planejador": "planejador",
                 "fim": END,
             }
         )
@@ -99,9 +109,10 @@ class Graph:
 
     def _compilar_grafo(self) -> "CompiledStateGraph":
         construtor = self._construir_grafo_text_to_insight()
-        grafo_compilado = construtor.compile()
+        grafo_compilado = construtor.compile(checkpointer=self.memory,
+                                             interrupt_before=["espera_humana"])
         print("[GRAFO] Grafo Text-to-Insight compilado com sucesso!")
         return grafo_compilado
 
-    def invoke(self, estado: EstadoTextToInsight):
-        return self.grafo_text_to_insight.invoke(estado)
+    def app(self):
+        return self.grafo_text_to_insight
