@@ -21,6 +21,7 @@ Contexto atual:
 - Tentativas realizadas: {tentativas}
 - Status atual: {status_atual}
 - Erro anterior: {erro}
+- Schema (se disponível): {schema}
 
 AVALIAÇÃO CRÍTICA:
 Verifique se a "Pergunta do usuário" pode ser respondida com as tabelas e colunas do Schema.
@@ -75,6 +76,8 @@ def nos_nodo_planejador(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI
         tentativas=tentativas,
         status_atual=status,
         erro=erro if erro else "Nenhum",
+        # apenas primeiros 500 caracteres do schema para evitar estourar o prompt, mas pode ser ajustado conforme necessidade
+        schema=schema[:500] if schema else "Nenhum",
     )
 
     resposta_llm = llm.invoke(prompt)
