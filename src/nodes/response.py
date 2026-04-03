@@ -11,6 +11,7 @@ import sys
 import os
 
 from ..state import EstadoTextToInsight
+from ..utils import extrair_tokens
 
 PROMPT_RESPONSE = """Você é um assistente que transforma resultados de consultas SQL
 e amostras de dados em uma resposta em linguagem natural clara e concisa para o
@@ -115,9 +116,23 @@ def nos_nodo_resposta(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) 
         estado["resposta_natural"] = texto
     except Exception:
         # Se o estado não for um dict mutável por alguma razão, ignoramos
-        pass
+        pass    
+
+    # Se a variável `resposta` existir e for compatível, extraímos tokens;
+    # caso contrário retornamos zeros para os contadores.
+    in_tokens = out_tokens = total_tokens = 0
+    try:
+        # `resposta` pode não existir no caminho determinístico (pytest)
+        if 'resposta' in locals() and resposta is not None:
+            in_tokens, out_tokens, total_tokens = extrair_tokens(resposta)
+    except Exception as e:
+        print(f"[RESPOSTA] Falha ao extrair tokens: {e}")
 
     return {
         "resposta_natural": texto,
         "status": "aprovado",
+
+        "tokens_input": in_tokens,
+        "tokens_output": out_tokens,
+        "tokens_total": total_tokens,
     }

@@ -8,6 +8,7 @@ respondem corretamente à pergunta original do usuário.
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from ..state import EstadoTextToInsight
+from ..utils import extrair_tokens
 
 PROMPT_CRITIC = """Você é um revisor de qualidade para consultas SQL geradas por IA.
 
@@ -94,7 +95,13 @@ def nos_nodo_critico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -
     print(f"[CRITICO] Veredito: {veredito}")
     print(f"[CRITICO] Feedback: {feedback[:100]}...")
 
+    in_tokens, out_tokens, total_tokens = extrair_tokens(resposta)
+
     return {
         "feedback_critico": feedback,
         "status": veredito,
+
+        "tokens_input": in_tokens,
+        "tokens_output": out_tokens,
+        "tokens_total": total_tokens,
     }

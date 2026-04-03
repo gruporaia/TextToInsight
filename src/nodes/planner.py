@@ -8,6 +8,8 @@ para decidir a próxima etapa do fluxo (status de roteamento).
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from ..state import EstadoTextToInsight
+# Importando a função de extração de tokens
+from ..utils import extrair_tokens
 
 PROMPT_PLANNER = """Você é o planejador de um sistema que transforma perguntas em consultas SQL.
 
@@ -78,7 +80,13 @@ def nos_nodo_planejador(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI
 
     print(f"[PLANEJADOR] Decisão LLM: {decisao}")
 
+    in_tokens, out_tokens, total_tokens = extrair_tokens(resposta)
+    
     return {
         "status": decisao,
         "tentativas_loop": tentativas,
+
+        "tokens_input": in_tokens,
+        "tokens_output": out_tokens,
+        "tokens_total": total_tokens,       
     }

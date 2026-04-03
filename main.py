@@ -3,11 +3,13 @@
 Script principal para demonstração do grafo Text-to-Insight.
 """
 
+import time
 import sys
 import os
 from dotenv import load_dotenv
 from langgraph.graph import StateGraph
 from src.graph import Graph
+from src.utils import salvar_metricas_csv
 
 load_dotenv()
 
@@ -31,7 +33,18 @@ def executar_consulta(grafo: StateGraph, pergunta: str) -> dict:
     print(f"\nPergunta: {pergunta}\n")
     print("=" * 70)
 
+    # Intervalo de cálculo da latência da consulta no grafo. Optei por considerar somente
+    # o tempo em que o grafo de fato está rodando, então não incluo o tempo que leva as linhas
+    # anteriores na main ou antes desse trecho.
+    lat_inicio = time.perf_counter()
+
     resultado_final = grafo.invoke(estado_inicial)
+
+    lat_fim = time.perf_counter()
+    latencia_consulta = lat_fim - lat_inicio
+
+    salvar_metricas_csv(resultado_final, latencia_consulta)
+
     return resultado_final
 
 
