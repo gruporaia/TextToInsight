@@ -99,3 +99,18 @@ class Graph:
 
     def invoke(self, estado: EstadoTextToInsight):
         return self.grafo_text_to_insight.invoke(estado)
+
+    def stream(self, estado: EstadoTextToInsight, config: dict = None):
+        """
+        Executa o grafo em modo streaming, yieldando estado após cada nó.
+
+        Args:
+            estado: Estado inicial
+            config: Configurações (ex: recursion_limit)
+
+        Yields:
+            Dicts com saída de cada nó
+        """
+        if config is None:
+            config = {}
+        return self.grafo_text_to_insight.stream(estado, config)
