@@ -9,6 +9,8 @@ import json
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from ..state import EstadoTextToInsight
+# Importando a função de extração de tokens
+from ..utils import extrair_tokens
 
 PROMPT_PLANNER = """Você é o planejador de um sistema que transforma perguntas em consultas SQL.
 
@@ -52,21 +54,37 @@ def nos_nodo_planejador(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI
     tentativas = estado.get("tentativas_loop", 0)
     status = estado.get("status", "iniciado")
     erro = estado.get("erro_execucao", "")
+    # Contrato estável para métricas: sempre retornamos esses campos,
+    # mesmo quando o nó não chama LLM (valor zero).
+    in_tokens = 0
+    out_tokens = 0
+    total_tokens = 0
 
     print(f"[PLANEJADOR] Pergunta: {pergunta[:50]}... | Status: {status}")
 
     # Caso determinístico: sem schema, precisa buscá-lo primeiro
     if not schema:
         print("[PLANEJADOR] Schema vazio → aguardando_schema")
+        # Retorno antecipado sem uso de LLM: tokens ficam zerados.
         return {
             "status": "aguardando_schema",
             "tentativas_loop": tentativas,
+            "tokens_input": in_tokens,
+            "tokens_output": out_tokens,
+            "tokens_total": total_tokens,
         }
 
     # Se já foi aprovado, mantém
     if status == "aprovado":
         print("[PLANEJADOR] Já aprovado → mantendo status")
-        return {"status": "aprovado", "tentativas_loop": tentativas}
+        # Sem nova chamada ao modelo: preserva contadores em zero.
+        return {
+            "status": "aprovado",
+            "tentativas_loop": tentativas,
+            "tokens_input": in_tokens,
+            "tokens_output": out_tokens,
+            "tokens_total": total_tokens,
+        }
 
     # Usa LLM para decidir estratégia
     prompt = PROMPT_PLANNER.format(
@@ -81,6 +99,8 @@ def nos_nodo_planejador(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI
     )
 
     resposta_llm = llm.invoke(prompt)
+    # A partir daqui houve chamada ao LLM; registramos tokens reais da resposta.
+    in_tokens, out_tokens, total_tokens = extrair_tokens(resposta_llm)
     conteudo_bruto = resposta_llm.content.strip()
 
     # Limpeza caso o LLM retorne blocos de código markdown (```json ... ```)
@@ -102,11 +122,16 @@ def nos_nodo_planejador(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI
     # Mapeia para os estados do grafo e levanta a flag de HITL se necessário
     if decisao == "necessita_ajuda":
         print(f"[PLANEJADOR] Solicitando ajuda: {pergunta_agente}")
+        # Mesmo no fluxo HITL, retornamos tokens para manter consistência
+        # para CSV, dashboards e testes que consomem o estado.
         return {
             "status": "aguardando_input", 
-            "espera_humana": True,            # Flag que o router vai ler!
-            "pergunta_ao_usuario": pergunta_agente, # A pergunta que vai aparecer no terminal!
-            "tentativas_loop": tentativas
+            "espera_humana": True,            # Flag que o router vai ler
+            "pergunta_ao_usuario": pergunta_agente, # A pergunta que vai aparecer no terminal
+            "tentativas_loop": tentativas,
+            "tokens_input": in_tokens,
+            "tokens_output": out_tokens,
+            "tokens_total": total_tokens,
         }
 
     # Mapeia resposta para status válido
@@ -121,4 +146,7 @@ def nos_nodo_planejador(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI
         "status": decisao,
         "espera_humana": False,  
         "tentativas_loop": tentativas,
+        "tokens_input": in_tokens,
+        "tokens_output": out_tokens,
+        "tokens_total": total_tokens,       
     }

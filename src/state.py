@@ -7,7 +7,10 @@ contendo todas as informações necessárias para o fluxo de execução.
 
 # trocando imports para incluir tipos de status e opcionais
 # isso ajuda a garantir que o estado seja consistente e fácil de entender para os agentes e roteadores do grafo
-from typing import Any, Literal, TypedDict
+
+# --> Adição dos imports de Annotated e operator para possibilitar o tracking dos tokens.
+from typing import Any, Literal, TypedDict, Annotated
+import operator
 # Uso de Literal para reduzir erro de digitação e inconsistências de roteamento
 StatusExecucao = Literal[
 "iniciado",
@@ -60,3 +63,9 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     pergunta_ao_usuario: str
     tentativas_loop: int
     resposta_natural: str
+
+    # Campos exclusivos para métricas. Possibilita a soma automática dos tokens utilizados
+    # por cada chamada do Gemini nos vários diferentes nós.
+    tokens_input: Annotated[int, operator.add]
+    tokens_output: Annotated[int, operator.add]
+    tokens_total: Annotated[int, operator.add]

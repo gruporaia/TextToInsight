@@ -35,7 +35,8 @@ class Graph:
     def __init__(self, api_key): #Essa definição do grafo pode mudar pro caso de utilizarmos diferentes modelos
 
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash", #Aqui coloquei manualmente o gemini 2.5, mas podemos deixar na definição do grafo
+            model="gemini-2.5-flash",
+            # model="gemini-3-flash",   #Aqui coloquei manualmente o gemini 2.5, mas podemos deixar na definição do grafo
                                       #um campo pro usuário utilizar mais modelos no futuro
             google_api_key=api_key
             )

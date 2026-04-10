@@ -3,11 +3,13 @@
 Script principal para demonstração do grafo Text-to-Insight.
 """
 
+import time
 import sys
 import os
 from dotenv import load_dotenv
 from langgraph.graph import StateGraph
 from src.graph import Graph
+from src.utils import salvar_metricas_csv
 
 load_dotenv()
 
@@ -33,6 +35,11 @@ def executar_consulta(grafo: StateGraph, pergunta: str) -> dict:
     print(f"\nPergunta: {pergunta}\n")
     print("=" * 70)
 
+    # Intervalo de cálculo da latência da consulta no grafo. Optei por considerar somente
+    # o tempo em que o grafo de fato está rodando, então não incluo o tempo que leva as linhas
+    # anteriores na main ou antes desse trecho.
+    lat_inicio = time.perf_counter()
+
     while True:
         for evento in grafo.grafo_text_to_insight.stream(estado_inicial, config, stream_mode="values"):
             pass
@@ -40,8 +47,12 @@ def executar_consulta(grafo: StateGraph, pergunta: str) -> dict:
         snapshot = grafo.grafo_text_to_insight.get_state(config)
 
         if not snapshot.next:
-            return snapshot.values
-        
+            resultado_final = snapshot.values
+            lat_fim = time.perf_counter()
+            latencia_consulta = lat_fim - lat_inicio
+            salvar_metricas_csv(resultado_final, latencia_consulta)
+            return resultado_final
+
         if "espera_humana" in snapshot.next:
             pergunta_agente = snapshot.values.get("pergunta_ao_usuario", "Pode confirmar o prosseguimento?")
             pergunta_original = snapshot.values.get("pergunta_usuario", "")
@@ -49,11 +60,21 @@ def executar_consulta(grafo: StateGraph, pergunta: str) -> dict:
 
             resposta = input("Resposta: ")
 
-            grafo.grafo_text_to_insight.update_state(config, {f"pergunta_usuario": f"{pergunta_original}.\n[Contexto Adicional do Usuário]: {resposta}", 
-                                            "espera_humana": False})
+            grafo.grafo_text_to_insight.update_state(
+                config,
+                {
+                    "pergunta_usuario": f"{pergunta_original}.\n[Contexto Adicional do Usuário]: {resposta}",
+                    "espera_humana": False,
+                },
+            )
 
             estado_inicial = None
-            
+
+    # Código morto porque o fluxo já retorna dentro do while acima
+    # resultado_final = grafo.invoke(estado_inicial)
+    # return resultado_final
+
+
 def exibir_resultado(resultado: dict) -> None:
     """Exibe o resultado final da execução de forma formatada."""
     print("\n" + "=" * 70)

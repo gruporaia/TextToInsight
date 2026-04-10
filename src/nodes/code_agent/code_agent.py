@@ -9,6 +9,7 @@ import re
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from ...state import EstadoTextToInsight
+from ...utils import extrair_tokens
 
 PROMPT_TEMPLATE = """Você é um especialista em SQL para bancos SQLite.
 
@@ -73,8 +74,14 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativ
 
     print(f"[AGENTE_CODIGO] SQL gerada: {sql[:100]}...")
 
+    in_tokens, out_tokens, total_tokens = extrair_tokens(resposta)
+
     return {
         "sql_gerada": sql,
         "status": "sql_gerada",
         "tentativas_loop": tentativas + 1,
+        # Retornando o número de tokens nessa chamada do Gemini
+        "tokens_input": in_tokens,
+        "tokens_output": out_tokens,
+        "tokens_total": total_tokens,
     }
