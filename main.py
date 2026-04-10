@@ -23,6 +23,7 @@ def executar_consulta(grafo: StateGraph, pergunta: str) -> dict:
         "saida_terminal": "",
         "feedback_critico": "",
         "erro_execucao": "",
+        "historico_conversa": [],
         "status": "iniciado",
         "tentativas_loop": 0,
         "db_path": "data/olist_relational.db",
@@ -55,18 +56,14 @@ def executar_consulta(grafo: StateGraph, pergunta: str) -> dict:
 
         if "espera_humana" in snapshot.next:
             pergunta_agente = snapshot.values.get("pergunta_ao_usuario", "Pode confirmar o prosseguimento?")
-            pergunta_original = snapshot.values.get("pergunta_usuario", "")
+            historico_atual = snapshot.values.get("historico_conversa", [])
+
             print(f"\n[HITL]: {pergunta_agente}")
 
-            resposta = input("Resposta: ")
+            resposta = input("[RESPOSTA USUARIO]: ")
+            historico_atual.append(("ai: "+pergunta_agente, "\nuser: "+resposta))
 
-            grafo.grafo_text_to_insight.update_state(
-                config,
-                {
-                    "pergunta_usuario": f"{pergunta_original}.\n[Contexto Adicional do Usuário]: {resposta}",
-                    "espera_humana": False,
-                },
-            )
+            grafo.grafo_text_to_insight.update_state(config, {"historico_conversa": historico_atual, "espera_humana": False})
 
             estado_inicial = None
 

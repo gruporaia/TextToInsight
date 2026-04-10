@@ -18,12 +18,15 @@ Seu papel: analisar a situação atual e decidir a próxima ação.
 
 Contexto atual:
 - Pergunta do usuário: "{pergunta}"
-- Schema disponível: {schema_disponivel}
+
+- conversa_previa: {conversa_previa}
+
+- Schema: {schema}
+
 - Feedback do crítico: {feedback}
 - Tentativas realizadas: {tentativas}
 - Status atual: {status_atual}
 - Erro anterior: {erro}
-- Schema (se disponível): {schema}
 
 AVALIAÇÃO CRÍTICA:
 Verifique se a "Pergunta do usuário" pode ser respondida com as tabelas e colunas do Schema.
@@ -49,6 +52,7 @@ def nos_nodo_planejador(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI
     Lógica determinística para schema vazio; LLM para decisões mais complexas.
     """
     pergunta = estado.get("pergunta_usuario", "")
+    conversa_previa = estado.get("historico_conversa", "")
     schema = estado.get("contexto_schema", "")
     feedback = estado.get("feedback_critico", "")
     tentativas = estado.get("tentativas_loop", 0)
@@ -96,6 +100,7 @@ def nos_nodo_planejador(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI
         erro=erro if erro else "Nenhum",
         # apenas primeiros 500 caracteres do schema para evitar estourar o prompt, mas pode ser ajustado conforme necessidade
         schema=schema[:500] if schema else "Nenhum",
+        conversa_previa=conversa_previa if conversa_previa else "Nenhuma",
     )
 
     resposta_llm = llm.invoke(prompt)

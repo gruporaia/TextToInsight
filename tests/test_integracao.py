@@ -42,6 +42,7 @@ def rate_limit_delay():
 def _estado_inicial(pergunta: str) -> dict:
     return {
         "pergunta_usuario": pergunta,
+        "historico_conversa": [],
         "contexto_schema": "",
         "sql_gerada": "",
         "saida_terminal": "",

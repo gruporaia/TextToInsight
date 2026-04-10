@@ -61,6 +61,7 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     status: StatusExecucao
     espera_humana: bool
     pergunta_ao_usuario: str
+    historico_conversa: list[tuple[str, str]]
     tentativas_loop: int
     resposta_natural: str
 
