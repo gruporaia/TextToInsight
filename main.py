@@ -129,9 +129,10 @@ def main():
         pergunta = "Quantos pedidos existem no banco?"
         print(f"Nenhuma pergunta fornecida. Usando exemplo: '{pergunta}'\n")
 
-    api_key = os.getenv("GOOGLE_API_KEY")
+    api_key = os.getenv("GOOGLE_API_KEY") #GOOGLE_API_KEY/OPENAI_API_KEY
+    model = "gemini-2.5-flash" #gemini-2.5-flash/gpt-5-nano 
 
-    grafo = Graph(api_key)
+    grafo = Graph(api_key, model)
 
     resultado = executar_consulta(grafo, pergunta)
     exibir_resultado(resultado)

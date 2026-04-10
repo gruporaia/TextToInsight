@@ -13,7 +13,6 @@ Fluxo MVP:
 from functools import partial
 
 from langgraph.graph import StateGraph, START, END
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.checkpoint.memory import MemorySaver
 
 from .state import EstadoTextToInsight
@@ -26,20 +25,16 @@ from .nodes import (
     nos_nodo_resposta,
 )
 from .routers import roteador_sandbox, roteador_planejador
+from .model_selection import get_model
 
 def nos_nodo_espera_humana(estado: EstadoTextToInsight):
     """Nó estrutural: serve apenas como breakpoint para o HITL."""
     return estado
 
 class Graph:
-    def __init__(self, api_key): #Essa definição do grafo pode mudar pro caso de utilizarmos diferentes modelos
-
-        self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            # model="gemini-3-flash",   #Aqui coloquei manualmente o gemini 2.5, mas podemos deixar na definição do grafo
-                                      #um campo pro usuário utilizar mais modelos no futuro
-            google_api_key=api_key
-            )
+    def __init__(self, api_key, model): 
+        
+        self.llm = get_model(model, api_key)
         self.memory = MemorySaver()
         self.grafo_text_to_insight = self._compilar_grafo()
 

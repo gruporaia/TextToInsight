@@ -29,7 +29,7 @@ def grafo():
         pytest.skip("Variável GOOGLE_API_KEY não encontrada. Pulando testes de integração.")
 
     from src.graph import Graph
-    return Graph(api_key)
+    return Graph(api_key, "gemini-2.5-flash")
 
 
 @pytest.fixture(autouse=True)
