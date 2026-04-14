@@ -80,6 +80,12 @@ def main():
         help="Diretório com dados do Spider",
     )
 
+    parser.add_argument(
+        "--question-filter",
+        type=str,
+        help="Filtrar por um trecho específico da pergunta em inglês",
+    )
+
     args = parser.parse_args()
 
     # Validar API key
@@ -91,22 +97,30 @@ def main():
     # 1. Carregar dados
     print(f"\n📂 Carregando exemplos do Spider de {args.data_dir}...")
     try:
-        ejemplos = load_spider_dev_examples(args.data_dir)
-        print(f"✓ Carregados {len(ejemplos)} exemplos")
+        exemplos = load_spider_dev_examples(args.data_dir)
+        print(f"✓ Carregados {len(exemplos)} exemplos")
     except FileNotFoundError as e:
         print(f"❌ {e}")
         sys.exit(1)
 
     # 2. Aplicar filtros
     if args.db_filter:
-        ejemplos = filter_by_db_id(ejemplos, args.db_filter)
-        print(f"✓ Filtrados por db_id={args.db_filter}: {len(ejemplos)} exemplos")
+        exemplos = filter_by_db_id(exemplos, args.db_filter)
+        print(f"✓ Filtrados por db_id={args.db_filter}: {len(exemplos)} exemplos")
 
+    # --- NOVO TRECHO ADICIONADO ---
+    if args.question_filter:
+        exemplos = [
+            ex for ex in exemplos 
+            if args.question_filter.lower() in ex.get("question", "").lower()
+        ]
+        print(f"✓ Filtrados pela pergunta contendo '{args.question_filter}': {len(exemplos)} exemplos")
+    
     # 3. Fazer sampling
-    ejemplos = sample_examples(ejemplos, sample_size=args.sample_size, seed=args.seed)
+    exemplos = sample_examples(exemplos, sample_size=args.sample_size, seed=args.seed)
     print(
-        f"✓ Selecionados {len(ejemplos)} exemplos (seed={args.seed}, "
-        f"bancos únicos: {len(get_unique_db_ids(ejemplos))})"
+        f"✓ Selecionados {len(exemplos)} exemplos (seed={args.seed}, "
+        f"bancos únicos: {len(get_unique_db_ids(exemplos))})"
     )
 
     # 4. Inicializar componentes
@@ -131,18 +145,18 @@ def main():
     print(f"✓ CSV reporter inicializado: {csv_path}")
 
     # 6. Loop de testes
-    print(f"\n🚀 Iniciando avaliação com {len(ejemplos)} perguntas...\n")
+    print(f"\n🚀 Iniciando avaliação com {len(exemplos)} perguntas...\n")
     print("=" * 100)
 
     all_rows = []
     ex_id = 1
 
-    for idx, ex in enumerate(ejemplos, 1):
+    for idx, ex in enumerate(exemplos, 1):
         pergunta = ex.get("question", "")
         query_ouro = ex.get("query", "")
         db_id = ex.get("db_id", "")
 
-        print(f"\n[{idx}/{len(ejemplos)}] Pergunta: {pergunta[:60]}...")
+        print(f"\n[{idx}/{len(exemplos)}] Pergunta: {pergunta[:60]}...")
         print(f"     DB: {db_id} | Query Ouro: {query_ouro[:50]}...")
 
         # Executar query ouro para obter resultado esperado
@@ -214,6 +228,10 @@ def main():
                         if query_agente and not erro_exec:
                             resultado_agente = executor.execute_query(db_id, query_agente)
                             if resultado_agente["success"]:
+                                # Testes de pensamentos pensantes
+                                print(f"Resultado Ouro: {resultado_ouro["results"][:50]}")
+                                print(f"Resultado Text-to-Insight: {resultado_agente["results"][:50]}")
+
                                 resultado_exato_match = results_exact_match(
                                     resultado_ouro["results"],
                                     resultado_agente["results"],
