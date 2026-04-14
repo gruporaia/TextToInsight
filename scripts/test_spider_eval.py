@@ -80,6 +80,7 @@ def main():
         help="Diretório com dados do Spider",
     )
 
+    # testar queries individualmente
     parser.add_argument(
         "--question-filter",
         type=str,
@@ -228,7 +229,7 @@ def main():
                         if query_agente and not erro_exec:
                             resultado_agente = executor.execute_query(db_id, query_agente)
                             if resultado_agente["success"]:
-                                # Testes de pensamentos pensantes
+                                # Imprimir os resultados das duas queries
                                 print(f"Resultado Ouro: {resultado_ouro["results"][:50]}")
                                 print(f"Resultado Text-to-Insight: {resultado_agente["results"][:50]}")
 
