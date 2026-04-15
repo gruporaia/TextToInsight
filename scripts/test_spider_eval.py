@@ -90,9 +90,12 @@ def main():
     args = parser.parse_args()
 
     # Validar API key
-    api_key = os.getenv("GOOGLE_API_KEY")
+    # model = "gpt-4o-mini"
+    model = "gemini-2.5-flash"
+    
+    api_key = os.getenv("OPENAI_API_KEY") if "gpt" in model.lower() else os.getenv("GOOGLE_API_KEY")
     if not api_key:
-        print("❌ Erro: GOOGLE_API_KEY não encontrada em .env")
+        print("❌ Erro: Chave API não encontrada em .env")
         sys.exit(1)
 
     # 1. Carregar dados
@@ -127,7 +130,7 @@ def main():
     # 4. Inicializar componentes
     print("\n🔧 Inicializando componentes...")
     try:
-        grafo = Graph(api_key)
+        grafo = Graph(model=model, api_key=api_key)
         print("✓ Grafo LangGraph inicializado")
     except Exception as e:
         print(f"❌ Erro ao inicializar grafo: {e}")
@@ -192,7 +195,11 @@ def main():
 
         try:
             for output in grafo.stream(
-                estado_inicial, config={"recursion_limit": 30}
+                estado_inicial, config={"recursion_limit": 30,
+                                        "configurable": {
+                                            "thread_id": f"spider_test_{ex_id}", # config incluindo a thread de memória 
+                                        }
+                                    }
             ):
                 # stream() retorna dict: {'nó_name': {mudanças_do_nó}}
                 # Acumular mudanças no estado completo
