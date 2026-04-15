@@ -3,7 +3,7 @@ interactions:
     body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 o planejador de um
       sistema que transforma perguntas em consultas SQL.\n\nSeu papel: analisar a
       situa\u00e7\u00e3o atual e decidir a pr\u00f3xima a\u00e7\u00e3o.\n\nContexto
-      atual:\n- Pergunta do usu\u00e1rio: \"Quantos pedidos existem no banco?\"\n-
+      atual:\n- Pergunta do usu\u00e1rio: \"Quantas vezes a Ahri ganhou o CBLOL?\"\n-
       Schema dispon\u00edvel: Sim\n- Feedback do cr\u00edtico: Nenhum\n- Tentativas
       realizadas: 0\n- Status atual: schema_obtido\n- Erro anterior: Nenhum\n\nAVALIA\u00c7\u00c3O
       CR\u00cdTICA:\nVerifique se a \"Pergunta do usu\u00e1rio\" pode ser respondida
@@ -28,7 +28,7 @@ interactions:
       Connection:
       - keep-alive
       Content-Length:
-      - '1551'
+      - '1554'
       Content-Type:
       - application/json
       Host:
@@ -42,12 +42,15 @@ interactions:
   response:
     body:
       string: !!binary |
-        H4sIAAAAAAAC/2WRXUvDMBSG7/srSq436Sbb0Fv1YqJsapGJlXFoztqwNinJKUxL/7tJu26ZNlCS
-        97w5H0+aIAxZCpILDoSG3YafVgnDpvu7mJKEkmxgkKxYgaazt/8ab28thAd3iTWJdOeEcUyFAZVY
-        MWGVtmnVNlVc7EQKqdNHg7NCndWSYAtqW5satDjesku2zKvTnvZfo3N3WhXoSpeKYzHY28HAdkIK
-        k78iGCWd7S1erdkpKiTHg5WjYCjQpWa1gQyfkcByghMNN0hZUaz2KO9U3XG6nsz7bB7XC8P05hgn
-        RVBchqJoOvqX2dzbuqLwiXuPYceEQtC3myV+2MTMQ0F/GhtgBB4zRrmqs5wum5zMZ4vgiK0n+Y7a
-        iB5ZhqWFOJ5ezca7AkzelWQaTaWkwSV3ns1HvAJePj3WC/2zWK4jmKvyZc+CNvgFzNz0U3UCAAA=
+        H4sIAAAAAAAC/2VSTW/TQBC9+1eM9pxUTQMKgkMFAYlCqxQaVUgYVYM9sTe1d5z9QG2i/Jqe4N5f
+        kD/G2IkTB3xYzc68efvmeVYRgErQpDpFT069hu+SAVg1Z11j48l4KbQpSVZo/QG7/VadWCCeHuom
+        tYpNfY9VSol2yLEkY2UoIee0xzuchxRj1WthFdksmLrAd8EFtHrX8ja3Gja/IZQICZYVbZ56QLvw
+        mRyYzRNDhibHEjxbQ5odpNqSx1ImoDcw5wxTtoLlALQIuqpDB8HrQi+lTeZC+EUmIXsCt5xs/kDG
+        zosIhJTA4U+ysAgo+pzgltIeypb2QCoQguDkjtDIbigDMIzfXU4uezUSi4xF3Yxsre08VrFZq46F
+        6338o3cw3nJBtaslp1S08HULUDNttMu/Ejo2NexmOrlW+6o2KT1I+jRqH2ioVXCY0ZXYJCuA+x+t
+        Kstl5ad8T2bMoVmB4dnplq2zMkeAV23ds8fiqDQYDAe9/5jde3lXF91l6uyZjImF9o/1LNMP36aq
+        Y4X/R1hrRtTxTPmcQ5b7Y5Gj4SDaubY18pas01vHMirFw/7Zycv+rECXNy8qWZmKjaOLtMHwaILp
+        5/6nq5uPy9HF9fzFeLn4cq+idfQXVWsbQk8DAAA=
     headers:
       Alt-Svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
@@ -56,11 +59,11 @@ interactions:
       Content-Type:
       - application/json; charset=UTF-8
       Date:
-      - Thu, 02 Apr 2026 14:59:50 GMT
+      - Thu, 02 Apr 2026 15:43:02 GMT
       Server:
       - scaffolding on HTTPServer2
       Server-Timing:
-      - gfet4t7; dur=8863
+      - gfet4t7; dur=4508
       Transfer-Encoding:
       - chunked
       Vary:

@@ -34,10 +34,15 @@ interactions:
   response:
     body:
       string: !!binary |
-        H4sIAAAAAAAC/y2OuwrDMAxF93yF8FxCoXTplkKHQiiFPnaRCMfUdoJkQ03Iv1eh2XTOvYI7VwCG
-        mEc2J5gVFLuxJ6Xj/rD7i0AiaFdnnoMTCFrwoEeXmSkmX4C+E7Gj2LloYXB2gJ4Cxr6Gx+Q+JODi
-        ZgCZIEtGr2+JwjQycqnh7gmFIHEBtKh1j4m4NtsGSZiyrBNet+bdXNvm3F6MZku1VD+9N5M8xgAA
-        AA==
+        H4sIAAAAAAAC/11SwW7TQBC9+ytGeymgNGqjFNrcQuJKEW0dEhOBAJElntgr7F2zu1ZLo/xLqx74
+        AG5c/WPM2nHq4IM1O+/tm5m3s/EA2IrLSETcomED+EwZgE31d5iSFqUloElRMufaPnPrb9OKiWLx
+        zl1iC3/mjydhMIDhdBYshuPgi7z0/fHb4egd5YD0TZFaDvP3V7Cc+1f+KIRR8OEmfPHqJVzOgmtQ
+        OkJtlqDR5EpGCJHQaHlGbSGUD5CjjgtJEpGCwhTloxaq44QtzaVAgSz/ZqgVWGV5CiSQI82rDEgO
+        ln/HlMNyV6QLgXGFXEuOwXM6UCF36MByc1RpfNsJHA3g4qLfP90uO2DKJwWrlGtHXPN7zMBdJBog
+        dUBgUj4CasIhLf/EYkWBKlw7ggbRuZup/E3ELmtZud3HXzvPD6BVis7dTEWYNvRtQ2BrIYVJZsiN
+        ko42D4Mp26OCPLyj9InXFKikWWF4jNfUBa0C3z84y7XKchuqHyhHqqhWoXdyXqu1VueA8OZsh1d2
+        HUD91w3WEjZjKivS9k611o2m5Kmwv9woof8xZC0n7H99NV54LcuYTVQRJ/awx9PznrczrfZxQQsg
+        asNizMjC41737HidcpNUFVm9gAYnkeMkn8KAr/jsZlIMf1ozjaf3o9uhYt7W+wfW/ferVgMAAA==
     headers:
       Alt-Svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
@@ -46,85 +51,11 @@ interactions:
       Content-Type:
       - application/json; charset=UTF-8
       Date:
-      - Wed, 25 Mar 2026 14:43:19 GMT
+      - Thu, 02 Apr 2026 15:00:24 GMT
       Server:
       - scaffolding on HTTPServer2
       Server-Timing:
-      - gfet4t7; dur=6581
-      Transfer-Encoding:
-      - chunked
-      Vary:
-      - Origin
-      - X-Origin
-      - Referer
-      X-Content-Type-Options:
-      - nosniff
-      X-Frame-Options:
-      - SAMEORIGIN
-      X-Gemini-Service-Tier:
-      - standard
-      X-XSS-Protection:
-      - '0'
-    status:
-      code: 503
-      message: Service Unavailable
-- request:
-    body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 um revisor de qualidade
-      para consultas SQL geradas por IA.\n\nSua tarefa: avaliar se a consulta SQL
-      e seus resultados respondem adequadamente\n\u00e0 pergunta original do usu\u00e1rio.\n\n===
-      PERGUNTA DO USU\u00c1RIO ===\nQuantos pedidos existem no banco?\n\n=== SQL GERADA
-      ===\nSELECT COUNT(*) as total_pedidos FROM orders\n\n=== RESULTADO DA EXECU\u00c7\u00c3O
-      ===\nStatus: exec_ok\nTotal de linhas: 1\nAmostra dos resultados (primeiras
-      linhas):\n[{''total_pedidos'': 99441}]\n\n=== ERROS (se houver) ===\nNenhum\n\nAvalie:\n1.
-      A SQL responde \u00e0 pergunta do usu\u00e1rio?\n2. Os resultados fazem sentido?\n3.
-      H\u00e1 algum erro l\u00f3gico ou de interpreta\u00e7\u00e3o?\n\nResponda no
-      formato:\nVEREDITO: APROVADO ou REPROVADO\nFEEDBACK: <sua avalia\u00e7\u00e3o
-      em 1-3 frases>"}], "role": "user"}], "safetySettings": [], "generationConfig":
-      {"temperature": 0.7, "candidateCount": 1}}'
-    headers:
-      Accept:
-      - '*/*'
-      Accept-Encoding:
-      - gzip, deflate, zstd
-      Connection:
-      - keep-alive
-      Content-Length:
-      - '941'
-      Content-Type:
-      - application/json
-      Host:
-      - generativelanguage.googleapis.com
-      User-Agent:
-      - google-genai-sdk/1.68.0 gl-python/3.10.12
-      x-goog-api-client:
-      - google-genai-sdk/1.68.0 gl-python/3.10.12
-    method: POST
-    uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
-  response:
-    body:
-      string: !!binary |
-        H4sIAAAAAAAC/2VSTW/aQBC9+1eM9pILoCgKEOVGY1eiXxBioUptD1M8wKr2rrMfEgXxXxL1UPXc
-        W6/+Y501mJjWB2s0H++9eTu7CEAsUGUyQ0dW3MInzgDs6n+oaeVIOS40KU6WaNxL7+HbtWJucbQJ
-        Q2KezJJ4nE5uYTSdTeajePJZvU6S+NXo7i3ngPGtzx3Cw/07qH5BSWZJ0mHBpASY0aPHDIEZETBU
-        V15xd6bBW189G6k7AcPxCpoDY6iZ1aCqPwUZDU47zCEjHuc9tQWF4PAr5QgX2mRk7EUPJmCoVsI4
-        TEgbWvjqZ/VDB1WLHA0TZZLhNRAscXtEtcwla+pCB4RSW5ZXPcGjJ+t4vAcfAsi6egYyhsnz6vdK
-        LjjQPmiSrNWUQXbN1hMtH/en+EvnxX2jcwrWFjqjvGnfNw1iKZW06xmh1Sq0PaSTqThVpcpow+nL
-        qCGooYW3uKL3rILvAE+vLUqji9Kl+hupO+3rO7i6vDmgte7mrGHQP9Zrh85KN9fDzn/ANmZambcP
-        qnVrvCXm0n0Pq6TJx1S0nHD/6Gq8iFqWCbfWfrV25xr7w+voaNrBxzlfgTwYtqKCLexe9frdZY52
-        XTOK+m2VpXEWeuQ0jRElvumS2w7H0+3A+8F9IqJ99Bez6SP2UwMAAA==
-    headers:
-      Alt-Svc:
-      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
-      Content-Encoding:
-      - gzip
-      Content-Type:
-      - application/json; charset=UTF-8
-      Date:
-      - Wed, 25 Mar 2026 14:43:30 GMT
-      Server:
-      - scaffolding on HTTPServer2
-      Server-Timing:
-      - gfet4t7; dur=10003
+      - gfet4t7; dur=2416
       Transfer-Encoding:
       - chunked
       Vary:

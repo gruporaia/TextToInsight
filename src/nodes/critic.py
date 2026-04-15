@@ -8,6 +8,7 @@ respondem corretamente à pergunta original do usuário.
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from ..state import EstadoTextToInsight
+from ..utils import extrair_tokens
 
 PROMPT_CRITIC = """Você é um revisor de qualidade para consultas SQL geradas por IA.
 
@@ -16,6 +17,9 @@ Sua tarefa: avaliar se a consulta SQL e seus resultados respondem adequadamente
 
 === PERGUNTA DO USUÁRIO ===
 {pergunta}
+
+=== CONVERSA COM O AGENTE (se houver) ===
+{conversa_previa}
 
 === SQL GERADA ===
 {sql}
@@ -48,6 +52,7 @@ def nos_nodo_critico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -
     preview = estado.get("linhas_resultado_preview", [])
     total = estado.get("total_linhas_resultado", 0)
     saida = estado.get("saida_terminal", "")
+    conversa_previa = estado.get("historico_conversa", "")
     erro = estado.get("erro_execucao", "")
     status_exec = estado.get("status", "")
 
@@ -69,6 +74,7 @@ def nos_nodo_critico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -
         pergunta=pergunta,
         sql=sql,
         status_exec=status_exec,
+        conversa_previa=conversa_previa if conversa_previa else "Nenhuma",
         total_linhas=total,
         preview=preview_str,
         erro=erro if erro else "Nenhum",
@@ -94,7 +100,12 @@ def nos_nodo_critico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -
     print(f"[CRITICO] Veredito: {veredito}")
     print(f"[CRITICO] Feedback: {feedback[:100]}...")
 
+    in_tokens, out_tokens, total_tokens = extrair_tokens(resposta)
+
     return {
         "feedback_critico": feedback,
         "status": veredito,
+        "tokens_input": in_tokens,
+        "tokens_output": out_tokens,
+        "tokens_total": total_tokens,
     }
