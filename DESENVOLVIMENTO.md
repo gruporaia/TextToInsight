@@ -49,6 +49,46 @@ python main.py "Quantos pedidos existem no banco?"
 python main.py
 ```
 
+### Tutorial da flag `--hitl`
+
+A CLI agora aceita o toggle `--hitl {on,off}` para controlar o modo Human-in-the-Loop.
+
+#### 1) Comportamento padrão (sem informar flag)
+
+Se você não passar `--hitl`, o modo fica **ativado automaticamente** (`on`).
+
+```bash
+python main.py "Quantos pedidos existem no banco?"
+```
+
+#### 2) Forçar HITL ligado
+
+Use quando quiser interação humana no terminal caso o planejador peça esclarecimentos.
+
+```bash
+python main.py --hitl on "Quais foram os principais fatores de queda no lucro?"
+```
+
+Quando o fluxo precisar de ajuda humana, o terminal pergunta e aguarda input:
+
+```text
+[HITL]: <pergunta do agente>
+[RESPOSTA USUARIO]:
+```
+
+#### 3) Desligar HITL
+
+Use para execução não interativa (scripts, pipelines, CI, etc.).
+
+```bash
+python main.py --hitl off "Quais foram os principais fatores de queda no lucro?"
+```
+
+Se o grafo chegar em `espera_humana` com `--hitl off`:
+- o sistema **não** chama `input()`;
+- encerra a execução com status `bloqueado_hitl`;
+- registra erro explicando que havia necessidade de intervenção humana com HITL desativado.
+
 ## Testes
 
 3 camadas, do mais rápido ao mais completo:

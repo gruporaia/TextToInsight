@@ -3,8 +3,8 @@
 Script principal para demonstração do grafo Text-to-Insight.
 """
 
+import argparse
 import time
-import sys
 import os
 from dotenv import load_dotenv
 from langgraph.graph import StateGraph
@@ -13,7 +13,7 @@ from src.utils import salvar_metricas_csv
 
 load_dotenv()
 
-def executar_consulta(grafo: StateGraph, pergunta: str) -> dict:
+def executar_consulta(grafo: StateGraph, pergunta: str, hitl_ativado: bool = True) -> dict:
     """Executa uma consulta através do grafo Text-to-Insight."""
     config = {"configurable": {"thread_id": "sessao_usuario_1"}}
     estado_inicial = {
@@ -58,6 +58,25 @@ def executar_consulta(grafo: StateGraph, pergunta: str) -> dict:
             pergunta_agente = snapshot.values.get("pergunta_ao_usuario", "Pode confirmar o prosseguimento?")
             historico_atual = snapshot.values.get("historico_conversa", [])
 
+            if not hitl_ativado:
+                print("\n[HITL] Intervenção humana solicitada, mas o modo HITL está DESATIVADO.")
+                print("[HITL] Encerrando execução com status de bloqueio.")
+
+                resultado_final = dict(snapshot.values)
+                resultado_final.update({
+                    "status": "bloqueado_hitl",
+                    "erro_execucao": (
+                        "Fluxo bloqueado: o planejador solicitou intervenção humana, "
+                        "mas o HITL está desativado (--hitl off)."
+                    ),
+                    "saida_terminal": "[HITL] Bloqueado: intervenção humana necessária com HITL off.",
+                })
+
+                lat_fim = time.perf_counter()
+                latencia_consulta = lat_fim - lat_inicio
+                salvar_metricas_csv(resultado_final, latencia_consulta)
+                return resultado_final
+
             print(f"\n[HITL]: {pergunta_agente}")
 
             resposta = input("[RESPOSTA USUARIO]: ")
@@ -70,6 +89,25 @@ def executar_consulta(grafo: StateGraph, pergunta: str) -> dict:
     # Código morto porque o fluxo já retorna dentro do while acima
     # resultado_final = grafo.invoke(estado_inicial)
     # return resultado_final
+
+
+def _parse_args() -> argparse.Namespace:
+    """Faz parse dos argumentos da CLI."""
+    parser = argparse.ArgumentParser(
+        description="Executa o pipeline Text-to-Insight para responder perguntas sobre o banco SQLite."
+    )
+    parser.add_argument(
+        "--hitl",
+        choices=["on", "off"],
+        default="on",
+        help="Ativa/desativa o modo Human-in-the-Loop. Padrão: on.",
+    )
+    parser.add_argument(
+        "pergunta",
+        nargs="*",
+        help="Pergunta em linguagem natural. Se omitida, usa uma pergunta padrão.",
+    )
+    return parser.parse_args()
 
 
 def exibir_resultado(resultado: dict) -> None:
@@ -123,18 +161,23 @@ def exibir_resultado(resultado: dict) -> None:
 
 
 def main():
-    if len(sys.argv) > 1:
-        pergunta = " ".join(sys.argv[1:])
+    args = _parse_args()
+
+    if args.pergunta:
+        pergunta = " ".join(args.pergunta)
     else:
         pergunta = "Quantos pedidos existem no banco?"
         print(f"Nenhuma pergunta fornecida. Usando exemplo: '{pergunta}'\n")
+
+    hitl_ativado = args.hitl == "on"
+    print(f"[CONFIG] HITL: {'ATIVADO' if hitl_ativado else 'DESATIVADO'}")
 
     api_key = os.getenv("GOOGLE_API_KEY") #GOOGLE_API_KEY/OPENAI_API_KEY
     model = "gemini-2.5-flash" #gemini-2.5-flash/gpt-5-nano 
 
     grafo = Graph(api_key, model)
 
-    resultado = executar_consulta(grafo, pergunta)
+    resultado = executar_consulta(grafo, pergunta, hitl_ativado=hitl_ativado)
     exibir_resultado(resultado)
 
 
