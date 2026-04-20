@@ -175,7 +175,7 @@ def main():
     api_key = os.getenv("GOOGLE_API_KEY") #GOOGLE_API_KEY/OPENAI_API_KEY
     model = "gemini-2.5-flash" #gemini-2.5-flash/gpt-5-nano 
 
-    grafo = Graph(api_key, model)
+    grafo = Graph(api_key, model, hitl_ativado)
 
     resultado = executar_consulta(grafo, pergunta, hitl_ativado=hitl_ativado)
     exibir_resultado(resultado)
