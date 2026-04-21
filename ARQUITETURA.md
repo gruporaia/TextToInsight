@@ -2,7 +2,7 @@
 
 ## Visão geral
 
-O sistema usa um grafo de agentes (LangGraph) com 5 nós e 3 roteadores condicionais. Três nós usam LLM (Gemini), um usa introspecção SQLite e um executa SQL diretamente.
+O sistema usa um grafo de agentes (LangGraph) com 7 nós e 3 roteadores condicionais. Quatro nós podem usar LLM (Planejador, Agente de Código, Crítico e Resposta), um usa introspecção SQLite, um executa SQL diretamente e um funciona como breakpoint estrutural para HITL.
 
 ```
 START
@@ -12,6 +12,13 @@ START
   |-- schema vazio? --> [Schema] --> extrai metadados do banco
   |                        |
   |                        v
+  |--------------------- volta ao Planejador
+  |
+  |-- precisa ajuda? --> [Espera Humana] --> interrompe fluxo (HITL)
+  |                        |
+  |                        v
+  |--------------------- volta ao Planejador
+  |
   |-- pronto? --------> [Agente Código] --> gera SQL (LLM)
   |                        |
   |                        v
@@ -20,7 +27,7 @@ START
   |                        v
   |                    [Crítico] --> avalia resultado (LLM)
   |                        |
-  |                   aprovado? -- Sim --> END
+  |                   aprovado? -- Sim --> [Resposta] --> END
   |                              -- Não --> volta ao Planejador
   |
   |-- aprovado? ------> END
@@ -33,11 +40,22 @@ START
 Decide a próxima etapa do fluxo.
 
 - **Sem schema**: retorna `"aguardando_schema"` (determinístico, sem API)
-- **Com schema**: chama Gemini para decidir entre `"pronto_codificacao"` ou `"revisando_estrategia"`
+- **Com schema**: chama Gemini para decidir entre `"pronto_codificacao"`, `"revisando_estrategia"` ou `"necessita_ajuda"` (quando HITL está ativo)
 - **Já aprovado**: mantém `"aprovado"`
 
-Entrada: `pergunta_usuario`, `contexto_schema`, `feedback_critico`, `status`
-Saída: `status`
+Entrada: `pergunta_usuario`, `historico_conversa`, `contexto_schema`, `feedback_critico`, `status`, `erro_execucao`, `tentativas_loop`
+Saída: `status`, `espera_humana`, `pergunta_ao_usuario`, `tentativas_loop`, métricas de token
+
+### Espera Humana (`src/graph.py`)
+
+Nó estrutural para Human-in-the-Loop (HITL).
+
+- Não transforma dados
+- Existe para permitir interrupção controlada via `interrupt_before=["espera_humana"]`
+- Após coleta de input no terminal, o fluxo retorna ao Planejador
+
+Entrada: estado atual completo
+Saída: estado inalterado
 
 ### Schema (`src/nodes/schema.py`)
 
@@ -59,7 +77,7 @@ Gera SQL a partir da pergunta + schema usando Gemini.
 - Incrementa `tentativas_loop`
 
 Entrada: `pergunta_usuario`, `contexto_schema`, `feedback_critico`
-Saída: `sql_gerada`, `status`, `tentativas_loop`
+Saída: `sql_gerada`, `status`, `tentativas_loop`, métricas de token
 
 Utilidades auxiliares em `code_sql.py`:
 - `validar_sql_segura()`: bloqueia INSERT, UPDATE, DELETE, DROP, etc. Permite apenas SELECT e WITH.
@@ -85,7 +103,18 @@ Avalia se o resultado responde à pergunta original usando Gemini.
 - Retorna veredito (`"aprovado"` / `"reprovado"`) e feedback textual
 
 Entrada: `pergunta_usuario`, `sql_gerada`, `linhas_resultado_preview`, `status`
-Saída: `feedback_critico`, `status`
+Saída: `feedback_critico`, `status`, métricas de token
+
+### Resposta (`src/nodes/response.py`)
+
+Gera resposta final em linguagem natural quando o resultado foi aprovado.
+
+- Só executa geração textual quando `status == "aprovado"`
+- Em `pytest`/`CI`, usa fallback determinístico sem API
+- Em execução normal, usa LLM para sumarizar pergunta + resultado
+
+Entrada: `pergunta_usuario`, `sql_gerada`, `linhas_resultado_preview`, `total_linhas_resultado`, `saida_terminal`, `status`
+Saída: `resposta_natural`, `status`, métricas de token
 
 ## Roteadores (`src/routers/edges.py`)
 
@@ -95,12 +124,14 @@ Saída: `feedback_critico`, `status`
 - Caso contrário → Planejador
 
 ### Após Planejador (`roteador_planejador`)
+- `espera_humana=True` → Espera Humana
 - Schema vazio → Schema
 - `pronto_codificacao` ou `revisando_estrategia` → Agente Código
 - `aprovado` → END
+- Default → Planejador
 
 ### Após Crítico (`roteador_critico`, definido em `graph.py`)
-- `aprovado` → END
+- `aprovado` → Resposta
 - Caso contrário → Planejador
 
 ## Estado compartilhado (`src/state.py`)
@@ -118,20 +149,33 @@ total_linhas_resultado: int # Total de linhas retornadas
 erro_execucao: str          # Mensagem de erro (se houver)
 saida_terminal: str         # Saída resumida da execução
 feedback_critico: str       # Feedback do crítico
+espera_humana: bool         # Flag para interrupção HITL
+pergunta_ao_usuario: str    # Pergunta que será exibida no terminal
+historico_conversa: list[tuple[str, str]]  # Histórico humano/agente
+resposta_natural: str       # Resposta final em linguagem natural
 status: StatusExecucao      # Estágio atual do fluxo
 tentativas_loop: int        # Contador de tentativas
+
+# Telemetria
+tokens_input: int
+tokens_output: int
+tokens_total: int
 ```
 
 Status possíveis: `iniciado`, `aguardando_schema`, `schema_obtido`, `pronto_codificacao`, `sql_gerada`, `exec_ok`, `exec_erro`, `revisando_estrategia`, `aprovado`, `reprovado`.
+
+Status operacionais adicionais em runtime: `aguardando_input` (pedido de HITL) e `bloqueado_hitl` (quando a CLI roda com `--hitl off` e há necessidade de intervenção humana).
 
 ## Fluxo típico
 
 ```
 1. START → Planejador (schema vazio → "aguardando_schema")
 2. → Schema (extrai metadados do SQLite)
-3. → Agente Código (gera SQL com Gemini)
-4. → Executor (executa SQL no banco)
-5. → Crítico (avalia resultado com Gemini)
-6. → Se aprovado: END
-     Se reprovado: volta ao passo 1 com feedback
+3. → Planejador reavalia estratégia
+4. → (Opcional) Espera Humana se houver ambiguidade/falta de contexto
+5. → Agente Código (gera SQL com Gemini)
+6. → Executor (executa SQL no banco)
+7. → Crítico (avalia resultado com Gemini)
+8. → Se aprovado: Resposta → END
+  Se reprovado: volta ao Planejador com feedback
 ```

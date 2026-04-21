@@ -36,7 +36,7 @@ Colocar o banco SQLite em `data/` (ex: `data/olist_relational.db`).
 ### Validar instalação
 
 ```bash
-python -c "from src.graph import grafo_text_to_insight; print('OK')"
+python -c "from src.graph import Graph; print('OK')"
 ```
 
 ## Executando
@@ -127,6 +127,8 @@ TextToInsight/
 ├── src/
 │   ├── state.py                   # EstadoTextToInsight (TypedDict)
 │   ├── graph.py                   # Grafo LangGraph
+│   ├── model_selection.py         # Seleção de modelo/provedor LLM
+│   ├── utils.py                   # Tokens e métricas CSV
 │   ├── nodes/
 │   │   ├── planner.py             # Planejador (Gemini)
 │   │   ├── schema.py              # Extração de schema (SQLite)
@@ -134,7 +136,8 @@ TextToInsight/
 │   │   │   ├── code_agent.py      # Geração SQL (Gemini)
 │   │   │   └── code_sql.py        # Validação + execução SQL
 │   │   ├── sandbox.py             # Executor SQL (banco real)
-│   │   └── critic.py              # Avaliador (Gemini)
+│   │   ├── critic.py              # Avaliador (Gemini)
+│   │   └── response.py            # Resposta natural final
 │   └── routers/
 │       └── edges.py               # Roteadores condicionais
 └── tests/
@@ -209,3 +212,6 @@ Quota da API Gemini esgotada. Aguardar reset ou verificar em https://ai.dev/rate
 
 **Grafo entra em loop infinito**
 O sistema limita a 3 tentativas via `roteador_sandbox`. Se persistir, verificar se o status retornado pelos nós é um valor válido de `StatusExecucao`.
+
+**Validação de import do grafo falha com `grafo_text_to_insight`**
+O módulo atual expõe a classe `Graph` (não um singleton global). Use o comando de validação da seção Setup.

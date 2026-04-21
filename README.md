@@ -1,6 +1,6 @@
 # Text-to-Insight
 
-Sistema de agentes baseado em **LangGraph** que transforma perguntas em linguagem natural em consultas SQL, executa contra um banco SQLite real e valida os resultados automaticamente.
+Sistema de agentes baseado em **LangGraph** que transforma perguntas em linguagem natural em consultas SQL, executa contra um banco SQLite real, valida os resultados automaticamente e gera uma resposta final em linguagem natural.
 
 ## Como funciona
 
@@ -17,9 +17,12 @@ Pergunta do usuário
         |
     [Crítico]   --  Avalia se o resultado responde à pergunta (LLM)
         |
-   Aprovado? -- Sim --> FIM
+   Aprovado? -- Sim --> [Resposta Natural] --> FIM
              -- Não --> Volta ao Planejador (retry)
 ```
+
+Fluxo paralelo:
+- Se faltar contexto humano: Planejador -> Espera Humana -> Planejador
 
 ## Requisitos
 
@@ -45,9 +48,17 @@ echo "GOOGLE_API_KEY=sua_chave_aqui" > .env
 # Pergunta via linha de comando
 python main.py "Quantos pedidos existem no banco?"
 
+# Forçando HITL ligado
+python main.py --hitl on "Quais categorias vendem mais?"
+
+# Execução não interativa
+python main.py --hitl off "Quais categorias vendem mais?"
+
 # Sem argumento usa pergunta padrão
 python main.py
 ```
+
+Por padrão, o sistema roda com `--hitl on`.
 
 ## Testes
 
@@ -76,6 +87,8 @@ TextToInsight/
 ├── src/
 │   ├── state.py                         # Estado compartilhado (TypedDict)
 │   ├── graph.py                         # Grafo LangGraph compilado
+│   ├── model_selection.py               # Seleção de provedor/modelo LLM
+│   ├── utils.py                         # Métricas de tokens e latência
 │   ├── nodes/
 │   │   ├── planner.py                   # Planejador (LLM)
 │   │   ├── schema.py                    # Extração de schema (SQLite)
@@ -83,7 +96,8 @@ TextToInsight/
 │   │   │   ├── code_agent.py            # Geração de SQL (LLM)
 │   │   │   └── code_sql.py              # Validação e execução de SQL
 │   │   ├── sandbox.py                   # Executor de SQL (banco real)
-│   │   └── critic.py                    # Avaliador de qualidade (LLM)
+│   │   ├── critic.py                    # Avaliador de qualidade (LLM)
+│   │   └── response.py                  # Resposta final em linguagem natural
 │   └── routers/
 │       └── edges.py                     # Roteadores condicionais
 └── tests/
@@ -99,12 +113,17 @@ langgraph>=0.2.0
 langchain>=0.2.0
 langchain-core>=0.2.0
 langchain-google-genai>=2.0.0
+langchain-openai
 python-dotenv>=1.0.0
+pytest>=9.0.2
+pytest-recording>=0.13.0
+pytest-timeout>=2.3.0
 ```
 
 ## Stack
 
 - **LangGraph** para orquestração do grafo de agentes
-- **Google Gemini** (gemini-2.5-flash) para chamadas LLM
+- **Google Gemini** (gemini-2.5-flash, padrão atual) para chamadas LLM
+- **OpenAI Chat Models** suportados via seletor de modelo
 - **SQLite** como banco de dados (modo read-only)
-- **pytest** para testes
+- **pytest + VCR** para testes determinísticos com gravação de chamadas

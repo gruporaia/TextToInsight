@@ -3,18 +3,18 @@
 
 ╔════════════════════════════════════════════════════════════════════════════╗
 ║                        PROJETO TEXT-TO-INSIGHT                             ║
-║              Supervisor/Hierarchical Agent com LangGraph                    ║
-║        Autor: Jonas Melo | Versão: 0.1.0 Alpha | Status: Esqueleto        ║
+║        Supervisor/Hierarchical Agent com LangGraph + HITL + Métricas       ║
+║        Autor: Jonas Melo | Versão: 0.2.0 Alpha | Status: Fluxo Ativo       ║
 ╚════════════════════════════════════════════════════════════════════════════╝
 
 ESTRUTURA DE DIRETÓRIOS:
 ═══════════════════════
 
-projeto_raia/                              (Raiz do projeto)
+TextToInsight/                             (Raiz do projeto)
 │
 ├── 📄 README.md                           ⭐ COMECE AQUI - Documentação Principal
 ├── 📄 ARQUITETURA.md                      Detalhamento técnico da arquitetura
-├── 📄 DESENVOLVIMENTO.md                  Guia de setup e desenvolvimentyo local
+├── 📄 DESENVOLVIMENTO.md                  Guia de setup e desenvolvimento local
 │
 ├── 🔧 pyproject.toml                      Metadados e dependências do projeto
 ├── 📋 requirements.txt                    Dependências pip
@@ -27,12 +27,17 @@ projeto_raia/                              (Raiz do projeto)
     ├── __init__.py                        Package root
     ├── state.py                           ⭐ TypedDict EstadoTextToInsight
     ├── graph.py                           ⭐ Grafo compilado (entry point)
+    ├── model_selection.py                 Seleção de modelo/provedor LLM
+    ├── utils.py                           Telemetria de tokens e latência
     │
     ├── 📁 nodes/                          Nós do grafo
     │   ├── __init__.py
     │   ├── planner.py                     🧠 Nó: Planejador (Supervisor)
+    │   ├── response.py                    💬 Nó: Resposta Natural Final
     │   ├── schema.py                      📊 Nó: Extrator de Schema
-    │   ├── code_agent.py                  💻 Nó: Gerador de Código
+    │   ├── 📁 code_agent/
+    │   │   ├── code_agent.py              💻 Nó: Gerador de SQL
+    │   │   └── code_sql.py                🔐 Validação + Execução SQL segura
     │   ├── sandbox.py                     🏖️  Nó: Executor Seguro
     │   └── critic.py                      🎯 Nó: Avaliador de Qualidade
     │
@@ -62,12 +67,13 @@ GUIA DE LEITURA RECOMENDADO:
 O QUE FOI CRIADO:
 ═════════════════
 
-✅ ESTRUTURA:          18 arquivos criados com tipagens, imports e estrutura completa
-✅ ESTADO:             TypedDict EstadoTextToInsight com 7 campos essenciais
-✅ 5 NÓS:              Planejador, Schema, AgenteCódigo, Sandbox, Crítico
-✅ 2 ROTEADORES:       Roteador Sandbox, Roteador Planejador (+ Crítico integrado)
-✅ GRAFO COMPILADO:    StateGraph com add_node, add_edge, add_conditional_edges
+✅ ESTRUTURA:          Projeto modular com src/, nós, roteadores e suíte de testes em 3 camadas
+✅ ESTADO:             TypedDict EstadoTextToInsight com campos de SQL, HITL, resposta e telemetria
+✅ 7 NÓS:              Planejador, EsperaHumana, Schema, AgenteCódigo, Sandbox, Crítico, Resposta
+✅ 3 ROTEADORES:       Sandbox, Planejador e Crítico
+✅ GRAFO COMPILADO:    StateGraph + MemorySaver + interrupt_before para HITL
 ✅ DOCUMENTAÇÃO:       3 guias: README, ARQUITETURA, DESENVOLVIMENTO
+✅ TELEMETRIA:         Tokens (input/output/total), tentativas e latência em CSV
 ✅ TODA EM PT-BR:      Código, variáveis, docstrings, comentários
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -75,12 +81,12 @@ O QUE FOI CRIADO:
 ESTATÍSTICAS:
 ═════════════
 
-📊 Linhas de Código:          ~1.200+ (sem testes)
-📚 Arquivos Python:           10 (src/ + main.py)
-📖 Documentação:              3 arquivos markdown (~2.000 linhas)
-🔄 Fluxos de Grafo:           3+ cenários possíveis
+📊 Linhas de Código:          ~1.400+ (incluindo nós, roteadores e utilitários)
+📚 Arquivos Python:           15+ (src/ + main.py + testes)
+📖 Documentação:              3 guias principais
+🔄 Fluxos de Grafo:           4+ cenários (normal, retry, HITL, bloqueado_hitl)
 🧠 Tentativas max:            3 por padrão (configurável)
-⏱️  Status possíveis:         10+ diferentes (initiado, schema_obtido, codigo_ok, etc)
+⏱️  Status possíveis:         10 tipados + operacionais (aguardando_input, bloqueado_hitl)
 
 ═══════════════════════════════════════════════════════════════════════════════
 
@@ -105,7 +111,7 @@ PARA COMEÇAR:
 2. Executar: python main.py "Sua pergunta"
 3. Rastrear logs nos outputs dos nós
 4. Estudar ARQUITETURA.md para entender fluxos
-5. Modificar nós mockados para suas necessidades
+5. Testar o modo HITL: --hitl on e --hitl off
 
 ═══════════════════════════════════════════════════════════════════════════════
 
@@ -113,12 +119,13 @@ QUALIDADE DO CÓDIGO:
 ════════════════════
 
 ✓ Type hints completos (TypedDict, Literal, etc)
-✓ Docstrings em todos os funções
+✓ Docstrings nas principais funções
 ✓ Comentários explicativos em código crítico
 ✓ Imports organizados
 ✓ Nomes descritivos em português
 ✓ Separação clara de responsabilidades
 ✓ Estrutura pronta para testes
+✓ Métricas registradas por execução (tokens + latência)
 
 ═══════════════════════════════════════════════════════════════════════════════
 
