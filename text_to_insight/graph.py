@@ -32,20 +32,19 @@ def nos_nodo_espera_humana(estado: EstadoTextToInsight):
     return estado
 
 class Graph:
-    def __init__(self, api_key, model): 
-        
+    def __init__(self, api_key: str, model: str, hitl: bool = True):
         self.llm = get_model(model, api_key)
         self.memory = MemorySaver()
-        self.grafo_text_to_insight = self._compilar_grafo()
+        self.grafo_text_to_insight = self._compilar_grafo(hitl)
 
-    def _construir_grafo_text_to_insight(self) -> StateGraph:
+    def _construir_grafo_text_to_insight(self, hitl: bool) -> StateGraph:
         """
         Constrói e compila o grafo de agentes Text-to-Insight.
         """
         construtor_grafo = StateGraph(EstadoTextToInsight)
 
         # 1. ADICIONAR NÓS
-        construtor_grafo.add_node("planejador", partial(nos_nodo_planejador, llm=self.llm))
+        construtor_grafo.add_node("planejador", partial(nos_nodo_planejador, llm=self.llm, hitl=hitl))
         construtor_grafo.add_node("espera_humana", nos_nodo_espera_humana)
         construtor_grafo.add_node("esquema", nos_nodo_esquema)
         construtor_grafo.add_node("agente_codigo", partial(nos_nodo_agente_codigo, llm=self.llm))
@@ -103,8 +102,8 @@ class Graph:
 
         return construtor_grafo
 
-    def _compilar_grafo(self) -> "CompiledStateGraph":
-        construtor = self._construir_grafo_text_to_insight()
+    def _compilar_grafo(self, hitl: bool) -> "CompiledStateGraph":
+        construtor = self._construir_grafo_text_to_insight(hitl)
         grafo_compilado = construtor.compile(checkpointer=self.memory,
                                              interrupt_before=["espera_humana"])
         print("[GRAFO] Grafo Text-to-Insight compilado com sucesso!")

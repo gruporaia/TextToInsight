@@ -12,8 +12,6 @@ import time
 import pytest
 from dotenv import load_dotenv
 
-from src.nodes.schema import _formatar_schema_sqlite
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "olist_relational.db")
@@ -28,8 +26,8 @@ def grafo():
     if not api_key:
         pytest.skip("Variável GOOGLE_API_KEY não encontrada. Pulando testes de integração.")
 
-    from src.graph import Graph
-    return Graph(api_key, "gemini-2.5-flash")
+    from text_to_insight.graph import Graph
+    return Graph(api_key, "gemini-2.5-flash", hitl=True)
 
 
 @pytest.fixture(autouse=True)

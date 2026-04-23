@@ -1,184 +1,162 @@
 # Guia de Desenvolvimento - Text-to-Insight
 
-## Setup
+## Namespace oficial
 
-### Pré-requisitos
+O codigo-fonte da biblioteca esta no pacote `text_to_insight`.
+Imports antigos via `src` nao devem mais ser usados.
+
+## Setup local
+
+### Pre-requisitos
 
 - Python 3.10+
-- conda (ou pip + venv)
-- Git
-- Chave de API do Google Gemini
+- venv/conda
+- chave de API (Gemini ou OpenAI, conforme modelo escolhido)
 
-### Instalação
+### Instalacao
 
 ```bash
-# Criar e ativar ambiente
-conda create -n textToInsight python=3.11
-conda activate textToInsight
+python -m venv .venv
+source .venv/bin/activate
 
-# Instalar dependências
 pip install -r requirements.txt
-
-# Instalar ferramentas de teste
-pip install pytest pytest-timeout
+pip install -e .
 ```
 
-### Configuração
-
-Criar `.env` na raiz do projeto:
-
-```
-GOOGLE_API_KEY=sua_chave_aqui
-```
-
-Colocar o banco SQLite em `data/` (ex: `data/olist_relational.db`).
-
-### Validar instalação
+### Configuracao
 
 ```bash
-python -c "from src.graph import grafo_text_to_insight; print('OK')"
+echo "GOOGLE_API_KEY=sua_chave" > .env
 ```
 
-## Executando
+Banco SQLite esperado por padrao: `data/olist_relational.db`.
+
+###  Verificação Rápida (Smoke) de import
 
 ```bash
-# Com pergunta customizada
-python main.py "Quantos pedidos existem no banco?"
+python -c "from text_to_insight import InsightEngine, Graph; print('OK')"
+```
 
-# Com pergunta padrão
-python main.py
+## Contrato de execução
+
+API estável da engine:
+
+- `run(thread_id, query)` para iniciar;
+- `resume(thread_id, user_response)` para retomar HITL;
+- `get_insight(...)` mantido como API base.
+
+Criterios minimos:
+
+- fluxo completo do grafo;
+- HITL on/off;
+- retomada por `thread_id`;
+- gravacao de metricas em CSV.
+
+## Execucao
+
+```bash
+# adaptador local
+python main.py --hitl on "Quantos pedidos existem no banco?"
+
+# biblioteca instalada (entrypoint)
+text-to-insight --hitl off "Quais categorias vendem mais?"
+```
+
+## Estrutura relevante
+
+```text
+text_to_insight/
+    InsightEngine.py
+    cli.py
+    runtime.py
+    graph.py
+    state.py
+    model_selection.py
+    nodes/
+    routers/
+tests/
+    test_componentes.py
+    test_nodes.py
+    test_integracao.py
+    test_main_engine_integracao.py
+    test_real_api_smoke.py
 ```
 
 ## Testes
 
-3 camadas, do mais rápido ao mais completo:
+### Camadas
 
 ```bash
-# Camada 1: Componentes (sem API, ~1s)
-# Testa: validação SQL, execução SQL, schema, executor, routers
+# camada 1 - componentes deterministicos
 pytest tests/test_componentes.py -v -s
 
-# Camada 2: Nós individuais (com API, ~30s)
-# Testa cada nó isoladamente com estado manual
-pytest tests/test_nodes.py -v -s
+# camada 2 - nos com VCR (replay, sem gravar novas cassetes)
+pytest tests/test_nodes.py -v -s --record-mode=none
 
-# Camada 3: Grafo completo (com API, ~1-2min)
-# Testa o pipeline inteiro end-to-end
-pytest tests/test_integracao.py -v -s
+# camada 2 - nos com VCR (gravar/atualizar cassetes)
+pytest tests/test_nodes.py -v -s --record-mode=new_episodes
 
-# Tudo de uma vez
-pytest tests/ -v -s
+# camada 3 - integracao do grafo com VCR (replay, sem gravar)
+pytest tests/test_integracao.py -v -s --record-mode=none
+
+# camada 3 - integracao do grafo com VCR (gravar/atualizar cassetes)
+pytest tests/test_integracao.py -v -s --record-mode=new_episodes
+
+# integracao main + InsightEngine
+pytest tests/test_main_engine_integracao.py -v -s
 ```
 
-Se um teste falha:
-- Falha na camada 1 → lógica determinística quebrou
-- Falha na camada 2 → o nó específico que falhou está com problema
-- Camada 2 passa mas camada 3 falha → problema nos roteadores ou na conexão entre nós
+### Gravacao de cassetes VCR (fluxo recomendado)
 
-## Módulo de avaliação com Spider Dataset
+Use este fluxo quando mudar prompts, comportamento de nos ou quando adicionar testes com `@pytest.mark.vcr`:
 
-**Documentação completa em: [`src/spider/BENCHMARK.md`](src/spider/BENCHMARK.md)**
+```bash
+# 1) Grave/atualize as cassetes
+pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=new_episodes
 
-- O módulo reutiliza o grafo existente para avaliar perguntas contra o Spider Dataset
-- Rastreia cada tentativa (quando crítico reprova, volta ao planejador)
-- Componentes: data_loader, query_executor, metrics, csv_reporter
-- Orquestrador: `scripts/test_spider_eval.py`
-- Uso: `python scripts/test_spider_eval.py --sample-size 50 --db-filter concert_singer`
-
-## Estrutura de arquivos
-
-```
-TextToInsight/
-├── main.py                        # Ponto de entrada CLI
-├── .env                           # GOOGLE_API_KEY (não commitar)
-├── requirements.txt
-├── data/
-│   ├── olist_relacional.db        # Banco SQLite (dados de teste)
-│   └── spider_data/               # Dataset Spider (opcional)
-│       └── spider_data/
-│           ├── dev.json
-│           └── database/
-├── src/
-│   ├── state.py                   # EstadoTextToInsight (TypedDict)
-│   ├── graph.py                   # Grafo LangGraph
-│   ├── nodes/                     # Nós do grafo
-│   │   ├── planner.py, schema.py, code_agent/, sandbox.py, critic.py
-│   ├── spider/                    # Módulo de benchmark Spider
-│   │   ├── BENCHMARK.md           # 📖 Documentação técnica
-│   │   ├── data_loader.py         # Carrega dev.json
-│   │   ├── query_executor.py      # Executa queries
-│   │   ├── metrics.py             # Similarity e matching
-│   │   └── csv_reporter.py        # Gera CSV e resumo
-│   └── routers/
-├── scripts/
-│   └── test_spider_eval.py        # Orquestrador do benchmark
-├── reports/                       # CSVs de avaliação
-└── tests/
+# 2) Rode em replay para garantir determinismo
+pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=none
 ```
 
-## Criando um novo nó
+Observacoes:
 
-1. Criar `src/nodes/novo_no.py`:
+- cassetes ficam em `tests/cassettes/`;
+- `new_episodes` grava apenas chamadas que ainda nao existem no YAML;
+- `none` falha se faltar cassette, garantindo execucao reproduzivel.
 
-```python
-from ..state import EstadoTextToInsight
+### Drift provider/modelo (opcional) para verificar se API real ainda responde conforme esperado:
 
-def nos_nodo_novo(estado: EstadoTextToInsight) -> dict:
-    # ler do estado
-    valor = estado.get("algum_campo", "")
-
-    # processar
-
-    # retornar atualizações
-    return {
-        "campo_atualizado": resultado,
-        "status": "novo_status",
-    }
+```bash
+pytest tests/test_real_api_smoke.py -v -s -m real_api
 ```
 
-2. Registrar em `src/nodes/__init__.py`
-3. Adicionar ao grafo em `src/graph.py`
-4. Criar teste em `tests/`
+## CI hibrida
 
-## Criando um novo roteador
+Arquivo: `.github/workflows/ci.yml`
 
-```python
-from typing import Literal
-from ..state import EstadoTextToInsight
+- job padrao deterministico em PR/push (VCR + `--record-mode=none`);
+- job manual `record-vcr-cassettes` em `workflow_dispatch` para gravar/atualizar cassetes com API real;
+- job opcional real API em `workflow_dispatch` e `schedule`.
 
-def roteador_novo(estado: EstadoTextToInsight) -> Literal["no_a", "no_b"]:
-    if estado.get("status") == "condicao":
-        return "no_a"
-    return "no_b"
+## Build e distribuicao
+
+```bash
+python -m build
+
+python -m venv .venv-smoke
+source .venv-smoke/bin/activate
+pip install dist/*.whl
+python -c "from text_to_insight import InsightEngine; print('wheel_ok')"
 ```
 
-Registrar com `add_conditional_edges()` em `graph.py`.
+## Troubleshooting (diagnóstico de falhas) rápido
 
-## Git Flow
-
-```
-main          ← versão estável (v0.0.1)
-  └── dev     ← desenvolvimento
-       └── feature_<nome>  ← features individuais
-```
-
-Branches de hotfix saem direto de `main`.
-
-## Variáveis de ambiente
-
-| Variável | Descrição |
-|---|---|
-| `GOOGLE_API_KEY` | Chave da API do Google Gemini |
-
-## Troubleshooting
-
-**`ModuleNotFoundError: No module named 'langgraph'`**
+`ModuleNotFoundError`:
 ```bash
 pip install -r requirements.txt
+pip install -e .
 ```
 
-**`429 RESOURCE_EXHAUSTED`**
-Quota da API Gemini esgotada. Aguardar reset ou verificar em https://ai.dev/rate-limit
-
-**Grafo entra em loop infinito**
-O sistema limita a 3 tentativas via `roteador_sandbox`. Se persistir, verificar se o status retornado pelos nós é um valor válido de `StatusExecucao`.
+`429 RESOURCE_EXHAUSTED`:
+- aguardar reset de quota;
+- preferir testes com VCR no dia a dia.

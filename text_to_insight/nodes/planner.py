@@ -28,24 +28,11 @@ Contexto atual:
 - Status atual: {status_atual}
 - Erro anterior: {erro}
 
-AVALIAÇÃO CRÍTICA:
-Verifique se a "Pergunta do usuário" pode ser respondida com as tabelas e colunas do Schema.
-Se houver ambiguidade, conceitos não mapeados no banco de dados, ou se a intenção do usuário não estiver clara, você DEVE pedir mais informações.
-
-Responda EXATAMENTE no formato JSON abaixo, sem formatação markdown (```json):
-{{
-    "decisao": "escolha_uma_opcao",
-    "pergunta_ao_usuario": "escreva a pergunta aqui se precisar de ajuda, ou deixe vazio se não precisar"
-}}
-
-Opções válidas para 'decisão':
-- "pronto_codificacao" → se temos schema, a pergunta faz sentido e devemos gerar/regenerar SQL
-- "revisando_estrategia" → se o crítico reprovou e devemos tentar uma abordagem diferente
-- "necessita_ajuda" → a pergunta não é clara, não faz sentido, falta contexto ou não há dados no schema para responder.
+{diretrizes}
 """
 
 
-def nos_nodo_planejador(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -> dict:
+def nos_nodo_planejador(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI, hitl: bool) -> dict:
     """
     Nó Planejador: decide a próxima etapa do fluxo.
 
@@ -89,6 +76,30 @@ def nos_nodo_planejador(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI
             "tokens_output": out_tokens,
             "tokens_total": total_tokens,
         }
+    
+    diretrizes = """Responda EXATAMENTE no formato JSON abaixo, sem formatação markdown (```json):
+{{
+    "decisao": "escolha_uma_opcao"
+}}
+Opções válidas para 'decisão':
+- "pronto_codificacao" → se temos schema, a pergunta faz sentido e devemos gerar/regenerar SQL
+- "revisando_estrategia" → se o crítico reprovou e devemos tentar uma abordagem diferente"""
+
+    if hitl:
+        diretrizes = """AVALIAÇÃO CRÍTICA:
+Verifique se a "Pergunta do usuário" pode ser respondida com as tabelas e colunas do Schema.
+Se houver ambiguidade, conceitos não mapeados no banco de dados, ou se a intenção do usuário não estiver clara, você DEVE pedir mais informações.
+
+Responda EXATAMENTE no formato JSON abaixo, sem formatação markdown (```json):
+{{
+    "decisao": "escolha_uma_opcao",
+    "pergunta_ao_usuario": "escreva a pergunta aqui se precisar de ajuda, ou deixe vazio se não precisar"
+}}
+
+Opções válidas para 'decisão':
+- "pronto_codificacao" → se temos schema, a pergunta faz sentido e devemos gerar/regenerar SQL
+- "revisando_estrategia" → se o crítico reprovou e devemos tentar uma abordagem diferente
+- "necessita_ajuda" → a pergunta não é clara, não faz sentido, falta contexto ou não há dados no schema para responder."""
 
     # Usa LLM para decidir estratégia
     prompt = PROMPT_PLANNER.format(
@@ -101,6 +112,7 @@ def nos_nodo_planejador(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI
         # apenas primeiros 500 caracteres do schema para evitar estourar o prompt, mas pode ser ajustado conforme necessidade
         schema=schema[:500] if schema else "Nenhum",
         conversa_previa=conversa_previa if conversa_previa else "Nenhuma",
+        diretrizes=diretrizes,
     )
 
     resposta_llm = llm.invoke(prompt)
