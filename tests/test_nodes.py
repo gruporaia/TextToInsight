@@ -15,8 +15,6 @@ import pytest
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-import pytest
-
 load_dotenv()
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -38,7 +36,7 @@ def llm():
 
 def _obter_schema_real() -> str:
     """Helper: extrai schema real do olist DB (sem API, só SQLite)."""
-    from src.nodes.schema import nos_nodo_esquema
+    from text_to_insight.nodes.schema import nos_nodo_esquema
     resultado = nos_nodo_esquema({"db_path": DB_PATH, "pergunta_usuario": "teste"})
     return resultado["contexto_schema"]
 
@@ -49,7 +47,7 @@ def _obter_schema_real() -> str:
 
 def test_planner_sem_schema(llm):
     """Planner sem schema → aguardando_schema (determinístico, sem API)."""
-    from src.nodes.planner import nos_nodo_planejador
+    from text_to_insight.nodes.planner import nos_nodo_planejador
 
     estado = {
         "pergunta_usuario": "Quantos pedidos existem?",
@@ -59,7 +57,7 @@ def test_planner_sem_schema(llm):
         "tentativas_loop": 0,
         "erro_execucao": "",
     }
-    resultado = nos_nodo_planejador(estado, llm)
+    resultado = nos_nodo_planejador(estado, llm, hitl=True)
     assert resultado["status"] == "aguardando_schema"
 
 
@@ -71,7 +69,7 @@ def test_planner_sem_schema(llm):
 @pytest.mark.timeout(60)
 def test_planner_com_schema_decide_codificar(llm):
     """Planner com schema e sem feedback → deve decidir gerar código."""
-    from src.nodes.planner import nos_nodo_planejador
+    from text_to_insight.nodes.planner import nos_nodo_planejador
 
     schema = _obter_schema_real()
     estado = {
@@ -82,7 +80,7 @@ def test_planner_com_schema_decide_codificar(llm):
         "tentativas_loop": 0,
         "erro_execucao": "",
     }
-    resultado = nos_nodo_planejador(estado, llm)
+    resultado = nos_nodo_planejador(estado, llm, hitl=True)
 
     assert resultado["status"] in ("pronto_codificacao", "revisando_estrategia")
     print(f"  → Planner decidiu: {resultado['status']}")
@@ -92,7 +90,7 @@ def test_planner_com_schema_decide_codificar(llm):
 @pytest.mark.timeout(60)
 def test_planner_com_feedback_revisa(llm):
     """Planner com feedback do crítico → deve revisar estratégia."""
-    from src.nodes.planner import nos_nodo_planejador
+    from text_to_insight.nodes.planner import nos_nodo_planejador
 
     time.sleep(5)  # rate limit
     schema = _obter_schema_real()
@@ -104,7 +102,7 @@ def test_planner_com_feedback_revisa(llm):
         "tentativas_loop": 1,
         "erro_execucao": "",
     }
-    resultado = nos_nodo_planejador(estado, llm)
+    resultado = nos_nodo_planejador(estado, llm, hitl=True)
 
     assert resultado["status"] in ("pronto_codificacao", "revisando_estrategia", "aguardando_input")
     print(f"  → Planner decidiu: {resultado['status']}")
@@ -113,7 +111,7 @@ def test_planner_com_feedback_revisa(llm):
 @pytest.mark.timeout(60)
 def test_planner_pergunta_fora_de_escopo(llm):
     """Planner deve detectar pergunta fora de escopo e levantar a flag de HITL."""
-    from src.nodes.planner import nos_nodo_planejador
+    from text_to_insight.nodes.planner import nos_nodo_planejador
 
     time.sleep(5)  # rate limit
     schema = _obter_schema_real()
@@ -126,7 +124,7 @@ def test_planner_pergunta_fora_de_escopo(llm):
         "erro_execucao": "",
     }
     
-    resultado = nos_nodo_planejador(estado, llm)
+    resultado = nos_nodo_planejador(estado, llm, hitl=True)
 
     assert resultado.get("espera_humana") is True
     assert resultado.get("status") == "aguardando_input"
@@ -142,7 +140,7 @@ def test_planner_pergunta_fora_de_escopo(llm):
 @pytest.mark.timeout(60)
 def test_code_agent_gera_sql(llm):
     """Code Agent recebe pergunta + schema → retorna SQL válida."""
-    from src.nodes.code_agent.code_agent import nos_nodo_agente_codigo
+    from text_to_insight.nodes.code_agent.code_agent import nos_nodo_agente_codigo
 
     time.sleep(5)  # rate limit
     schema = _obter_schema_real()
@@ -170,7 +168,7 @@ def test_code_agent_gera_sql(llm):
 @pytest.mark.timeout(60)
 def test_code_agent_com_feedback_regenera(llm):
     """Code Agent com feedback do crítico → gera SQL diferente."""
-    from src.nodes.code_agent.code_agent import nos_nodo_agente_codigo
+    from text_to_insight.nodes.code_agent.code_agent import nos_nodo_agente_codigo
 
     time.sleep(5)  
     schema = _obter_schema_real()
@@ -194,7 +192,7 @@ def test_code_agent_com_feedback_regenera(llm):
 
 def test_executor_com_sql_real():
     """Executor executa SQL gerada manualmente contra olist DB."""
-    from src.nodes.sandbox import nos_nodo_sandbox
+    from text_to_insight.nodes.sandbox import nos_nodo_sandbox
 
     estado = {
         "sql_gerada": "SELECT COUNT(*) as total_pedidos FROM orders",
@@ -217,7 +215,7 @@ def test_executor_com_sql_real():
 @pytest.mark.timeout(60)
 def test_critic_avalia_resultado_correto(llm):
     """Critic recebe pergunta + SQL + resultado OK → avalia com LLM."""
-    from src.nodes.critic import nos_nodo_critico
+    from text_to_insight.nodes.critic import nos_nodo_critico
 
     time.sleep(5)  # rate limit
     estado = {
@@ -239,7 +237,7 @@ def test_critic_avalia_resultado_correto(llm):
 
 def test_critic_reprova_erro_execucao(llm):
     """Critic com erro de execução → reprova sem chamar API (determinístico)."""
-    from src.nodes.critic import nos_nodo_critico
+    from text_to_insight.nodes.critic import nos_nodo_critico
 
     estado = {
         "pergunta_usuario": "Quantos pedidos existem?",
@@ -265,8 +263,8 @@ def test_critic_reprova_erro_execucao(llm):
 @pytest.mark.timeout(90)
 def test_cadeia_code_agent_executor(llm):
     """Code Agent gera SQL, Executor executa — testa a conexão entre os dois."""
-    from src.nodes.code_agent.code_agent import nos_nodo_agente_codigo
-    from src.nodes.sandbox import nos_nodo_sandbox
+    from text_to_insight.nodes.code_agent.code_agent import nos_nodo_agente_codigo
+    from text_to_insight.nodes.sandbox import nos_nodo_sandbox
 
     time.sleep(5)  # rate limit
     schema = _obter_schema_real()

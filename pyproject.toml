@@ -28,13 +28,20 @@ dependencies = [
     "langgraph>=0.2.0",
     "langchain>=0.2.0",
     "langchain-core>=0.2.0",
+    "langchain-google-genai>=2.0.0",
+    "langchain-openai>=0.1.0",
     "python-dotenv>=1.0.0",
 ]
+
+[project.scripts]
+text-to-insight = "text_to_insight.cli:main"
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
+    "pytest-recording>=0.13.0",
+    "pytest-timeout>=2.3.0",
     "black>=23.0",
     "isort>=5.12",
     "flake8>=6.0",
@@ -51,8 +58,10 @@ Documentation = "https://github.com/gruporaia/TextToInsight#readme"
 Repository = "https://github.com/gruporaia/TextToInsight.git"
 "Bug Tracker" = "https://github.com/gruporaia/TextToInsight/issues"
 
-[tool.setuptools]
-packages = ["src"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["text_to_insight*"]
+exclude = ["tests*", "build*", "meus_testes*"]
 
 [tool.black]
 line-length = 88

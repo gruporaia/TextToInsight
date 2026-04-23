@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - dev
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *"
+
+jobs:
+  tests-vcr:
+    name: Tests (VCR deterministic)
+    runs-on: ubuntu-latest
+    env:
+      GOOGLE_API_KEY: dummy-key
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Run deterministic test layers
+        run: |
+          pytest \
+            tests/test_componentes.py \
+            tests/test_nodes.py \
+            tests/test_integracao.py \
+            tests/test_main_engine_integracao.py \
+            -v -s --record-mode=none -m "not real_api"
+
+  record-vcr-cassettes:
+    name: Record VCR cassettes (manual)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    env:
+      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Validate API key
+        run: |
+          if [[ -z "${GOOGLE_API_KEY}" ]]; then
+            echo "GOOGLE_API_KEY secret ausente; nao e possivel gravar cassetes."
+            exit 1
+          fi
+
+      - name: Record or update VCR cassettes
+        run: |
+          pytest \
+            tests/test_nodes.py \
+            tests/test_integracao.py \
+            -v -s --record-mode=new_episodes -m "not real_api"
+
+      - name: Show cassette status
+        run: |
+          git status -- tests/cassettes || true
+
+      - name: Upload recorded cassettes artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vcr-cassettes-${{ github.run_id }}
+          path: tests/cassettes
+          if-no-files-found: warn
+
+  tests-real-api:
+    name: Tests (real API optional)
+    runs-on: ubuntu-latest
+    needs: tests-vcr
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    env:
+      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Run optional real API smoke
+        run: |
+          if [[ -z "${GOOGLE_API_KEY}" ]]; then
+            echo "GOOGLE_API_KEY secret ausente; pulando job real_api."
+            exit 0
+          fi
+          pytest tests/test_real_api_smoke.py -v -s -m real_api

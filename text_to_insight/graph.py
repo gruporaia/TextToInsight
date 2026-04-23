@@ -32,13 +32,12 @@ def nos_nodo_espera_humana(estado: EstadoTextToInsight):
     return estado
 
 class Graph:
-    def __init__(self, api_key, model, hitl): 
-        
+    def __init__(self, api_key: str, model: str, hitl: bool = True):
         self.llm = get_model(model, api_key)
         self.memory = MemorySaver()
         self.grafo_text_to_insight = self._compilar_grafo(hitl)
 
-    def _construir_grafo_text_to_insight(self, hitl) -> StateGraph:
+    def _construir_grafo_text_to_insight(self, hitl: bool) -> StateGraph:
         """
         Constrói e compila o grafo de agentes Text-to-Insight.
         """
@@ -103,7 +102,7 @@ class Graph:
 
         return construtor_grafo
 
-    def _compilar_grafo(self, hitl) -> "CompiledStateGraph":
+    def _compilar_grafo(self, hitl: bool) -> "CompiledStateGraph":
         construtor = self._construir_grafo_text_to_insight(hitl)
         grafo_compilado = construtor.compile(checkpointer=self.memory,
                                              interrupt_before=["espera_humana"])
