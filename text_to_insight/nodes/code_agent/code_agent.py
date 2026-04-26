@@ -29,6 +29,10 @@ Regras:
 === PERGUNTA DO USUÁRIO ===
 {pergunta}
 
+=== CONVERSA PRÉVIA (CONTEXTO ADICIONAL) ===
+{conversa_previa}
+
+=== FEEDBACK CRÍTICO (SE HOUVER) ===
 {feedback_section}
 
 Responda APENAS com a consulta SQL, sem markdown, sem explicação."""
@@ -49,6 +53,7 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativ
     Nó Agente de Código: usa Gemini para gerar SQL a partir da pergunta + schema.
     """
     pergunta = estado.get("pergunta_usuario", "")
+    conversa_previa = estado.get("historico_conversa", "")
     schema = estado.get("contexto_schema", "")
     feedback = estado.get("feedback_critico", "")
     tentativas = estado.get("tentativas_loop", 0)
@@ -66,6 +71,7 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativ
     prompt = PROMPT_TEMPLATE.format(
         schema=schema,
         pergunta=pergunta,
+        conversa_previa=conversa_previa if conversa_previa else "Nenhuma",
         feedback_section=feedback_section,
     )
 

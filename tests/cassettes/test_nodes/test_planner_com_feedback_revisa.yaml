@@ -6,12 +6,18 @@ interactions:
       atual:\n- Pergunta do usu\u00e1rio: \"Quantos pedidos existem no banco?\"\n-
       Schema dispon\u00edvel: Sim\n- Feedback do cr\u00edtico: A SQL retornou dados
       incorretos, faltou filtrar por status.\n- Tentativas realizadas: 1\n- Status
-      atual: reprovado\n- Erro anterior: Nenhum\n\nDecida a pr\u00f3xima a\u00e7\u00e3o
-      respondendo com EXATAMENTE uma das op\u00e7\u00f5es abaixo:\n- \"pronto_codificacao\"
-      \u2192 se temos schema e devemos gerar/regenerar SQL\n- \"revisando_estrategia\"
+      atual: reprovado\n- Erro anterior: Nenhum\n\nAVALIA\u00c7\u00c3O CR\u00cdTICA:\nVerifique
+      se a \"Pergunta do usu\u00e1rio\" pode ser respondida com as tabelas e colunas
+      do Schema.\nSe houver ambiguidade, conceitos n\u00e3o mapeados no banco de dados,
+      ou se a inten\u00e7\u00e3o do usu\u00e1rio n\u00e3o estiver clara, voc\u00ea
+      DEVE pedir mais informa\u00e7\u00f5es.\n\nResponda EXATAMENTE no formato JSON
+      abaixo, sem formata\u00e7\u00e3o markdown (```json):\n{\n    \"decisao\": \"escolha_uma_opcao\",\n    \"pergunta_ao_usuario\":
+      \"escreva a pergunta aqui se precisar de ajuda, ou deixe vazio se n\u00e3o precisar\"\n}\n\nOp\u00e7\u00f5es
+      v\u00e1lidas para ''decis\u00e3o'':\n- \"pronto_codificacao\" \u2192 se temos
+      schema, a pergunta faz sentido e devemos gerar/regenerar SQL\n- \"revisando_estrategia\"
       \u2192 se o cr\u00edtico reprovou e devemos tentar uma abordagem diferente\n-
-      \"aprovado\" \u2192 se o resultado j\u00e1 foi aprovado pelo cr\u00edtico\n\nResponda
-      APENAS com uma das op\u00e7\u00f5es acima, sem explica\u00e7\u00e3o."}], "role":
+      \"necessita_ajuda\" \u2192 a pergunta n\u00e3o \u00e9 clara, n\u00e3o faz sentido,
+      falta contexto ou n\u00e3o h\u00e1 dados no schema para responder.\n"}], "role":
       "user"}], "safetySettings": [], "generationConfig": {"temperature": 0.7, "candidateCount":
       1}}'
     headers:
@@ -22,7 +28,7 @@ interactions:
       Connection:
       - keep-alive
       Content-Length:
-      - '1045'
+      - '1600'
       Content-Type:
       - application/json
       Host:
@@ -36,12 +42,15 @@ interactions:
   response:
     body:
       string: !!binary |
-        H4sIAAAAAAAC/2WQQU/DMAyF7/kVVc4b2qAwwQ0xDjvAxqgQ0oSQ1bhtRJtUjTdtVP3vJC3tUsgh
-        ivxebL+vZkHAY1BCCiA0/C7Y2UoQ1O3tNK0IFVmhL9liCRWdvd2pvbe1EB7dJ15WtoH+jLWQiYwh
-        Bs09YzO8Pybn9pXO0f0ttMC8tze9gSdSSZNtEYxWzvYarTd8UKUSeLTlGesHtK353kCKT0hgg8IQ
-        x+1XlBTpL1QPet8Gnd/edN08MCNDL5MmyMdKeDX519cs7VSZ+8A8ljYk5JJOLkn0+B5xDwT9WatH
-        wTxinDK9TzMarxiGc/bLrMP4hpWRHa8UC0twenlxPU1yMFk7kVdoSq0MroTzwCFaQnJaPK8PL9+L
-        1Uah2hb3M84a9gNSojPHMwIAAA==
+        H4sIAAAAAAAC/2VSzY4TMQy+z1NEuRSkdtXuj4q4IAQcFoG6gmqFYNDKzLjTQBoPiVMVqr4QUp+i
+        L4Yz0+lOYQ4Zx/7iz/7sbaaULsCVpgTGoJ+rL+JRatucKUaO0bEEOpc4a/D8iG2/bc8WCOMmPdLb
+        3KV7rkssTADKxZlrhwWGYBge4HssIdfDDlajr6JLAXqIIYI3xyf3VBz+qIoCiw9UiWphLHvwioKq
+        URpIf/IKbBVXSmAcg8JQY3HYL0xB6kmK4gZXtaWhGgCbNYWBWNJjYeNhX7bXGl0pLWMYPH2hZqrw
+        hz2n90ZUKiiqn1G4wbKYQtRUQQ3zkdOBkowhWgYFkkda8Be5zt1O9zTaneyvw0dlPVlMsq2oRNvB
+        dx1AL4wzYfkBIZBLsI/z2Z0+RaVA3Ih7nHUETWodA1T4HhlkxnCapK49rWqe0w90ryg2M766fNZm
+        6+3EGWA6PsaZGOxZaHI9ngz/yxxeC6+x/W3pLZK0Cdbwr9TL/M2nue5Jwf8U1omR9TTTvKRYLfm8
+        yMl4fJUdZWuVvEcfTCtZhSsRcXR5cTNaWAjLhlJ7WRSZGd6WCQPX8xl8G719R+vq9/T27mY9/Uwv
+        SWe77C/uqLKcMQMAAA==
     headers:
       Alt-Svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
@@ -50,11 +59,92 @@ interactions:
       Content-Type:
       - application/json; charset=UTF-8
       Date:
-      - Wed, 25 Mar 2026 14:42:53 GMT
+      - Thu, 02 Apr 2026 15:00:02 GMT
       Server:
       - scaffolding on HTTPServer2
       Server-Timing:
-      - gfet4t7; dur=2955
+      - gfet4t7; dur=6709
+      Transfer-Encoding:
+      - chunked
+      Vary:
+      - Origin
+      - X-Origin
+      - Referer
+      X-Content-Type-Options:
+      - nosniff
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Gemini-Service-Tier:
+      - standard
+      X-XSS-Protection:
+      - '0'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 o planejador de um
+      sistema que transforma perguntas em consultas SQL.\n\nSeu papel: analisar a
+      situa\u00e7\u00e3o atual e decidir a pr\u00f3xima a\u00e7\u00e3o.\n\nContexto
+      atual:\n- Pergunta do usu\u00e1rio: \"Quantos pedidos existem no banco?\"\n-
+      Schema dispon\u00edvel: Sim\n- Feedback do cr\u00edtico: A SQL retornou dados
+      incorretos, faltou filtrar por status.\n- Tentativas realizadas: 1\n- Status
+      atual: reprovado\n- Erro anterior: Nenhum\n\nAVALIA\u00c7\u00c3O CR\u00cdTICA:\nVerifique
+      se a \"Pergunta do usu\u00e1rio\" pode ser respondida com as tabelas e colunas
+      do Schema.\nSe houver ambiguidade, conceitos n\u00e3o mapeados no banco de dados,
+      ou se a inten\u00e7\u00e3o do usu\u00e1rio n\u00e3o estiver clara, voc\u00ea
+      DEVE pedir mais informa\u00e7\u00f5es.\n\nResponda EXATAMENTE no formato JSON
+      abaixo, sem formata\u00e7\u00e3o markdown (```json):\n{\n    \"decisao\": \"escolha_uma_opcao\",\n    \"pergunta_ao_usuario\":
+      \"escreva a pergunta aqui se precisar de ajuda, ou deixe vazio se n\u00e3o precisar\"\n}\n\nOp\u00e7\u00f5es
+      v\u00e1lidas para ''decis\u00e3o'':\n- \"pronto_codificacao\" \u2192 se temos
+      schema, a pergunta faz sentido e devemos gerar/regenerar SQL\n- \"revisando_estrategia\"
+      \u2192 se o cr\u00edtico reprovou e devemos tentar uma abordagem diferente\n-
+      \"necessita_ajuda\" \u2192 a pergunta n\u00e3o \u00e9 clara, n\u00e3o faz sentido,
+      falta contexto ou n\u00e3o h\u00e1 dados no schema para responder.\n"}], "role":
+      "user"}], "safetySettings": [], "generationConfig": {"temperature": 0.7, "candidateCount":
+      1}}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate, zstd
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '1600'
+      Content-Type:
+      - application/json
+      Host:
+      - generativelanguage.googleapis.com
+      User-Agent:
+      - google-genai-sdk/1.68.0 gl-python/3.10.12
+      x-goog-api-client:
+      - google-genai-sdk/1.68.0 gl-python/3.10.12
+    method: POST
+    uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAC/2VR22obMRB9368QekkLdkkcpwl9KaUNNIWS0JrQ0i1mkMZrpVqN0AXcGv9QIF/h
+        H+to7XXW7T5oR3POaGbOWVdCSAVOGw0Jo3wjfnBGiHV3FoxcQpcY6FOc9BDSM3f3rQcxUxKuSpFc
+        167ca6lRmQhUc7KWDhXGaBLM4SFrqOWop3kMTXYFoHmOGYLZl9yT2j6KhmLiHAiNoowGQVAUHnl+
+        /itqBdgmt4JZKUeB0aPaPi2MIvHCUxC4wtZbGokTrlY2b580nfDNo9O8JpaY5VBogYGXb2tZu40c
+        rLY5xD9Hz4IEsli2bUmj7embniAXxpm4/IIQyRXa19ntnTyghluvOH1a9Q26p2WO0OBnTMDWwMEA
+        6QO1Ps3oF7r3lDtrzidXu9cGVh4RLl7v8UQJ7BF0Np1cjv57OX7gvsYOTR74z2uCNel32WV2/W0m
+        B1KkfwbrxagGmsm0pNws0/GQZ6fT82ov207JewzR7CRrsGURx5NXF+OFhbjsWsrABpOLeKM7WacP
+        t/B9Hj5puP5zeXM3nn9MV++mstpUfwFeJnCn6AIAAA==
+    headers:
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=UTF-8
+      Date:
+      - Thu, 02 Apr 2026 15:16:33 GMT
+      Server:
+      - scaffolding on HTTPServer2
+      Server-Timing:
+      - gfet4t7; dur=6547
       Transfer-Encoding:
       - chunked
       Vary:

@@ -26,8 +26,8 @@ def grafo():
     if not api_key:
         pytest.skip("Variável GOOGLE_API_KEY não encontrada. Pulando testes de integração.")
 
-    from src.graph import Graph
-    return Graph(api_key)
+    from text_to_insight.graph import Graph
+    return Graph(api_key, "gemini-2.5-flash", hitl=True)
 
 
 @pytest.fixture(autouse=True)
@@ -40,6 +40,7 @@ def rate_limit_delay():
 def _estado_inicial(pergunta: str) -> dict:
     return {
         "pergunta_usuario": pergunta,
+        "historico_conversa": [],
         "contexto_schema": "",
         "sql_gerada": "",
         "saida_terminal": "",
@@ -60,7 +61,8 @@ def test_grafo_compila(grafo):
 @pytest.mark.timeout(120)
 def test_pergunta_simples(grafo):
     """Pergunta simples percorre o grafo e chega ao status aprovado."""
-    resultado = grafo.invoke(_estado_inicial("Quantos pedidos existem no banco?"))
+    config = {"configurable": {"thread_id": "teste_simples"}}
+    resultado = grafo.grafo_text_to_insight.invoke(_estado_inicial("Quantos pedidos existem no banco?"), config)
 
     assert resultado["status"] == "aprovado"
     assert resultado["sql_gerada"] != ""
@@ -72,8 +74,9 @@ def test_pergunta_simples(grafo):
 @pytest.mark.timeout(120)
 def test_pergunta_com_ranking(grafo):
     """Pergunta com ranking retorna múltiplas linhas."""
-    resultado = grafo.invoke(
-        _estado_inicial("Quais sao as 5 categorias de produtos mais vendidas?")
+    config = {"configurable": {"thread_id": "teste_simples"}}
+    resultado = grafo.grafo_text_to_insight.invoke(
+        _estado_inicial("Quais sao as 5 categorias de produtos mais vendidos por quantidade?"), config
     )
 
     assert resultado["status"] == "aprovado"
@@ -85,8 +88,9 @@ def test_pergunta_com_ranking(grafo):
 @pytest.mark.timeout(120)
 def test_estado_final_completo(grafo):
     """Estado final tem todos os campos-chave preenchidos."""
-    resultado = grafo.invoke(
-        _estado_inicial("Qual o valor medio dos pedidos?")
+    config = {"configurable": {"thread_id": "teste_estado"}}
+    resultado = grafo.grafo_text_to_insight.invoke(
+        _estado_inicial("Qual o valor medio dos pedidos?"), config
     )
 
     # Campos que devem estar preenchidos ao final

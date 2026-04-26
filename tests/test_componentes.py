@@ -20,7 +20,7 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "olist_relationa
 
 def test_schema_extrai_tabelas():
     """Schema node retorna contexto com tabelas do olist DB."""
-    from src.nodes.schema import nos_nodo_esquema
+    from text_to_insight.nodes.schema import nos_nodo_esquema
 
     estado = {"db_path": DB_PATH, "pergunta_usuario": "teste"}
     resultado = nos_nodo_esquema(estado)
@@ -32,7 +32,7 @@ def test_schema_extrai_tabelas():
 
 def test_schema_erro_db_invalido():
     """Schema node retorna erro quando db_path não existe."""
-    from src.nodes.schema import nos_nodo_esquema
+    from text_to_insight.nodes.schema import nos_nodo_esquema
 
     estado = {"db_path": "/caminho/inexistente.db", "pergunta_usuario": "teste"}
     resultado = nos_nodo_esquema(estado)
@@ -47,7 +47,7 @@ def test_schema_erro_db_invalido():
 
 def test_sql_valida_select():
     """Aceita SELECT válido."""
-    from src.nodes.code_agent.code_sql import validar_sql_segura
+    from text_to_insight.nodes.code_agent.code_sql import validar_sql_segura
 
     ok, msg = validar_sql_segura("SELECT COUNT(*) FROM orders")
     assert ok is True
@@ -56,7 +56,7 @@ def test_sql_valida_select():
 
 def test_sql_valida_cte():
     """Aceita WITH/CTE."""
-    from src.nodes.code_agent.code_sql import validar_sql_segura
+    from text_to_insight.nodes.code_agent.code_sql import validar_sql_segura
 
     ok, msg = validar_sql_segura("WITH totals AS (SELECT id FROM orders) SELECT * FROM totals")
     assert ok is True
@@ -64,7 +64,7 @@ def test_sql_valida_cte():
 
 def test_sql_rejeita_insert():
     """Rejeita INSERT."""
-    from src.nodes.code_agent.code_sql import validar_sql_segura
+    from text_to_insight.nodes.code_agent.code_sql import validar_sql_segura
 
     ok, msg = validar_sql_segura("INSERT INTO orders VALUES (1, 2, 3)")
     assert ok is False
@@ -72,7 +72,7 @@ def test_sql_rejeita_insert():
 
 def test_sql_rejeita_drop():
     """Rejeita DROP."""
-    from src.nodes.code_agent.code_sql import validar_sql_segura
+    from text_to_insight.nodes.code_agent.code_sql import validar_sql_segura
 
     ok, msg = validar_sql_segura("DROP TABLE orders")
     assert ok is False
@@ -80,7 +80,7 @@ def test_sql_rejeita_drop():
 
 def test_sql_rejeita_multiplas():
     """Rejeita múltiplas statements."""
-    from src.nodes.code_agent.code_sql import validar_sql_segura
+    from text_to_insight.nodes.code_agent.code_sql import validar_sql_segura
 
     ok, msg = validar_sql_segura("SELECT 1; SELECT 2")
     assert ok is False
@@ -88,7 +88,7 @@ def test_sql_rejeita_multiplas():
 
 def test_sql_rejeita_vazia():
     """Rejeita SQL vazia."""
-    from src.nodes.code_agent.code_sql import validar_sql_segura
+    from text_to_insight.nodes.code_agent.code_sql import validar_sql_segura
 
     ok, msg = validar_sql_segura("")
     assert ok is False
@@ -100,7 +100,7 @@ def test_sql_rejeita_vazia():
 
 def test_execucao_sql_valida():
     """Executa SELECT real no olist DB e retorna resultados."""
-    from src.nodes.code_agent.code_sql import executar_sql_sqlite
+    from text_to_insight.nodes.code_agent.code_sql import executar_sql_sqlite
 
     resultado = executar_sql_sqlite(DB_PATH, "SELECT COUNT(*) as total FROM orders")
     assert resultado["ok"] is True
@@ -110,7 +110,7 @@ def test_execucao_sql_valida():
 
 def test_execucao_sql_com_limite():
     """Respeita limite_preview."""
-    from src.nodes.code_agent.code_sql import executar_sql_sqlite
+    from text_to_insight.nodes.code_agent.code_sql import executar_sql_sqlite
 
     resultado = executar_sql_sqlite(DB_PATH, "SELECT * FROM orders", limite_preview=5)
     assert resultado["ok"] is True
@@ -119,7 +119,7 @@ def test_execucao_sql_com_limite():
 
 def test_execucao_sql_invalida():
     """Retorna erro para SQL com sintaxe inválida."""
-    from src.nodes.code_agent.code_sql import executar_sql_sqlite
+    from text_to_insight.nodes.code_agent.code_sql import executar_sql_sqlite
 
     resultado = executar_sql_sqlite(DB_PATH, "SELECT FROM")
     assert resultado["ok"] is False
@@ -128,7 +128,7 @@ def test_execucao_sql_invalida():
 
 def test_execucao_db_inexistente():
     """Retorna erro para DB inexistente."""
-    from src.nodes.code_agent.code_sql import executar_sql_sqlite
+    from text_to_insight.nodes.code_agent.code_sql import executar_sql_sqlite
 
     resultado = executar_sql_sqlite("/nao/existe.db", "SELECT 1")
     assert resultado["ok"] is False
@@ -140,7 +140,7 @@ def test_execucao_db_inexistente():
 
 def test_executor_sucesso():
     """Executor executa SQL do estado e retorna resultado."""
-    from src.nodes.sandbox import nos_nodo_sandbox
+    from text_to_insight.nodes.sandbox import nos_nodo_sandbox
 
     estado = {
         "sql_gerada": "SELECT COUNT(*) as total FROM orders",
@@ -156,7 +156,7 @@ def test_executor_sucesso():
 
 def test_executor_sql_vazia():
     """Executor retorna erro quando sql_gerada está vazia."""
-    from src.nodes.sandbox import nos_nodo_sandbox
+    from text_to_insight.nodes.sandbox import nos_nodo_sandbox
 
     estado = {
         "sql_gerada": "",
@@ -170,7 +170,7 @@ def test_executor_sql_vazia():
 
 def test_executor_sql_com_erro():
     """Executor retorna exec_erro para SQL com problema."""
-    from src.nodes.sandbox import nos_nodo_sandbox
+    from text_to_insight.nodes.sandbox import nos_nodo_sandbox
 
     estado = {
         "sql_gerada": "SELECT * FROM tabela_que_nao_existe",
@@ -189,7 +189,7 @@ def test_executor_sql_com_erro():
 
 def test_roteador_sandbox_exec_ok():
     """Roteador sandbox direciona para critico quando exec_ok."""
-    from src.routers.edges import roteador_sandbox
+    from text_to_insight.routers.edges import roteador_sandbox
 
     estado = {"status": "exec_ok", "tentativas_loop": 1}
     assert roteador_sandbox(estado) == "critico"
@@ -197,7 +197,7 @@ def test_roteador_sandbox_exec_ok():
 
 def test_roteador_sandbox_exec_erro():
     """Roteador sandbox direciona para planejador quando exec_erro."""
-    from src.routers.edges import roteador_sandbox
+    from text_to_insight.routers.edges import roteador_sandbox
 
     estado = {"status": "exec_erro", "tentativas_loop": 1}
     assert roteador_sandbox(estado) == "planejador"
@@ -205,7 +205,7 @@ def test_roteador_sandbox_exec_erro():
 
 def test_roteador_sandbox_muitas_tentativas():
     """Roteador sandbox direciona para planejador com muitas tentativas."""
-    from src.routers.edges import roteador_sandbox
+    from text_to_insight.routers.edges import roteador_sandbox
 
     estado = {"status": "exec_erro", "tentativas_loop": 5}
     assert roteador_sandbox(estado) == "planejador"
@@ -213,7 +213,7 @@ def test_roteador_sandbox_muitas_tentativas():
 
 def test_roteador_planejador_sem_schema():
     """Roteador planejador direciona para esquema quando schema vazio."""
-    from src.routers.edges import roteador_planejador
+    from text_to_insight.routers.edges import roteador_planejador
 
     estado = {"contexto_schema": "", "status": "iniciado"}
     assert roteador_planejador(estado) == "esquema"
@@ -221,7 +221,7 @@ def test_roteador_planejador_sem_schema():
 
 def test_roteador_planejador_pronto():
     """Roteador planejador direciona para agente_codigo quando pronto."""
-    from src.routers.edges import roteador_planejador
+    from text_to_insight.routers.edges import roteador_planejador
 
     estado = {"contexto_schema": "tabelas...", "status": "pronto_codificacao"}
     assert roteador_planejador(estado) == "agente_codigo"
@@ -229,7 +229,18 @@ def test_roteador_planejador_pronto():
 
 def test_roteador_planejador_aprovado():
     """Roteador planejador direciona para fim quando aprovado."""
-    from src.routers.edges import roteador_planejador
+    from text_to_insight.routers.edges import roteador_planejador
 
     estado = {"contexto_schema": "tabelas...", "status": "aprovado"}
     assert roteador_planejador(estado) == "fim"
+
+def test_roteador_planejador_espera_humana():
+    """Roteador planejador direciona para espera_humana se a flag esperar_usuario for True."""
+    from text_to_insight.routers.edges import roteador_planejador
+
+    estado = {
+        "espera_humana": True,
+        "contexto_schema": "tabelas...", 
+        "status": "aguardando_input"
+    }
+    assert roteador_planejador(estado) == "espera_humana"

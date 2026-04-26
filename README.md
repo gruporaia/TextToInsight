@@ -1,110 +1,136 @@
 # Text-to-Insight
 
-Sistema de agentes baseado em **LangGraph** que transforma perguntas em linguagem natural em consultas SQL, executa contra um banco SQLite real e valida os resultados automaticamente.
+Biblioteca Python para transformar perguntas em linguagem natural em SQL executada com seguranca em SQLite, com avaliacao automatica e resposta final em linguagem natural.
 
-## Como funciona
+O namespace oficial do pacote e `text_to_insight`.
 
-```
-Pergunta do usuário
-        |
-  [Planejador]  --  Decide a estratégia (LLM)
-        |
-    [Schema]    --  Extrai metadados do banco (SQLite)
-        |
- [Agente Código] -- Gera SQL a partir da pergunta + schema (LLM)
-        |
-   [Executor]   --  Executa SQL no banco real (read-only)
-        |
-    [Crítico]   --  Avalia se o resultado responde à pergunta (LLM)
-        |
-   Aprovado? -- Sim --> FIM
-             -- Não --> Volta ao Planejador (retry)
-```
+## Contrato minimo
 
-## Requisitos
+O runtime padrao garante:
 
-- Python 3.10+
-- Conta Google com API Key para Gemini
+- fluxo completo do grafo (planejador -> schema -> agente de codigo -> executor -> critico -> resposta);
+- HITL ligado e desligado;
+- retomada por `thread_id`;
+- persistencia de metricas em `data/metricas_execucao.csv`.
 
-## Setup
+## Instalacao
 
 ```bash
-# 1. Instalar dependências
 pip install -r requirements.txt
-
-# 2. Criar arquivo .env na raiz do projeto
-echo "GOOGLE_API_KEY=sua_chave_aqui" > .env
-
-# 3. Colocar o banco SQLite em data/
-#    (ex: data/olist_relational.db)
+pip install -e .
 ```
 
-## Uso
+Configure a chave da API:
 
 ```bash
-# Pergunta via linha de comando
-python main.py "Quantos pedidos existem no banco?"
+echo "GOOGLE_API_KEY=sua_chave_aqui" > .env
+```
 
-# Sem argumento usa pergunta padrão
-python main.py
+## Uso como biblioteca
+
+```python
+from text_to_insight import InsightEngine
+
+engine = InsightEngine(
+    api_key="...",
+    model="gemini-2.5-flash",
+    db_path="data/olist_relational.db",
+    hitl=True,
+)
+
+resultado = engine.run(
+    thread_id="sessao_1",
+    query="Quantos pedidos existem no banco?",
+)
+
+if resultado.get("status") == "AWAITING_USER":
+    resultado = engine.resume(
+        thread_id="sessao_1",
+        user_response="Pode assumir status entregue.",
+    )
+```
+
+API publica congelada do pacote:
+
+- `text_to_insight.InsightEngine`
+- `text_to_insight.Graph`
+- `text_to_insight.EstadoTextToInsight`
+
+Imports antigos via `src` nao sao mais suportados.
+
+## Uso via CLI
+
+O arquivo `main.py` e um adaptador fino da CLI da biblioteca.
+
+```bash
+# via adaptador local
+python main.py --hitl on "Quais categorias vendem mais?"
+
+# modo nao interativo
+python main.py --hitl off "Quais categorias vendem mais?"
+
+# via entrypoint instalado pelo pacote
+text-to-insight --hitl on "Quantos pedidos existem no banco?"
 ```
 
 ## Testes
 
-O projeto possui 3 camadas de teste:
+Camadas atuais:
 
 ```bash
-# Camada 1: Componentes isolados (sem API, rápido)
+# Camada 1 - componentes deterministicos (sem API)
 pytest tests/test_componentes.py -v -s
 
-# Camada 2: Cada nó individualmente com API + banco real
-pytest tests/test_nodes.py -v -s
+# Camada 2 - nos individuais com VCR (replay, sem gravar)
+pytest tests/test_nodes.py -v -s --record-mode=none
 
-# Camada 3: Grafo completo end-to-end
-pytest tests/test_integracao.py -v -s
+# Camada 2 - nos individuais com VCR (gravar/atualizar cassetes)
+pytest tests/test_nodes.py -v -s --record-mode=new_episodes
+
+# Camada 3 - integracao do grafo com VCR (replay, sem gravar)
+pytest tests/test_integracao.py -v -s --record-mode=none
+
+# Camada 3 - integracao do grafo com VCR (gravar/atualizar cassetes)
+pytest tests/test_integracao.py -v -s --record-mode=new_episodes
+
+# Integracao dedicada main + InsightEngine
+pytest tests/test_main_engine_integracao.py -v -s
 ```
 
-## Estrutura
+Fluxo recomendado de gravacao VCR:
 
-```
-TextToInsight/
-├── main.py                              # Ponto de entrada
-├── .env                                 # GOOGLE_API_KEY
-├── requirements.txt                     # Dependências
-├── data/
-│   └── olist_relational.db              # Banco SQLite para análise
-├── src/
-│   ├── state.py                         # Estado compartilhado (TypedDict)
-│   ├── graph.py                         # Grafo LangGraph compilado
-│   ├── nodes/
-│   │   ├── planner.py                   # Planejador (LLM)
-│   │   ├── schema.py                    # Extração de schema (SQLite)
-│   │   ├── code_agent/
-│   │   │   ├── code_agent.py            # Geração de SQL (LLM)
-│   │   │   └── code_sql.py              # Validação e execução de SQL
-│   │   ├── sandbox.py                   # Executor de SQL (banco real)
-│   │   └── critic.py                    # Avaliador de qualidade (LLM)
-│   └── routers/
-│       └── edges.py                     # Roteadores condicionais
-└── tests/
-    ├── test_componentes.py              # Testes sem API
-    ├── test_nodes.py                    # Testes por nó com API
-    └── test_integracao.py               # Teste do grafo completo
+```bash
+# gravar/atualizar
+pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=new_episodes
+
+# validar replay deterministico
+pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=none
 ```
 
-## Dependências
+As cassetes ficam em `tests/cassettes/`.
 
-```
-langgraph>=0.2.0
-langchain>=0.2.0
-langchain-core>=0.2.0
-langchain-google-genai>=2.0.0
-python-dotenv>=1.0.0
+Teste opcional com API real (drift provider/modelo):
+
+```bash
+pytest tests/test_real_api_smoke.py -v -s -m real_api
 ```
 
-## Stack
+## CI hibrida
 
-- **LangGraph** para orquestração do grafo de agentes
-- **Google Gemini** (gemini-2.5-flash) para chamadas LLM
-- **SQLite** como banco de dados (modo read-only)
-- **pytest** para testes
+Workflow em `.github/workflows/ci.yml`:
+
+- `tests-vcr`: job padrao em PR/push com execucao deterministica (`--record-mode=none`);
+- `record-vcr-cassettes`: job manual em `workflow_dispatch` para gravar/atualizar cassetes e publicar artifact;
+- `tests-real-api`: job opcional manual/noturno com `GOOGLE_API_KEY` real para detectar drift.
+
+## Validacao de distribuicao
+
+```bash
+python -m build
+
+python -m venv .venv-smoke
+source .venv-smoke/bin/activate
+pip install dist/*.whl
+
+python -c "from text_to_insight import InsightEngine, Graph; print('import_ok')"
+```

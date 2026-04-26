@@ -44,14 +44,19 @@ def roteador_planejador(estado: EstadoTextToInsight) -> Literal["esquema", "agen
     """
     contexto = estado.get("contexto_schema", "")
     status = estado.get("status", "")
+    esperar = estado.get("espera_humana", False)
 
     print(f"[ROTEADOR_PLANEJADOR] Status: {status}, Schema preenchido: {bool(contexto)}")
+
+    if esperar:
+        print("[ROTEADOR_PLANEJADOR] Espera humana ativa → espera_humana")
+        return "espera_humana"
 
     if not contexto:
         print("[ROTEADOR_PLANEJADOR] Schema vazio → esquema")
         return "esquema"
 
-    if status in ("pronto_codificacao", "revisando_estrategia", "aguardando_schema"):
+    if status in ("pronto_codificacao", "revisando_estrategia"):
         print("[ROTEADOR_PLANEJADOR] → agente_codigo")
         return "agente_codigo"
 
@@ -60,5 +65,5 @@ def roteador_planejador(estado: EstadoTextToInsight) -> Literal["esquema", "agen
         return "fim"
 
     # Default: gera código
-    print("[ROTEADOR_PLANEJADOR] Default → agente_codigo")
-    return "agente_codigo"
+    print("[ROTEADOR_PLANEJADOR] Default → planejador")
+    return "planejador"
