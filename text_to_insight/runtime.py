@@ -71,6 +71,7 @@ def _heuristica_nova_pergunta(resposta: str) -> bool:
         return False
 
     texto_lower = texto.lower()
+    # Confirmacoes curtas tipicas de prosseguimento nao devem reiniciar o fluxo.
     confirmacoes = {
         "sim",
         "ok",
@@ -85,9 +86,11 @@ def _heuristica_nova_pergunta(resposta: str) -> bool:
     if texto_lower in confirmacoes or texto_lower.startswith(("sim ", "ok ", "certo ")):
         return False
 
+    # Pergunta explicita e um forte sinal de nova intencao.
     if texto_lower.endswith("?"):
         return True
 
+    # Padroes que indicam nova solicitacao (intencao de perguntar algo novo)
     padroes = [
         r"\bquero saber\b",
         r"\bgostaria de saber\b",
@@ -107,6 +110,7 @@ def _heuristica_nova_pergunta(resposta: str) -> bool:
         r"\bporque\b",
         r"\bnova pergunta\b",
     ]
+    # se a resposta do usuario contiver alguma expressao dos padrões, devolve True; caso contrario, devolve False.
     return any(re.search(padrao, texto_lower) for padrao in padroes)
 
 
