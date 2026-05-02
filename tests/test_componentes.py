@@ -22,7 +22,7 @@ def test_schema_extrai_tabelas():
     """Schema node retorna contexto com tabelas do olist DB."""
     from text_to_insight.nodes.schema import nos_nodo_esquema
 
-    estado = {"db_path": DB_PATH, "pergunta_usuario": "teste"}
+    estado = {"db_path": DB_PATH, "pergunta_atual": "teste"}
     resultado = nos_nodo_esquema(estado)
 
     assert resultado["status"] == "schema_obtido"
@@ -34,7 +34,7 @@ def test_schema_erro_db_invalido():
     """Schema node retorna erro quando db_path não existe."""
     from text_to_insight.nodes.schema import nos_nodo_esquema
 
-    estado = {"db_path": "/caminho/inexistente.db", "pergunta_usuario": "teste"}
+    estado = {"db_path": "/caminho/inexistente.db", "pergunta_atual": "teste"}
     resultado = nos_nodo_esquema(estado)
 
     assert resultado["status"] == "exec_erro"
@@ -145,7 +145,7 @@ def test_executor_sucesso():
     estado = {
         "sql_gerada": "SELECT COUNT(*) as total FROM orders",
         "db_path": DB_PATH,
-        "pergunta_usuario": "teste",
+        "pergunta_atual": "teste",
     }
     resultado = nos_nodo_sandbox(estado)
 
@@ -161,7 +161,7 @@ def test_executor_sql_vazia():
     estado = {
         "sql_gerada": "",
         "db_path": DB_PATH,
-        "pergunta_usuario": "teste",
+        "pergunta_atual": "teste",
     }
     resultado = nos_nodo_sandbox(estado)
 
@@ -175,7 +175,7 @@ def test_executor_sql_com_erro():
     estado = {
         "sql_gerada": "SELECT * FROM tabela_que_nao_existe",
         "db_path": DB_PATH,
-        "pergunta_usuario": "teste",
+        "pergunta_atual": "teste",
     }
     resultado = nos_nodo_sandbox(estado)
 

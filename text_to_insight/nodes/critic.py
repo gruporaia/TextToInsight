@@ -47,7 +47,11 @@ def nos_nodo_critico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -
     """
     Nó Crítico: usa Gemini para avaliar qualidade do resultado.
     """
-    pergunta = estado.get("pergunta_usuario", "")
+    pergunta = (
+        estado.get("pergunta_atual", "")
+        or estado.get("pergunta_original", "")
+        or estado.get("pergunta_usuario", "")
+    )
     sql = estado.get("sql_gerada", "")
     preview = estado.get("linhas_resultado_preview", [])
     total = estado.get("total_linhas_resultado", 0)

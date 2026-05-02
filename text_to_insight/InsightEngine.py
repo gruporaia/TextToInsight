@@ -96,7 +96,12 @@ class InsightEngine:
         if snapshot.next and user_response:
             registrar_resposta_humana(app, config, user_response)
             estado_execucao = None
-            pergunta_exibicao = snapshot.values.get("pergunta_usuario", "Retomando conversa...")
+            pergunta_exibicao = (
+                snapshot.values.get("pergunta_atual")
+                or snapshot.values.get("pergunta_original")
+                or snapshot.values.get("pergunta_usuario")
+                or "Retomando conversa..."
+            )
         # Caso 2: chamada nova (primeira execução para essa pergunta).
         elif query:
             estado_execucao = construir_estado_inicial(query, self._db_path)

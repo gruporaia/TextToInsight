@@ -37,7 +37,7 @@ def llm():
 def _obter_schema_real() -> str:
     """Helper: extrai schema real do olist DB (sem API, só SQLite)."""
     from text_to_insight.nodes.schema import nos_nodo_esquema
-    resultado = nos_nodo_esquema({"db_path": DB_PATH, "pergunta_usuario": "teste"})
+    resultado = nos_nodo_esquema({"db_path": DB_PATH, "pergunta_atual": "teste"})
     return resultado["contexto_schema"]
 
 
@@ -50,7 +50,7 @@ def test_planner_sem_schema(llm):
     from text_to_insight.nodes.planner import nos_nodo_planejador
 
     estado = {
-        "pergunta_usuario": "Quantos pedidos existem?",
+        "pergunta_atual": "Quantos pedidos existem?",
         "contexto_schema": "",
         "feedback_critico": "",
         "status": "iniciado",
@@ -73,7 +73,7 @@ def test_planner_com_schema_decide_codificar(llm):
 
     schema = _obter_schema_real()
     estado = {
-        "pergunta_usuario": "Quantos pedidos existem no banco?",
+        "pergunta_atual": "Quantos pedidos existem no banco?",
         "contexto_schema": schema,
         "feedback_critico": "",
         "status": "schema_obtido",
@@ -95,7 +95,7 @@ def test_planner_com_feedback_revisa(llm):
     time.sleep(5)  # rate limit
     schema = _obter_schema_real()
     estado = {
-        "pergunta_usuario": "Quantos pedidos existem no banco?",
+        "pergunta_atual": "Quantos pedidos existem no banco?",
         "contexto_schema": schema,
         "feedback_critico": "A SQL retornou dados incorretos, faltou filtrar por status.",
         "status": "reprovado",
@@ -116,7 +116,7 @@ def test_planner_pergunta_fora_de_escopo(llm):
     time.sleep(5)  # rate limit
     schema = _obter_schema_real()
     estado = {
-        "pergunta_usuario": "Quantas vezes a Ahri ganhou o CBLOL?", 
+        "pergunta_atual": "Quantas vezes a Ahri ganhou o CBLOL?", 
         "contexto_schema": schema,
         "feedback_critico": "",
         "status": "schema_obtido",
@@ -145,7 +145,7 @@ def test_code_agent_gera_sql(llm):
     time.sleep(5)  # rate limit
     schema = _obter_schema_real()
     estado = {
-        "pergunta_usuario": "Quantos pedidos existem no banco?",
+        "pergunta_atual": "Quantos pedidos existem no banco?",
         "contexto_schema": schema,
         "feedback_critico": "",
         "sql_gerada": "",
@@ -173,7 +173,7 @@ def test_code_agent_com_feedback_regenera(llm):
     time.sleep(5)  
     schema = _obter_schema_real()
     estado = {
-        "pergunta_usuario": "Quais as 5 categorias de produtos mais vendidas?",
+        "pergunta_atual": "Quais as 5 categorias de produtos mais vendidas?",
         "contexto_schema": schema,
         "feedback_critico": "A SQL anterior não tinha LIMIT 5, corrija.",
         "sql_gerada": "SELECT product_category_name FROM products",
@@ -197,7 +197,7 @@ def test_executor_com_sql_real():
     estado = {
         "sql_gerada": "SELECT COUNT(*) as total_pedidos FROM orders",
         "db_path": DB_PATH,
-        "pergunta_usuario": "Quantos pedidos existem?",
+        "pergunta_atual": "Quantos pedidos existem?",
     }
     resultado = nos_nodo_sandbox(estado)
 
@@ -219,7 +219,7 @@ def test_critic_avalia_resultado_correto(llm):
 
     time.sleep(5)  # rate limit
     estado = {
-        "pergunta_usuario": "Quantos pedidos existem no banco?",
+        "pergunta_atual": "Quantos pedidos existem no banco?",
         "sql_gerada": "SELECT COUNT(*) as total_pedidos FROM orders",
         "linhas_resultado_preview": [{"total_pedidos": 99441}],
         "total_linhas_resultado": 1,
@@ -240,7 +240,7 @@ def test_critic_reprova_erro_execucao(llm):
     from text_to_insight.nodes.critic import nos_nodo_critico
 
     estado = {
-        "pergunta_usuario": "Quantos pedidos existem?",
+        "pergunta_atual": "Quantos pedidos existem?",
         "sql_gerada": "SELECT * FROM tabela_inexistente",
         "linhas_resultado_preview": [],
         "total_linhas_resultado": 0,
@@ -271,7 +271,7 @@ def test_cadeia_code_agent_executor(llm):
 
     # Passo 1: Code Agent gera SQL
     estado_code = {
-        "pergunta_usuario": "Quantos clientes existem no banco?",
+        "pergunta_atual": "Quantos clientes existem no banco?",
         "contexto_schema": schema,
         "feedback_critico": "",
         "sql_gerada": "",
@@ -286,7 +286,7 @@ def test_cadeia_code_agent_executor(llm):
     estado_exec = {
         "sql_gerada": resultado_code["sql_gerada"],
         "db_path": DB_PATH,
-        "pergunta_usuario": "Quantos clientes existem no banco?",
+        "pergunta_atual": "Quantos clientes existem no banco?",
     }
     resultado_exec = nos_nodo_sandbox(estado_exec)
     print(f"  → Status execução: {resultado_exec['status']}")

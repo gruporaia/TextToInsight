@@ -38,7 +38,11 @@ def nos_nodo_planejador(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI
 
     Lógica determinística para schema vazio; LLM para decisões mais complexas.
     """
-    pergunta = estado.get("pergunta_usuario", "")
+    pergunta = (
+        estado.get("pergunta_atual", "")
+        or estado.get("pergunta_original", "")
+        or estado.get("pergunta_usuario", "")
+    )
     conversa_previa = estado.get("historico_conversa", "")
     schema = estado.get("contexto_schema", "")
     feedback = estado.get("feedback_critico", "")

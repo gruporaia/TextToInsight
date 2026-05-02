@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import re
 import time
 from typing import Any, Callable
 
@@ -8,11 +10,35 @@ from .utils import salvar_metricas_csv
 HITL_AWAITING_STATUS = "AWAITING_USER"
 HITL_BLOCKED_STATUS = "bloqueado_hitl"
 
+PROMPT_CLASSIFICADOR_HITL = """Voce e um classificador de respostas de usuario em um fluxo HITL.
+
+Tarefa:
+- Dado a pergunta original, a pergunta atual e a resposta do usuario,
+  classifique se o usuario fez uma NOVA PERGUNTA ou se apenas ESCLARECEU
+  algo da pergunta atual.
+
+Regras:
+- Responda ESTRITAMENTE em JSON valido, sem markdown.
+- Campos obrigatorios: "tipo" e "pergunta_normalizada".
+- "tipo" deve ser: "nova_pergunta" ou "esclarecimento".
+- Se for "esclarecimento", mantenha "pergunta_normalizada" como a pergunta atual.
+- Se for "nova_pergunta", normalize a nova pergunta a partir da resposta do usuario.
+
+Entrada:
+Pergunta original: "{pergunta_original}"
+Pergunta atual: "{pergunta_atual}"
+Resposta do usuario: "{user_response}"
+
+Retorne apenas:
+{{"tipo":"...","pergunta_normalizada":"..."}}
+"""
+
 
 def construir_estado_inicial(pergunta: str, db_path: str) -> dict[str, Any]:
     """Cria o estado inicial padrão para uma execução do grafo."""
     return {
-        "pergunta_usuario": pergunta,
+        "pergunta_original": pergunta,
+        "pergunta_atual": pergunta,
         "contexto_schema": "",
         "sql_gerada": "",
         "saida_terminal": "",
@@ -23,6 +49,109 @@ def construir_estado_inicial(pergunta: str, db_path: str) -> dict[str, Any]:
         "tentativas_loop": 0,
         "db_path": db_path,
         "espera_humana": False,
+    }
+
+
+def _limpar_json_markdown(conteudo: str) -> str:
+    conteudo_limpo = conteudo.strip()
+    if conteudo_limpo.startswith("```json"):
+        conteudo_limpo = conteudo_limpo[7:]
+        if conteudo_limpo.endswith("```"):
+            conteudo_limpo = conteudo_limpo[:-3]
+    elif conteudo_limpo.startswith("```"):
+        conteudo_limpo = conteudo_limpo[3:]
+        if conteudo_limpo.endswith("```"):
+            conteudo_limpo = conteudo_limpo[:-3]
+    return conteudo_limpo.strip()
+
+
+def _heuristica_nova_pergunta(resposta: str) -> bool:
+    texto = (resposta or "").strip()
+    if not texto:
+        return False
+
+    texto_lower = texto.lower()
+    confirmacoes = {
+        "sim",
+        "ok",
+        "certo",
+        "pode",
+        "pode prosseguir",
+        "pode seguir",
+        "continue",
+        "prosseguir",
+        "segue",
+    }
+    if texto_lower in confirmacoes or texto_lower.startswith(("sim ", "ok ", "certo ")):
+        return False
+
+    if texto_lower.endswith("?"):
+        return True
+
+    padroes = [
+        r"\bquero saber\b",
+        r"\bgostaria de saber\b",
+        r"\bpreciso saber\b",
+        r"\bme diga\b",
+        r"\bme informe\b",
+        r"\bme mostre\b",
+        r"\bqual\b",
+        r"\bquais\b",
+        r"\bquantos?\b",
+        r"\bquanto\b",
+        r"\bquando\b",
+        r"\bonde\b",
+        r"\bcomo\b",
+        r"\bquem\b",
+        r"\bpor que\b",
+        r"\bporque\b",
+        r"\bnova pergunta\b",
+    ]
+    return any(re.search(padrao, texto_lower) for padrao in padroes)
+
+
+def classificar_resposta_usuario(
+    pergunta_original: str,
+    pergunta_atual: str,
+    user_response: str,
+    llm: Any | None = None,
+) -> dict[str, str]:
+    pergunta_original = (pergunta_original or "").strip()
+    pergunta_atual = (pergunta_atual or "").strip()
+    resposta = (user_response or "").strip()
+
+    if llm is not None:
+        prompt = PROMPT_CLASSIFICADOR_HITL.format(
+            pergunta_original=pergunta_original,
+            pergunta_atual=pergunta_atual,
+            user_response=resposta,
+        )
+        try:
+            resposta_llm = llm.invoke(prompt)
+            conteudo_bruto = _limpar_json_markdown(str(getattr(resposta_llm, "content", "")))
+            dados = json.loads(conteudo_bruto)
+            tipo = str(dados.get("tipo", "")).strip().lower()
+            pergunta_normalizada = str(dados.get("pergunta_normalizada", "")).strip()
+            if tipo in {"nova_pergunta", "esclarecimento"}:
+                if tipo == "nova_pergunta" and resposta:
+                    pergunta_normalizada = resposta
+                if not pergunta_normalizada:
+                    pergunta_normalizada = pergunta_atual if tipo == "esclarecimento" else resposta
+                if pergunta_normalizada:
+                    return {
+                        "tipo": tipo,
+                        "pergunta_normalizada": pergunta_normalizada,
+                    }
+        except Exception:
+            pass
+
+    if _heuristica_nova_pergunta(resposta):
+        pergunta_normalizada = resposta if resposta else pergunta_atual or pergunta_original
+        return {"tipo": "nova_pergunta", "pergunta_normalizada": pergunta_normalizada}
+
+    return {
+        "tipo": "esclarecimento",
+        "pergunta_normalizada": pergunta_atual or pergunta_original or resposta,
     }
 
 
@@ -105,7 +234,44 @@ def registrar_resposta_humana(grafo_app: Any, config: dict[str, Any], user_respo
     historico = list(snapshot.values.get("historico_conversa", []))
     pergunta_agente = snapshot.values.get("pergunta_ao_usuario", "Pode confirmar o prosseguimento?")
     historico.append((f"ai: {pergunta_agente}", f"user: {user_response}"))
-    grafo_app.update_state(config, {"historico_conversa": historico, "espera_humana": False})
+    pergunta_original = snapshot.values.get("pergunta_original", "")
+    pergunta_atual = snapshot.values.get("pergunta_atual", "")
+    if not pergunta_atual:
+        pergunta_atual = snapshot.values.get("pergunta_usuario", "")
+
+    llm = getattr(grafo_app, "hitl_classifier_llm", None)
+    if llm is None:
+        llm = getattr(grafo_app, "llm", None)
+
+    classificacao = classificar_resposta_usuario(
+        pergunta_original=pergunta_original,
+        pergunta_atual=pergunta_atual,
+        user_response=user_response,
+        llm=llm,
+    )
+
+    updates = {
+        "historico_conversa": historico,
+        "espera_humana": False,
+    }
+
+    if not pergunta_original:
+        updates["pergunta_original"] = pergunta_atual or user_response
+
+    if classificacao.get("tipo") == "nova_pergunta":
+        updates.update(
+            {
+                "pergunta_atual": classificacao.get("pergunta_normalizada", pergunta_atual),
+                "sql_gerada": "",
+                "feedback_critico": "",
+                "erro_execucao": "",
+                "tentativas_loop": 0,
+                "saida_terminal": "",
+                "status": "iniciado",
+            }
+        )
+
+    grafo_app.update_state(config, updates)
 
 
 def executar_fluxo(

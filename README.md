@@ -13,6 +13,13 @@ O runtime padrao garante:
 - retomada por `thread_id`;
 - persistencia de metricas em `data/metricas_execucao.csv`.
 
+## Contrato HITL (perguntas)
+
+- `pergunta_original`: pergunta inicial da thread, imutavel apos o primeiro set.
+- `pergunta_atual`: pergunta corrente e fonte de verdade para o fluxo.
+- Em HITL, se a resposta do usuario for classificada como "nova pergunta",
+  o sistema atualiza `pergunta_atual` e reinicia o ciclo, sem alterar a original.
+
 ## Instalacao
 
 ```bash

@@ -90,7 +90,7 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
     callback = _coletar_resposta_humana if hitl_ativado else None
     resultado = engine.run(thread_id=args.thread_id, query=pergunta, on_human_prompt=callback)
 
-    # Fallback para clientes que prefiram retomar manualmente sem callback.
+    # Fallback (plano B) para clientes que prefiram retomar manualmente sem callback.
     while resultado.get("status") == "AWAITING_USER":
         resposta = _coletar_resposta_humana(resultado.get("message", "Pode confirmar o prosseguimento?"))
         resultado = engine.resume(

@@ -106,6 +106,7 @@ class Graph:
         construtor = self._construir_grafo_text_to_insight(hitl)
         grafo_compilado = construtor.compile(checkpointer=self.memory,
                                              interrupt_before=["espera_humana"])
+        grafo_compilado.hitl_classifier_llm = self.llm
         print("[GRAFO] Grafo Text-to-Insight compilado com sucesso!")
         return grafo_compilado
 

@@ -23,7 +23,11 @@ def salvar_metricas_csv(resultado: dict, latencia: float, arquivo_csv="data/metr
     # Colunas 
     dados = {
         "data_hora": datetime.now(),
-        "pergunta": resultado.get("pergunta_usuario", ""),
+        "pergunta": (
+            resultado.get("pergunta_atual", "")
+            or resultado.get("pergunta_original", "")
+            or resultado.get("pergunta_usuario", "")
+        ),
         "status_final": resultado.get("status", ""),
         "tentativas": resultado.get("tentativas_loop", 0),
         "tokens_input": resultado.get("tokens_input", 0),
