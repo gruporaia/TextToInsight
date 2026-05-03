@@ -55,7 +55,7 @@ def validar_sql_segura(sql: str) -> tuple[bool, str]:
 def executar_sql_sqlite(
     db_path: str,
     sql: str,
-    limite_preview: int = 30,
+    limite_preview: int = 5,
 ) -> dict[str, Any]:
     """
     Executa SQL validada em SQLite modo read-only e retorna resultado estruturado.
@@ -66,6 +66,7 @@ def executar_sql_sqlite(
             "ok": False,
             "erro_execucao": erro_validacao,
             "linhas_resultado_preview": [],
+            "linhas_resultado_completo": [],
             "total_linhas_resultado": 0,
             "saida_terminal": f"[SANDBOX] SQL invalida: {erro_validacao}",
         }
@@ -77,6 +78,7 @@ def executar_sql_sqlite(
             "ok": False,
             "erro_execucao": msg,
             "linhas_resultado_preview": [],
+            "linhas_resultado_completo": [],
             "total_linhas_resultado": 0,
             "saida_terminal": f"[SANDBOX] {msg}",
         }
@@ -90,11 +92,13 @@ def executar_sql_sqlite(
             rows = cur.fetchall()
             total = len(rows)
             preview_rows = [dict(r) for r in rows[:limite_preview]]
+            all_rows = [dict(r) for r in rows]
 
             return {
                 "ok": True,
                 "erro_execucao": "",
                 "linhas_resultado_preview": preview_rows,
+                "linhas_resultado_completo": all_rows,
                 "total_linhas_resultado": total,
                 "saida_terminal": (
                     f"[SANDBOX] Execucao OK | linhas_total={total} "
@@ -108,6 +112,7 @@ def executar_sql_sqlite(
             "ok": False,
             "erro_execucao": f"Falha ao executar SQL: {e}",
             "linhas_resultado_preview": [],
+            "linhas_resultado_completo": [],
             "total_linhas_resultado": 0,
             "saida_terminal": f"[SANDBOX] Erro de execucao: {e}",
         }
