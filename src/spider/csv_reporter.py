@@ -29,6 +29,9 @@ class CSVReporter:
         "erro_execucao",
         "resultado_exato_match",
         "similarity_score_sql",
+        "resultado_f1",
+        "resultado_precision",
+        "resultado_recall",
     ]
 
     def __init__(self, filepath: str | Path):

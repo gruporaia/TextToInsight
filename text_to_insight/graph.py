@@ -81,10 +81,17 @@ class Graph:
             }
         )
 
+        MAX_TENTATIVAS_CRITICO = 3
+
         def roteador_critico(estado: EstadoTextToInsight) -> str:
             status = estado.get("status", "")
-            # Se aprovado, enviar para nó de resposta; senão retornar ao planejador
+            tentativas = estado.get("tentativas_loop", 0)
+            # Se aprovado, enviar para nó de resposta
             if status == "aprovado":
+                return "resposta"
+            # Se atingiu limite de tentativas, encerrar mesmo reprovado
+            if tentativas >= MAX_TENTATIVAS_CRITICO:
+                print(f"[ROTEADOR_CRITICO] Limite de {MAX_TENTATIVAS_CRITICO} tentativas atingido → resposta (forçado)")
                 return "resposta"
             return "planejador"
 
