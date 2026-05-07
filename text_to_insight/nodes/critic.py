@@ -33,14 +33,62 @@ Amostra dos resultados (primeiras linhas):
 === ERROS (se houver) ===
 {erro}
 
+=== TENTATIVAS ANTERIORES ===
+{historico_tentativas_section}
+
 Avalie:
 1. A SQL responde à pergunta do usuário?
 2. Os resultados fazem sentido?
 3. Há algum erro lógico ou de interpretação?
+4. Se houve tentativas anteriores, verifique se os mesmos problemas persistem.
+
+Ao avaliar, priorize utilidade prática e correção semântica da resposta,
+não perfeição formal.
+
+Diferenças de formato, representação ou precisão que não alterem
+substancialmente a resposta NÃO devem causar reprovação.
+
+Exemplos de casos que normalmente devem ser APROVADOS:
+- Ano médio retornado como float em vez de inteiro/data
+- Pequenas diferenças de arredondamento
+- Colunas extras irrelevantes
+- Nomes/aliases diferentes
+- Resultado parcialmente correto mas ainda útil
+- Agregações corretas com precisão numérica diferente da esperada
+
+REPROVE apenas quando houver falha material, por exemplo:
+- A query responde outra pergunta
+- O dado necessário para responder não está presentes
+- Filtros importantes estão errados ou ausentes
+- JOIN incorreto altera significativamente os resultados
+- Métrica errada (SUM vs AVG, COUNT vs COUNT DISTINCT, etc.)
+- Resultado vazio inesperado
+- Erro SQL ou inconsistência lógica grave
+
+Considere o custo de retentativas. Em caso de dúvida entre APROVADO
+e REPROVADO, prefira APROVADO se a resposta ainda for útil para o usuário. Leve em consideração que ainda tem um agente depois de você que irá interpretar o resultado da query e criar uma resposta em linguagem natural.
 
 Responda no formato:
 VEREDITO: APROVADO ou REPROVADO
 FEEDBACK: <sua avaliação em 1-3 frases>"""
+
+
+def _formatar_historico_para_critico(historico: list[dict]) -> str:
+    """Formata o histórico de tentativas anteriores para o prompt do crítico."""
+    if not historico:
+        return "Nenhuma tentativa anterior (esta é a primeira)."
+
+    partes = []
+    for i, tent in enumerate(historico, 1):
+        bloco = f"--- Tentativa {i} ---\n"
+        bloco += f"SQL: {tent.get('sql', '(vazia)')}\n"
+        if tent.get("erro"):
+            bloco += f"Erro: {tent['erro']}\n"
+        if tent.get("feedback"):
+            bloco += f"Feedback: {tent['feedback']}\n"
+        partes.append(bloco)
+
+    return "\n".join(partes)
 
 
 def nos_nodo_critico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -> dict:
@@ -55,6 +103,7 @@ def nos_nodo_critico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -
     conversa_previa = estado.get("historico_conversa", "")
     erro = estado.get("erro_execucao", "")
     status_exec = estado.get("status", "")
+    historico = estado.get("historico_tentativas", [])
 
     print("[CRITICO] Avaliando resultado...")
 
@@ -65,10 +114,13 @@ def nos_nodo_critico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -
         return {
             "feedback_critico": feedback,
             "status": "reprovado",
+            # Registrar tentativa com erro no histórico
+            "historico_tentativas": [{"sql": sql, "erro": erro, "feedback": feedback}],
         }
 
     # Formata preview para o prompt
     preview_str = str(preview[:10]) if preview else "Nenhum resultado"
+    historico_section = _formatar_historico_para_critico(historico)
 
     prompt = PROMPT_CRITIC.format(
         pergunta=pergunta,
@@ -78,6 +130,7 @@ def nos_nodo_critico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -
         total_linhas=total,
         preview=preview_str,
         erro=erro if erro else "Nenhum",
+        historico_tentativas_section=historico_section,
     )
 
     resposta = llm.invoke(prompt)
@@ -108,4 +161,7 @@ def nos_nodo_critico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -
         "tokens_input": in_tokens,
         "tokens_output": out_tokens,
         "tokens_total": total_tokens,
+        # Registrar esta tentativa no histórico (acumula via operator.add)
+        "historico_tentativas": [{"sql": sql, "feedback": feedback}],
     }
+

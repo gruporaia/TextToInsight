@@ -4,12 +4,15 @@ Métricas para comparação de queries SQL.
 Fornece:
 - Similarity score entre duas queries (difflib-based)
 - Comparação de resultados (exato match)
+- F1 score de resultados (row-level precision/recall)
 - Normalização de SQL para comparação
 """
 
 import difflib
 import re
+from collections import Counter
 from typing import Any
+
 import numpy as np
 
 
@@ -153,6 +156,62 @@ def results_exact_match(
     return bool(np.array_equal(gold_array, agent_array))
 
 
+def results_f1_score(
+    results_gold: list[dict[str, Any]],
+    results_agent: list[dict[str, Any]],
+) -> dict[str, float]:
+    """
+    Calcula Precision, Recall e F1 row-level entre resultados gold e agent.
+
+    Cada linha é convertida em uma tupla canônica (valores ordenados, como string)
+    e tratada como membro de um multiset (Counter). Isso permite medir parcialmente
+    quantas linhas o agente acertou, mesmo que não tenha acertado todas.
+
+    - Precision: das linhas que o agente retornou, quantas estão no gold?
+    - Recall:    das linhas do gold, quantas o agente retornou?
+    - F1:        média harmônica de precision e recall.
+
+    Args:
+        results_gold: Resultados da query ouro
+        results_agent: Resultados da query do agente
+
+    Returns:
+        Dict com chaves: precision, recall, f1 (floats de 0 a 1)
+    """
+    def _row_to_canonical(row: dict[str, Any]) -> tuple:
+        """Converte uma linha em tupla canônica de valores (ordenados, stringificados)."""
+        values = [str(v) if v is not None else "NULL" for v in row.values()]
+        return tuple(sorted(values))
+
+    # Ambos vazios → match perfeito
+    if not results_gold and not results_agent:
+        return {"precision": 1.0, "recall": 1.0, "f1": 1.0}
+
+    # Um vazio e outro não
+    if not results_gold:
+        return {"precision": 0.0, "recall": 1.0, "f1": 0.0}
+    if not results_agent:
+        return {"precision": 1.0, "recall": 0.0, "f1": 0.0}
+
+    gold_bag = Counter(_row_to_canonical(r) for r in results_gold)
+    agent_bag = Counter(_row_to_canonical(r) for r in results_agent)
+
+    # Interseção: min(count_gold, count_agent) para cada tupla
+    true_positives = sum((gold_bag & agent_bag).values())
+    total_agent = sum(agent_bag.values())
+    total_gold = sum(gold_bag.values())
+
+    precision = true_positives / total_agent if total_agent > 0 else 0.0
+    recall = true_positives / total_gold if total_gold > 0 else 0.0
+
+    if precision + recall == 0:
+        f1 = 0.0
+    else:
+        f1 = 2 * (precision * recall) / (precision + recall)
+
+    return {"precision": round(precision, 4), "recall": round(recall, 4), "f1": round(f1, 4)}
+
+
 def build_comparison_row(
     id_exemplo: int,
     tentativa_numero: int,
@@ -166,6 +225,9 @@ def build_comparison_row(
     erro_execucao: str,
     resultado_exato_match: bool | None,
     similarity_score: float,
+    resultado_f1: float = 0.0,
+    resultado_precision: float = 0.0,
+    resultado_recall: float = 0.0,
 ) -> dict[str, Any]:
     """
     Constrói uma linha para o CSV de avaliação.
@@ -183,9 +245,12 @@ def build_comparison_row(
         erro_execucao: Mensagem de erro (vazio se OK)
         resultado_exato_match: True/False se resultado foi exato (None se erro)
         similarity_score: Score 0-1
+        resultado_f1: F1 score row-level (0-1)
+        resultado_precision: Precision row-level (0-1)
+        resultado_recall: Recall row-level (0-1)
 
     Returns:
-        Dict com 12 chaves para CSV
+        Dict com 15 chaves para CSV
     """
     return {
         "id_exemplo": id_exemplo,
@@ -200,4 +265,8 @@ def build_comparison_row(
         "erro_execucao": erro_execucao,
         "resultado_exato_match": resultado_exato_match if resultado_exato_match is not None else "",
         "similarity_score_sql": round(similarity_score, 4),
+        "resultado_f1": resultado_f1,
+        "resultado_precision": resultado_precision,
+        "resultado_recall": resultado_recall,
     }
+

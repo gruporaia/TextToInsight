@@ -29,6 +29,7 @@ def construir_estado_inicial(pergunta: str, db_path: str) -> dict[str, Any]:
         "db_path": db_path,
         "espera_humana": False,
         "linhas_resultado_completo": [],
+        "historico_tentativas": [],
     }
 
 
