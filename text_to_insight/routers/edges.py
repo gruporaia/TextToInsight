@@ -6,7 +6,43 @@ baseado nas condições do estado atual.
 """
 
 from typing import Literal
+from langchain_google_genai import ChatGoogleGenerativeAI
+
 from ..state import EstadoTextToInsight
+from ..utils import extrair_tokens
+
+PROMPT_ROTEADOR_GRAFICO = """Você é um assistente que decide se os resultados de uma consulta SQL
+devem ser acompanhados de um gráfico (visualização).
+
+Analise a pergunta do usuário e as características dos dados retornados.
+
+=== PERGUNTA DO USUÁRIO ===
+{pergunta}
+
+=== COLUNAS DO RESULTADO ===
+{colunas}
+
+=== TOTAL DE LINHAS ===
+{total_linhas}
+
+=== AMOSTRA DOS DADOS ===
+{amostra}
+
+Um gráfico é útil quando:
+- A pergunta envolve comparações entre categorias (ex: vendas por região)
+- Há dados temporais ou tendências (ex: evolução ao longo dos meses)
+- Há distribuições ou rankings (ex: top 10 produtos)
+- Há agregações numéricas que se beneficiam de visualização
+- O resultado tem mais de 1 linha com pelo menos uma coluna numérica
+
+Um gráfico NÃO é útil quando:
+- O resultado é um único valor escalar (ex: total geral)
+- A pergunta pede um dado específico pontual (ex: nome de um cliente)
+- O resultado tem apenas 1 linha
+- Não há colunas numéricas para plotar
+
+Responda APENAS com uma palavra: SIM ou NAO
+"""
 
 
 def roteador_sandbox(estado: EstadoTextToInsight) -> Literal["critico", "planejador"]:
@@ -67,3 +103,52 @@ def roteador_planejador(estado: EstadoTextToInsight) -> Literal["esquema", "agen
     # Default: gera código
     print("[ROTEADOR_PLANEJADOR] Default → planejador")
     return "planejador"
+
+
+def roteador_grafico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -> Literal["gerador_grafico", "resposta"]:
+    """
+    Roteador após salvar CSV: decide se gera gráfico ou vai direto para resposta.
+
+    Usa o LLM para avaliar se a pergunta e os dados justificam uma visualização.
+    """
+    pergunta = estado.get("pergunta_usuario", "")
+    preview = estado.get("linhas_resultado_preview", [])
+    total = estado.get("total_linhas_resultado", 0)
+    csv_path = estado.get("caminho_csv_resultado", "")
+
+    # Se não há CSV ou dados, pular gráfico
+    if not csv_path or not preview or total == 0:
+        print("[ROTEADOR_GRAFICO] Sem dados para gráfico → resposta")
+        return "resposta"
+
+    # Se resultado é uma única linha, provavelmente não precisa de gráfico
+    if total == 1:
+        print("[ROTEADOR_GRAFICO] Apenas 1 linha → resposta")
+        return "resposta"
+
+    colunas = list(preview[0].keys()) if preview and isinstance(preview[0], dict) else []
+    amostra_str = str(preview[:5]) if preview else "(vazio)"
+
+    prompt = PROMPT_ROTEADOR_GRAFICO.format(
+        pergunta=pergunta,
+        colunas=", ".join(colunas) if colunas else "(desconhecidas)",
+        total_linhas=total,
+        amostra=amostra_str,
+    )
+
+    try:
+        resposta = llm.invoke(prompt)
+        texto = resposta.content.strip().upper()
+
+        in_tokens, out_tokens, total_tokens = extrair_tokens(resposta)
+
+        decisao = "SIM" in texto
+        print(f"[ROTEADOR_GRAFICO] Decisão LLM: {'SIM' if decisao else 'NAO'} → {'gerador_grafico' if decisao else 'resposta'}")
+
+        if decisao:
+            return "gerador_grafico"
+        else:
+            return "resposta"
+    except Exception as e:
+        print(f"[ROTEADOR_GRAFICO] Erro ao consultar LLM: {e} → resposta (fallback)")
+        return "resposta"

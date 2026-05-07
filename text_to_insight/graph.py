@@ -7,7 +7,10 @@ Fluxo MVP:
 3. Agente de Código: Gera SQL (LLM)
 4. Executor: Executa SQL no banco real
 5. Crítico: Avalia qualidade (LLM)
-6. Roteadores condicionais decidem continuação ou conclusão
+6. Salvar CSV: Exporta resultado para CSV
+7. Roteador Gráfico: Decide se gera visualização (LLM)
+8. Gerador Gráfico: Gera gráfico matplotlib (LLM + subprocess)
+9. Resposta: Gera resposta em linguagem natural (LLM)
 """
 
 from functools import partial
@@ -23,8 +26,10 @@ from .nodes import (
     nos_nodo_sandbox,
     nos_nodo_critico,
     nos_nodo_resposta,
+    nos_nodo_salvar_csv,
+    nos_nodo_gerador_grafico,
 )
-from .routers import roteador_sandbox, roteador_planejador
+from .routers import roteador_sandbox, roteador_planejador, roteador_grafico
 from .model_selection import get_model
 
 def nos_nodo_espera_humana(estado: EstadoTextToInsight):
@@ -50,6 +55,8 @@ class Graph:
         construtor_grafo.add_node("agente_codigo", partial(nos_nodo_agente_codigo, llm=self.llm))
         construtor_grafo.add_node("sandbox", nos_nodo_sandbox)
         construtor_grafo.add_node("critico", partial(nos_nodo_critico, llm=self.llm))
+        construtor_grafo.add_node("salvar_csv", nos_nodo_salvar_csv)
+        construtor_grafo.add_node("gerador_grafico", partial(nos_nodo_gerador_grafico, llm=self.llm))
         construtor_grafo.add_node("resposta", partial(nos_nodo_resposta, llm=self.llm))
 
         # 2. ARESTAS FIXAS
@@ -57,7 +64,10 @@ class Graph:
         construtor_grafo.add_edge("espera_humana", "planejador")
         construtor_grafo.add_edge("esquema", "planejador")
         construtor_grafo.add_edge("agente_codigo", "sandbox")
-        
+
+        # Gerador de gráfico sempre vai para resposta (sucesso ou falha)
+        construtor_grafo.add_edge("gerador_grafico", "resposta")
+
         # 3. ARESTAS CONDICIONAIS
         construtor_grafo.add_conditional_edges(
             "sandbox",
@@ -86,13 +96,13 @@ class Graph:
         def roteador_critico(estado: EstadoTextToInsight) -> str:
             status = estado.get("status", "")
             tentativas = estado.get("tentativas_loop", 0)
-            # Se aprovado, enviar para nó de resposta
+            # Se aprovado, enviar para salvar CSV (que precede a decisão de gráfico)
             if status == "aprovado":
-                return "resposta"
+                return "salvar_csv"
             # Se atingiu limite de tentativas, encerrar mesmo reprovado
             if tentativas >= MAX_TENTATIVAS_CRITICO:
-                print(f"[ROTEADOR_CRITICO] Limite de {MAX_TENTATIVAS_CRITICO} tentativas atingido → resposta (forçado)")
-                return "resposta"
+                print(f"[ROTEADOR_CRITICO] Limite de {MAX_TENTATIVAS_CRITICO} tentativas atingido → salvar_csv (forçado)")
+                return "salvar_csv"
             return "planejador"
 
         construtor_grafo.add_conditional_edges(
@@ -100,6 +110,16 @@ class Graph:
             roteador_critico,
             {
                 "planejador": "planejador",
+                "salvar_csv": "salvar_csv",
+            }
+        )
+
+        # Após salvar CSV, o roteador de gráfico decide se gera visualização
+        construtor_grafo.add_conditional_edges(
+            "salvar_csv",
+            partial(roteador_grafico, llm=self.llm),
+            {
+                "gerador_grafico": "gerador_grafico",
                 "resposta": "resposta",
             }
         )
@@ -135,3 +155,4 @@ class Graph:
         if config is None:
             config = {}
         return self.grafo_text_to_insight.stream(estado, config)
+
