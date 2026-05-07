@@ -143,3 +143,6 @@ data/
 
 # testes
 /meus_testes/*
+
+# reports testes spider
+/reports/

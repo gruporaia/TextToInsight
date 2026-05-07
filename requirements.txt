@@ -7,3 +7,4 @@ langchain-openai>=0.1.0
 pytest>=9.0.2
 pytest-recording>=0.13.0
 pytest-timeout>=2.3.0
+numpy
