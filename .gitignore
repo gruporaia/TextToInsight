@@ -140,6 +140,8 @@ config_local.py
 
 # data 
 data/
+chroma_db/
+.schema_hash
 
 # testes
 /meus_testes/*
