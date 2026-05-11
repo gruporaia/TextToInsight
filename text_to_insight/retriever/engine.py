@@ -1,6 +1,8 @@
 from .graph_logic import SchemaGraph
 from .rag_logic import RAGRetriever
 from pathlib import Path
+import chromadb
+from .RAG_example import SCHEMA
 #aqui vamos ter a integração da lógica do grafo com a lógica do RAG
 #a ideia é que o RAG seja responsável por recuperar as informações relevantes para responder às perguntas, usando o grafo como guia para navegar pelas relações entre os dados
 
@@ -22,4 +24,12 @@ class SchemaGraphRAG:
 
         #o importante aqui é encontrar o caminho mais curto que liga as tabelas retornadas pelo RAG com base no grafo
         #que foi produzido com o schema fornecido
-        pass
+        retrieved_tables = self.rag._query(query)
+        relations = self.schema_graph._get_relations(retrieved_tables['ids'][0])
+        return retrieved_tables, relations
+    
+if __name__ == '__main__':
+    schema_graph_rag = SchemaGraphRAG(schema = SCHEMA)
+    retrieved_tables, relations = schema_graph_rag.retrieve("What are the total sales for each customer?")
+    print("Retrieved Tables:", retrieved_tables['ids'])
+    print("Relations:", relations)

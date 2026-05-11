@@ -26,7 +26,24 @@ class SchemaGraph:
 
         self.graph.add_edges_from(edges) #isso deve ser suficiente, só falta mexer na engine e depois integrar no grafo principal
 
+    def _get_relations(self, tables: list):
+        #aqui a ideia é pegar as tabelas retornadas pelo RAG e achar o caminho mais curto entre elas usando o grafo
+        #isso deve retornar as relações necessárias para ligar os dados
+        relations = []
+        print(tables)
+        if len(tables) < 2:
+            return relations
+        for i in range(len(tables)):
+            for j in range(i + 1, len(tables)):
+                try:
+                    path = nx.shortest_path(self.graph, source=tables[i], target=tables[j])
+                    relations.append(path)
+                except nx.NetworkXNoPath:
+                    continue
+        return relations
+
 if __name__ == '__main__':
     graph_class = SchemaGraph(schema = SCHEMA.get("contexto_schema", ""))
     print(list(graph_class.graph.nodes))
     print(list(graph_class.graph.edges))
+    print(graph_class._get_relations(['orders', 'customers']))
