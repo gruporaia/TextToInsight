@@ -2,6 +2,8 @@ import re
 import networkx as nx
 #toda a lógica do grafo deve ficar aqui (ligar tabelas e colunas por foreign keys)
 
+from .RAG_example import SCHEMA
+
 class SchemaGraph:
 #o objetivo aqui seria conectar as tabelas pelas FK, não pensei ainda exatamente como fazer, vou pensar
     def __init__(self, schema: str = None):
@@ -18,8 +20,13 @@ class SchemaGraph:
             child_id = name_match.group(1) if name_match else f"table_{hash(table)}" #table name
             self.graph.add_node(child_id)
             if 'Foreign keys:' in table: #isso faz sentido? preciso revisitar pós stress test
-                fk_matches = re.findall(r"->\s+(\w+)\.", table) #achar as tables pais
+                fk_matches = re.findall(r"->\s+(\w+)\.", table) #acha as tables pais
                 for parent_id in fk_matches:
                     edges.append((child_id, parent_id))
 
         self.graph.add_edges_from(edges) #isso deve ser suficiente, só falta mexer na engine e depois integrar no grafo principal
+
+if __name__ == '__main__':
+    graph_class = SchemaGraph(schema = SCHEMA.get("contexto_schema", ""))
+    print(list(graph_class.graph.nodes))
+    print(list(graph_class.graph.edges))
