@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import csv
 import time
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Callable
+
+from tabulate import tabulate
 
 from .utils import salvar_metricas_csv
 
@@ -23,7 +28,58 @@ def construir_estado_inicial(pergunta: str, db_path: str) -> dict[str, Any]:
         "tentativas_loop": 0,
         "db_path": db_path,
         "espera_humana": False,
+        "linhas_resultado_completo": [],
+        "historico_tentativas": [],
     }
+
+
+def _montar_saida_resultado_terminal(resultado: dict[str, Any]) -> str:
+    """Monta o texto do bloco de resultado para exibição no terminal."""
+    linhas = resultado.get("linhas_resultado_completo", []) or []
+    if not linhas:
+        linhas = resultado.get("linhas_resultado_preview", []) or []
+    total = int(resultado.get("total_linhas_resultado", 0) or 0)
+
+    if not linhas:
+        return "[Nenhum resultado]"
+
+    colunas = list(linhas[0].keys()) if isinstance(linhas[0], dict) else []
+    if not colunas:
+        return "[Resultado indisponivel para exibicao]"
+
+    def _formatar_tabela(amostras: list[dict[str, Any]]) -> str:
+        return tabulate(amostras, headers="keys", tablefmt="grid", showindex=False)
+
+    partes: list[str] = []
+
+    if len(linhas) <= 5:
+        partes.append(_formatar_tabela(linhas))
+    else:
+        partes.append(_formatar_tabela(linhas[:3]))
+        partes.append(f"... (omitted {len(linhas) - 5} rows) ...")
+        partes.append(_formatar_tabela(linhas[-2:]))
+
+    partes.append(f"Total de linhas retornadas: {total}")
+    return "\n".join(partes)
+
+
+def salvar_resultado_csv(resultado: dict[str, Any], pasta_resultados: Path | None = None) -> Path | None:
+    """Salva o resultado completo em CSV quando houver linhas para exportar."""
+    linhas = resultado.get("linhas_resultado_completo", []) or []
+    if not linhas:
+        return None
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    resultados_dir = pasta_resultados or (Path(__file__).parent.parent / "results")
+    resultados_dir.mkdir(exist_ok=True)
+    csv_path = resultados_dir / f"query_{timestamp}.csv"
+
+    with csv_path.open("w", newline="", encoding="utf-8") as arquivo_csv:
+        writer = csv.DictWriter(arquivo_csv, fieldnames=list(linhas[0].keys()))
+        writer.writeheader()
+        writer.writerows(linhas)
+
+    return csv_path
 
 
 def exibir_resultado_console(resultado: dict[str, Any]) -> None:
@@ -47,18 +103,17 @@ def exibir_resultado_console(resultado: dict[str, Any]) -> None:
     saida = str(resultado.get("saida_terminal", "")).strip()
     print(saida if saida else "[Nenhuma saida]")
 
+    # Nova lógica: Exibir resultado como DataFrame
     print("\n" + "-" * 70)
-    print("RESULTADO (preview):")
+    print("RESULTADO:")
     print("-" * 70)
-    preview = resultado.get("linhas_resultado_preview", []) or []
-    total = int(resultado.get("total_linhas_resultado", 0) or 0)
-    if preview:
-        for row in preview[:10]:
-            print(row)
-        if total > 10:
-            print(f"... ({total - 10} linhas omitidas)")
-    else:
-        print("[Nenhum resultado]")
+
+    print(_montar_saida_resultado_terminal(resultado))
+
+    csv_path = salvar_resultado_csv(resultado)
+    if csv_path is not None:
+        total = int(resultado.get("total_linhas_resultado", 0) or 0)
+        print(f"\n✓ Resultados completos salvos em: {csv_path.as_posix()} ({total} linhas)")
 
     print("\n" + "-" * 70)
     print("FEEDBACK DO CRITICO:")

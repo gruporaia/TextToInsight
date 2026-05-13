@@ -145,3 +145,6 @@ chroma_db/
 
 # testes
 /meus_testes/*
+
+# reports testes spider
+/reports/

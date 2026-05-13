@@ -64,6 +64,8 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     historico_conversa: list[tuple[str, str]]
     tentativas_loop: int
     resposta_natural: str
+    historico_tentativas: Annotated[list[dict[str, str]], operator.add]
+    linhas_resultado_completo: list[dict[str, Any]]
 
     # Campos exclusivos para métricas. Possibilita a soma automática dos tokens utilizados
     # por cada chamada do Gemini nos vários diferentes nós.

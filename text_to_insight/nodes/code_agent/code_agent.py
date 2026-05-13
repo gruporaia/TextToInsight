@@ -32,8 +32,8 @@ Regras:
 === CONVERSA PRÉVIA (CONTEXTO ADICIONAL) ===
 {conversa_previa}
 
-=== FEEDBACK CRÍTICO (SE HOUVER) ===
-{feedback_section}
+=== HISTÓRICO DE TENTATIVAS ANTERIORES ===
+{historico_tentativas_section}
 
 Responda APENAS com a consulta SQL, sem markdown, sem explicação."""
 
@@ -48,6 +48,24 @@ def _extrair_sql(resposta: str) -> str:
     return resposta.strip()
 
 
+def _formatar_historico_tentativas(historico: list[dict]) -> str:
+    """Formata o histórico de tentativas anteriores para inclusão no prompt."""
+    if not historico:
+        return "Nenhuma tentativa anterior."
+
+    partes = []
+    for i, tent in enumerate(historico, 1):
+        bloco = f"--- Tentativa {i} ---\n"
+        bloco += f"SQL gerada:\n{tent.get('sql', '(vazia)')}\n"
+        if tent.get("erro"):
+            bloco += f"Erro de execução: {tent['erro']}\n"
+        if tent.get("feedback"):
+            bloco += f"Feedback do crítico: {tent['feedback']}\n"
+        partes.append(bloco)
+
+    return "\n".join(partes) + "\nNÃO repita os mesmos erros. Gere uma SQL diferente e corrigida."
+
+
 def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -> dict:
     """
     Nó Agente de Código: usa Gemini para gerar SQL a partir da pergunta + schema.
@@ -55,26 +73,20 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativ
     pergunta = estado.get("pergunta_usuario", "")
     conversa_previa = estado.get("historico_conversa", "")
     schema = estado.get("contexto_schema", "")
-    feedback = estado.get("feedback_critico", "")
+    historico = estado.get("historico_tentativas", [])
     tentativas = estado.get("tentativas_loop", 0)
 
     print(f"[AGENTE_CODIGO] Gerando SQL (tentativa {tentativas + 1})...")
 
-    feedback_section = ""
-    if feedback:
-        feedback_section = f"""=== FEEDBACK DO CRÍTICO (corrija os problemas apontados) ===
-        {feedback}
-
-        === SQL ANTERIOR (que foi reprovada) ===
-        {estado.get('sql_gerada', '')}"""
+    historico_section = _formatar_historico_tentativas(historico)
 
     prompt = PROMPT_TEMPLATE.format(
         schema=schema,
         pergunta=pergunta,
         conversa_previa=conversa_previa if conversa_previa else "Nenhuma",
-        feedback_section=feedback_section,
+        historico_tentativas_section=historico_section,
     )
-
+    
     resposta = llm.invoke(prompt)
     sql = _extrair_sql(resposta.content)
 
@@ -91,3 +103,4 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativ
         "tokens_output": out_tokens,
         "tokens_total": total_tokens,
     }
+
