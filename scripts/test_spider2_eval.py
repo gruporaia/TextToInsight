@@ -19,6 +19,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 import random
+import glob
+import pandas as pd
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -77,6 +79,33 @@ def get_gold_sql(data_dir: str, instance_id: str) -> str:
         return ""
     with open(sql_path, "r", encoding="utf-8") as f:
         return f.read().strip()
+
+
+def get_gold_results(data_dir: str, instance_id: str) -> list[list[dict]]:
+    """Carrega os resultados gold (CSVs) para um dado instance_id.
+    Pode haver múltiplos CSVs (e.g. local040_a.csv, local040_b.csv).
+    """
+    exec_result_dir = Path(data_dir) / "evaluation_suite" / "gold" / "exec_result"
+    
+    # Try exact match first
+    exact_match = exec_result_dir / f"{instance_id}.csv"
+    if exact_match.exists():
+        try:
+            return [pd.read_csv(exact_match).to_dict(orient="records")]
+        except Exception:
+            pass
+            
+    # Try multiple (e.g. _a, _b)
+    pattern = str(exec_result_dir / f"{instance_id}_*.csv")
+    files = sorted(glob.glob(pattern))
+    results = []
+    for f in files:
+        try:
+            results.append(pd.read_csv(f).to_dict(orient="records"))
+        except Exception:
+            pass
+            
+    return results
 
 
 def _gerar_relatorio_md(
@@ -226,9 +255,11 @@ def main():
 
     args = parser.parse_args()
 
-    model = "gemini-2.5-flash"  # O Gemini será usado, você pode ajustar
+    # Validar API key
+    model = "gpt-4o-mini"
+    # model = "gemini-2.5-flash"
     
-    api_key = os.getenv("GOOGLE_API_KEY")
+    api_key = os.getenv("OPENAI_API_KEY") if "gpt" in model.lower() else os.getenv("GOOGLE_API_KEY")
     if not api_key:
         print("❌ Erro: Chave API não encontrada em .env")
         sys.exit(1)
@@ -280,23 +311,32 @@ def main():
         db_id = ex.get("db", "")
         pergunta = ex.get("question", "")
         
-        # Recuperar query ouro
+        # Recuperar query ouro e/ou csvs ouro
         query_ouro = get_gold_sql(args.data_dir, instance_id)
-        if not query_ouro:
-            print(f"\n[{idx}/{len(exemplos)}] ⚠️ Query ouro não encontrada para {instance_id}. Pulando.")
+        gold_results_list = get_gold_results(args.data_dir, instance_id)
+
+        if not query_ouro and not gold_results_list:
+            print(f"\n[{idx}/{len(exemplos)}] ⚠️ Nenhuma query ouro nem resultado CSV encontrados para {instance_id}. Pulando.")
             continue
 
         print(f"\n[{idx}/{len(exemplos)}] Instance: {instance_id} | DB: {db_id} | Pergunta: {pergunta[:60]}...")
-        print(f"     → Query Ouro: {query_ouro[:50]}...")
+        if query_ouro:
+            print(f"     → Query Ouro: {query_ouro[:50]}...")
+        else:
+            print(f"     → Query Ouro não fornecida (avaliando via CSVs oficiais).")
 
-        # Executar ouro
-        resultado_ouro = executor.execute_query(db_id, query_ouro)
-        if not resultado_ouro["success"]:
-            print(f"     ⚠️  Erro na query ouro ou db ausente: {resultado_ouro['error']}")
-            print("     (Aviso: Certifique-se de baixar e extrair os bancos locais em spider2-localdb)")
-            continue
-
-        print(f"     ✓ Query ouro retornou {resultado_ouro['row_count']} linhas")
+        # Configurar resultado ouro (para relatórios e fallback)
+        if gold_results_list:
+            resultado_ouro_primeiro = {"success": True, "results": gold_results_list[0], "row_count": len(gold_results_list[0])}
+            print(f"     ✓ CSV Ouro carregado ({len(gold_results_list)} variantes, usando a primeira para display com {len(gold_results_list[0])} linhas)")
+        else:
+            resultado_ouro_primeiro = executor.execute_query(db_id, query_ouro)
+            if not resultado_ouro_primeiro["success"]:
+                print(f"     ⚠️  Erro na query ouro ou db ausente: {resultado_ouro_primeiro['error']}")
+                print("     (Aviso: Certifique-se de baixar e extrair os bancos locais em spider2-localdb)")
+                continue
+            gold_results_list = [resultado_ouro_primeiro["results"]]
+            print(f"     ✓ Query ouro retornou {resultado_ouro_primeiro['row_count']} linhas")
 
         # Inicializar engine
         try:
@@ -353,9 +393,26 @@ def main():
         if query_agente and not erro_exec:
             resultado_agente = executor.execute_query(db_id, query_agente)
             if resultado_agente["success"]:
-                resultado_exato_match = results_exact_match(resultado_ouro["results"], resultado_agente["results"])
-                similarity_score = sql_similarity_score(query_ouro, query_agente)
-                f1_scores = results_f1_score(resultado_ouro["results"], resultado_agente["results"])
+                if query_ouro:
+                    similarity_score = sql_similarity_score(query_ouro, query_agente)
+                
+                # Testar contra todas as variantes de ouro e pegar a melhor pontuação
+                best_match = False
+                best_f1 = {"f1": 0.0, "precision": 0.0, "recall": 0.0}
+                
+                for gold_res in gold_results_list:
+                    match_atual = results_exact_match(gold_res, resultado_agente["results"])
+                    f1_atual = results_f1_score(gold_res, resultado_agente["results"])
+                    
+                    if match_atual:
+                        best_match = True
+                    
+                    if f1_atual["f1"] > best_f1["f1"]:
+                        best_f1 = f1_atual
+                
+                resultado_exato_match = best_match
+                f1_scores = best_f1
+
                 print(
                     f"       Resultado final ({tentativas} tentativa(s)): "
                     f"similarity={similarity_score:.2f}, "
@@ -370,7 +427,7 @@ def main():
                         "pergunta": pergunta,
                         "query_ouro": query_ouro,
                         "query_agente": query_agente,
-                        "resultado_ouro": resultado_ouro["results"],
+                        "resultado_ouro": gold_results_list[0],
                         "resultado_agente": resultado_agente["results"],
                         "f1": f1_scores["f1"],
                         "precision": f1_scores["precision"],
