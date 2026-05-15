@@ -66,8 +66,8 @@ def roteador_sandbox(estado: EstadoTextToInsight) -> Literal["critico", "planeja
         print("[ROTEADOR_SANDBOX] Erro detectado → planejador para retry")
         return "planejador"
 
-    print("[ROTEADOR_SANDBOX] Muitas tentativas ou erro → planejador")
-    return "planejador"
+    print("[ROTEADOR_SANDBOX] Muitas tentativas ou erro → critico (para forçar o fim do loop)")
+    return "critico"
 
 
 def roteador_planejador(estado: EstadoTextToInsight) -> Literal["esquema", "agente_codigo", "critico", "fim"]:

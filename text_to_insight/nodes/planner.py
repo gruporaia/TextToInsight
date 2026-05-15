@@ -110,7 +110,7 @@ Opções válidas para 'decisão':
         status_atual=status,
         erro=erro if erro else "Nenhum",
         # apenas primeiros 500 caracteres do schema para evitar estourar o prompt, mas pode ser ajustado conforme necessidade
-        schema=schema[:500] if schema else "Nenhum",
+        schema=schema if schema else "Nenhum",
         conversa_previa=conversa_previa if conversa_previa else "Nenhuma",
         diretrizes=diretrizes,
     )
