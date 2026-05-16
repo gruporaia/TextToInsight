@@ -38,6 +38,7 @@ from src.spider.metrics import (
     sql_similarity_score,
 )
 from src.spider.query_executor import SpiderQueryExecutor
+from src.spider.analise_empirica import gerar_relatorio_empirico_completo
 
 load_dotenv()
 
@@ -375,6 +376,23 @@ def main():
         feedback_estado = resultado.get("feedback_critico", "")
         erro_exec = resultado.get("erro_execucao", "")
         tentativas = resultado.get("tentativas_loop", 1)
+        historico_tent = resultado.get("historico_tentativas", [])
+
+        # Extrair métricas de tokens acumuladas
+        tokens_input = resultado.get("tokens_input", 0) or 0
+        tokens_output = resultado.get("tokens_output", 0) or 0
+        tokens_total = resultado.get("tokens_total", 0) or 0
+
+        # Extrair dados do agente de visualização
+        viz_acionado = "grafico_gerado" in resultado
+        viz_sucesso = resultado.get("grafico_gerado", False)
+
+        # Extrair SQL da 1ª tentativa para ablação do Crítico
+        query_1a_tentativa = ""
+        if historico_tent and isinstance(historico_tent, list) and len(historico_tent) > 0:
+            query_1a_tentativa = historico_tent[0].get("sql", "")
+        if not query_1a_tentativa:
+            query_1a_tentativa = query_agente  # fallback: se só houve 1 tentativa
 
         if veredito == "aprovado":
             veredito_critico = "aprovado"
@@ -387,6 +405,8 @@ def main():
             feedback_critico = feedback_estado if feedback_estado else "Erro na avaliação"
 
         resultado_exato_match = None
+        resultado_exato_match_1a = None
+        resultado_f1_1a = 0.0
         similarity_score = 0.0
         f1_scores = {"f1": 0.0, "precision": 0.0, "recall": 0.0}
 
@@ -413,10 +433,32 @@ def main():
                 resultado_exato_match = best_match
                 f1_scores = best_f1
 
+                # Ablação: calcular exact match da 1ª tentativa
+                if query_1a_tentativa and query_1a_tentativa != query_agente:
+                    res_1a = executor.execute_query(db_id, query_1a_tentativa)
+                    if res_1a["success"]:
+                        best_match_1a = False
+                        best_f1_1a = 0.0
+                        for gold_res in gold_results_list:
+                            if results_exact_match(gold_res, res_1a["results"]):
+                                best_match_1a = True
+                            f1_atual_1a = results_f1_score(gold_res, res_1a["results"])
+                            if f1_atual_1a["f1"] > best_f1_1a:
+                                best_f1_1a = f1_atual_1a["f1"]
+                        resultado_exato_match_1a = best_match_1a
+                        resultado_f1_1a = best_f1_1a
+                    else:
+                        resultado_exato_match_1a = False
+                        resultado_f1_1a = 0.0
+                else:
+                    resultado_exato_match_1a = resultado_exato_match
+                    resultado_f1_1a = f1_scores["f1"]
+
                 print(
                     f"       Resultado final ({tentativas} tentativa(s)): "
                     f"similarity={similarity_score:.2f}, "
                     f"match={resultado_exato_match}, "
+                    f"match_1a={resultado_exato_match_1a}, "
                     f"F1={f1_scores['f1']:.2f}, "
                     f"veredito={veredito_critico}"
                 )
@@ -454,6 +496,14 @@ def main():
             resultado_f1=f1_scores["f1"],
             resultado_precision=f1_scores["precision"],
             resultado_recall=f1_scores["recall"],
+            tokens_input=tokens_input,
+            tokens_output=tokens_output,
+            tokens_total=tokens_total,
+            viz_acionado=viz_acionado,
+            viz_sucesso=viz_sucesso,
+            resultado_exato_match_1a_tentativa=resultado_exato_match_1a,
+            resultado_f1_1a_tentativa=resultado_f1_1a,
+            query_1a_tentativa=query_1a_tentativa,
         )
 
         reporter.append_row(row)
@@ -470,7 +520,7 @@ def main():
 
     if all_rows:
         summary = reporter.generate_summary(all_rows)
-        f1_values = [float(r.get("resultado_f1", 0)) for r in all_rows if r.get("resultado_f1")]
+        f1_values = [float(r.get("resultado_f1", 0.0) or 0.0) for r in all_rows]
         f1_medio = sum(f1_values) / len(f1_values) if f1_values else 0.0
         match_values = [r.get("resultado_exato_match") for r in all_rows]
         exact_matches = sum(1 for v in match_values if v is True)
@@ -496,6 +546,18 @@ def main():
             data_dir=args.data_dir,
         )
         print(f"✅ Relatório salvo em: {report_path}")
+
+        # 9. Gerar relatório empírico completo (análises do orientador)
+        empirico_dir = str(Path(csv_path).parent / Path(csv_path).stem) + "_empirico"
+        empirico_path = csv_path.replace(".csv", "_empirico.md")
+        gerar_relatorio_empirico_completo(
+            report_path=empirico_path,
+            dataset_label="Spider 2.0 Lite",
+            all_rows=all_rows,
+            output_dir=empirico_dir,
+        )
+        print(f"✅ Relatório empírico salvo em: {empirico_path}")
+        print(f"   Gráficos e CSVs auxiliares em: {empirico_dir}/")
     else:
         print("❌ Nenhum resultado para salvar. (Verificou os bancos na pasta spider2-localdb?)")
 

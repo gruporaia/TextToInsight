@@ -53,6 +53,8 @@ Regras:
 - O gráfico será salvo automaticamente, você NÃO deve chamar plt.savefig() nem plt.show().
 - Responda APENAS com o código Python puro, sem markdown, sem explicações.
 - Se os dados tiverem muitas categorias (>15), mostre apenas o top 10-15 mais relevantes.
+
+Não faça um gráfico basico visualmente, faça ele bonito, use cores agradaveis e que ajude o usuario a entender os dados. Tenta fazer algo com cara profissional! Feito por um analista apresentando para um grande cliente que julga o livro pela capa.
 """
 
 

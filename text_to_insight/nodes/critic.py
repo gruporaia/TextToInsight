@@ -18,6 +18,9 @@ Sua tarefa: avaliar se a consulta SQL e seus resultados respondem adequadamente
 === PERGUNTA DO USUÁRIO ===
 {pergunta}
 
+=== SCHEMA DO BANCO ===
+{schema}
+
 === CONVERSA COM O AGENTE (se houver) ===
 {conversa_previa}
 
@@ -36,37 +39,77 @@ Amostra dos resultados (primeiras linhas):
 === TENTATIVAS ANTERIORES ===
 {historico_tentativas_section}
 
-Avalie:
-1. A SQL responde à pergunta do usuário?
-2. Os resultados fazem sentido?
-3. Há algum erro lógico ou de interpretação?
-4. Se houve tentativas anteriores, verifique se os mesmos problemas persistem.
+=== EXEMPLOS DE AVALIAÇÃO ===
 
-Ao avaliar, priorize utilidade prática e correção semântica da resposta,
-não perfeição formal.
+-- EXEMPLO 1: REPROVADO (escopo incompleto) --
+Pergunta: "Which airport has the least number of flights?"
+SQL: SELECT SourceAirport FROM flights GROUP BY SourceAirport ORDER BY COUNT(*) ASC LIMIT 1
+Resultado: [('AID',)]
+VEREDITO: REPROVADO
+Razão: A query conta apenas voos com partida (SourceAirport) e ignora voos com chegada (DestAirport).
+O escopo da pergunta é "flights" em geral — a query responde a uma pergunta diferente.
 
-Diferenças de formato, representação ou precisão que não alterem
-substancialmente a resposta NÃO devem causar reprovação.
+-- EXEMPLO 2: REPROVADO (erro semântico: MIN vs MAX) --
+Pergunta: "Which Asian countries have a population larger than any country in Africa?"
+SQL: SELECT Name FROM country WHERE Continent='Asia' AND Population > (SELECT MAX(Population) FROM country WHERE Continent='Africa')
+Resultado: [] (vazio)
+VEREDITO: REPROVADO
+Razão: "Larger than any country in Africa" significa maior que pelo menos um país africano (MIN),
+não maior que todos os países africanos (MAX). A lógica está semanticamente errada.
 
-Exemplos de casos que normalmente devem ser APROVADOS:
-- Ano médio retornado como float em vez de inteiro/data
-- Pequenas diferenças de arredondamento
-- Colunas extras irrelevantes
-- Nomes/aliases diferentes
-- Resultado parcialmente correto mas ainda útil
-- Agregações corretas com precisão numérica diferente da esperada
+-- EXEMPLO 3: REPROVADO (resultado vazio suspeito) --
+Pergunta: "Find the last name of students who live in North Carolina and are not enrolled in any degree."
+SQL: SELECT last_name FROM Students WHERE state_province_county = 'North Carolina' AND ...
+Resultado: [] (vazio)
+VEREDITO: REPROVADO
+Razão: Resultado vazio quando a pergunta espera dados reais é suspeito. Verifique se o filtro
+de string corresponde exatamente ao valor no banco (ex: 'NorthCarolina' vs 'North Carolina').
 
-REPROVE apenas quando houver falha material, por exemplo:
-- A query responde outra pergunta
-- O dado necessário para responder não está presentes
-- Filtros importantes estão errados ou ausentes
-- JOIN incorreto altera significativamente os resultados
+-- EXEMPLO 4: REPROVADO (JOIN incorreto muda o que está sendo contado) --
+Pergunta: "Find the name of makers that produced some cars in 1970."
+SQL: SELECT DISTINCT Maker FROM car_makers JOIN car_names ON car_makers.Id = car_names.MakeId JOIN cars_data ON car_names.MakeId = cars_data.Id WHERE cars_data.Year = 1970
+Resultado: [('chevrolet',), ('buick',)]
+VEREDITO: REPROVADO
+Razão: O JOIN usa car_names.MakeId para conectar a cars_data, mas cars_data.Id refere-se
+ao ID do carro, não do fabricante. O caminho correto seria via model_list. Os resultados
+parecem plausíveis mas derivam de uma junção incorreta.
+
+-- EXEMPLO 5: APROVADO (formato diferente, resposta correta) --
+Pergunta: "On average, when were the transcripts printed?"
+SQL: SELECT AVG(transcript_date) AS average_transcript_date FROM Transcripts
+Resultado: [('1989.9333333333334',)]
+VEREDITO: APROVADO
+Razão: O resultado é um número que representa a média das datas (formato numérico do SQLite).
+Embora não seja uma data formatada, responde corretamente à pergunta. Diferença de
+representação não é motivo de reprovação.
+
+-- EXEMPLO 6: APROVADO (query mais simples que o gold, resultado equivalente) --
+Pergunta: "Which model of car has the minimum horsepower?"
+SQL: SELECT Model FROM car_names JOIN cars_data ON car_names.MakeId = cars_data.Id WHERE Horsepower = (SELECT MIN(Horsepower) FROM cars_data) LIMIT 1
+Resultado: [('triumph',)]
+VEREDITO: APROVADO
+Razão: A query retorna corretamente o modelo com menor potência. O LIMIT 1 garante unicidade
+e o resultado é semanticamente correto. Aprovar.
+
+=== CRITÉRIOS DE AVALIAÇÃO ===
+
+REPROVE quando houver:
+- Escopo incompleto: query cobre apenas parte do que a pergunta pede
+- Erro semântico: lógica correta na forma mas errada no significado (MIN vs MAX, ANY vs ALL)
+- JOIN incorreto que altera os dados sendo agregados ou filtrados
+- Resultado vazio quando a pergunta claramente espera dados
+- Filtro com valor literal diferente do que está no banco
 - Métrica errada (SUM vs AVG, COUNT vs COUNT DISTINCT, etc.)
-- Resultado vazio inesperado
-- Erro SQL ou inconsistência lógica grave
+- Erro de execução SQL
 
-Considere o custo de retentativas. Em caso de dúvida entre APROVADO
-e REPROVADO, prefira APROVADO se a resposta ainda for útil para o usuário. Leve em consideração que ainda tem um agente depois de você que irá interpretar o resultado da query e criar uma resposta em linguagem natural.
+APROVE quando:
+- O resultado responde à pergunta, mesmo com formato ou representação diferente
+- Há colunas extras que não prejudicam a resposta
+- A precisão numérica difere mas o valor está correto
+- A query é mais simples que o esperado mas semanticamente equivalente
+
+Avalie com rigor semântico. Resultados que parecem plausíveis mas derivam de lógica
+incorreta devem ser reprovados. Não presuma que uma query bem-formada está correta.
 
 Responda no formato:
 VEREDITO: APROVADO ou REPROVADO
@@ -97,6 +140,7 @@ def nos_nodo_critico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -
     """
     pergunta = estado.get("pergunta_usuario", "")
     sql = estado.get("sql_gerada", "")
+    schema = estado.get("contexto_schema", "")
     preview = estado.get("linhas_resultado_preview", [])
     total = estado.get("total_linhas_resultado", 0)
     saida = estado.get("saida_terminal", "")
@@ -124,6 +168,7 @@ def nos_nodo_critico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -
 
     prompt = PROMPT_CRITIC.format(
         pergunta=pergunta,
+        schema=schema,
         sql=sql,
         status_exec=status_exec,
         conversa_previa=conversa_previa if conversa_previa else "Nenhuma",
