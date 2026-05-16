@@ -36,7 +36,10 @@ class RAGRetriever:
         except FileNotFoundError:
             old_hash = None
         new_schema = hashlib.md5(schema_string.encode()).hexdigest()
-        if new_schema != old_hash:
+        # Se a collection está vazia, o hash cacheado não reflete o estado real do índice
+        # (ex.: chroma_db apagado, ou collection nova em diretório isolado). Reindexar.
+        collection_vazia = self.collection.count() == 0
+        if new_schema != old_hash or collection_vazia:
             print(f"[RAG] new schema detected, indexing...")
             with open(BASE_DIR / ".schema_hash", "w") as f:
                 f.write(new_schema)

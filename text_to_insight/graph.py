@@ -19,6 +19,7 @@ from .state import EstadoTextToInsight
 from .nodes import (
     nos_nodo_planejador,
     nos_nodo_esquema,
+    nos_nodo_retriever,
     nos_nodo_agente_codigo,
     nos_nodo_sandbox,
     nos_nodo_critico,
@@ -47,6 +48,7 @@ class Graph:
         construtor_grafo.add_node("planejador", partial(nos_nodo_planejador, llm=self.llm, hitl=hitl))
         construtor_grafo.add_node("espera_humana", nos_nodo_espera_humana)
         construtor_grafo.add_node("esquema", nos_nodo_esquema)
+        construtor_grafo.add_node("retriever", nos_nodo_retriever)
         construtor_grafo.add_node("agente_codigo", partial(nos_nodo_agente_codigo, llm=self.llm))
         construtor_grafo.add_node("sandbox", nos_nodo_sandbox)
         construtor_grafo.add_node("critico", partial(nos_nodo_critico, llm=self.llm))
@@ -55,7 +57,8 @@ class Graph:
         # 2. ARESTAS FIXAS
         construtor_grafo.add_edge(START, "planejador")
         construtor_grafo.add_edge("espera_humana", "planejador")
-        construtor_grafo.add_edge("esquema", "planejador")
+        construtor_grafo.add_edge("esquema", "retriever")
+        construtor_grafo.add_edge("retriever", "planejador")
         construtor_grafo.add_edge("agente_codigo", "sandbox")
         
         # 3. ARESTAS CONDICIONAIS

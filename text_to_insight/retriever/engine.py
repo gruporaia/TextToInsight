@@ -2,7 +2,6 @@ from .graph_logic import SchemaGraph
 from .rag_logic import RAGRetriever
 from pathlib import Path
 import chromadb
-from .RAG_example import SCHEMA
 #aqui vamos ter a integração da lógica do grafo com a lógica do RAG
 #a ideia é que o RAG seja responsável por recuperar as informações relevantes para responder às perguntas, usando o grafo como guia para navegar pelas relações entre os dados
 
@@ -13,7 +12,7 @@ class SchemaGraphRAG:
         #definição do grafo após o get do schema
         if schema:
             chroma_client = chromadb.PersistentClient(path=str(BASE_DIR / "chroma_db"))
-            self.schema_graph = SchemaGraph(schema = SCHEMA.get("contexto_schema", ""))
+            self.schema_graph = SchemaGraph(schema = schema.get("contexto_schema", ""))
             self.rag = RAGRetriever(chroma_client = chroma_client, document_schema = schema)
 
     def retrieve(self, query: str):
@@ -29,6 +28,7 @@ class SchemaGraphRAG:
         return retrieved_tables, relations
     
 if __name__ == '__main__':
+    from .RAG_example import SCHEMA
     schema_graph_rag = SchemaGraphRAG(schema = SCHEMA)
     retrieved_tables, relations = schema_graph_rag.retrieve("What are the total sales for each customer?")
     print("Retrieved Tables:", retrieved_tables['ids'])
