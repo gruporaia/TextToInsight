@@ -31,6 +31,14 @@ jobs:
           pip install -r requirements.txt
           pip install -e .
 
+      - name: Ensure that the data folder exists
+        run: mkdir -p data
+
+      - name: Download the relase database for test
+        run: gh release download dados-teste -p "olist_relational.db" -D data/
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Run deterministic test layers
         run: |
           pytest \
