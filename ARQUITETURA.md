@@ -53,6 +53,12 @@ Responsavel por:
 - persistir metricas em CSV;
 - exibir resultado final em formato padrao.
 
+Funcoes principais:
+
+- `_montar_saida_resultado_terminal(resultado)`: template reutilizavel que transforma linhas brutas da query em texto formatado para o terminal, usando `tabulate` para renderizar a tabela. Suporta fallback para amostra quando resultado completo nao estiver disponivel.
+- `salvar_resultado_csv(resultado, pasta)`: exporta o resultado completo em CSV com timestamp em `results/`.
+- `exibir_resultado_console(resultado)`: orquestra a exibicao completa do resultado: SQL, saida da execucao, tabela formatada, feedback e resposta natural.
+
 ### 3) API publica da biblioteca
 
 Arquivos:

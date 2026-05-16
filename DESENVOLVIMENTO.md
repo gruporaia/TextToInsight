@@ -67,7 +67,13 @@ python main.py --hitl on "Quantos pedidos existem no banco?"
 
 # biblioteca instalada (entrypoint)
 text-to-insight --hitl off "Quais categorias vendem mais?"
+
+# com modelo OpenAI
+set -a && source .env && set +a
+python main.py --hitl off --model gpt-4o-mini --api-key-env OPENAI_API_KEY "Quantos pedidos existem?"
 ```
+
+O resultado e exibido no terminal em formato tabular sob o bloco `RESULTADO:`, junto com SQL gerada, feedback do critico e resposta natural.
 
 ## Estrutura relevante
 

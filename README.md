@@ -80,6 +80,27 @@ python main.py --hitl off "Quais categorias vendem mais?"
 text-to-insight --hitl on "Quantos pedidos existem no banco?"
 ```
 
+### Saida do terminal
+
+Apos a execucao, o resultado da query e exibido no bloco `RESULTADO` em formato tabular:
+
+```
+----------------------------------------------------------------------
+RESULTADO:
+----------------------------------------------------------------------
++------------+
+|   COUNT(*) |
++============+
+|      99441 |
++------------+
+Total de linhas retornadas: 1
+```
+
+O template de apresentacao usa `tabulate` para montar as linhas da query:
+- Ate 5 linhas: exibe a tabela completa
+- Acima de 5 linhas: mostra as 3 primeiras, omite as intermediarias, exibe as 2 ultimas
+- Resultado completo e exportado em CSV em `results/` automaticamente
+
 ## Testes
 
 Camadas atuais:

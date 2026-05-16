@@ -81,10 +81,17 @@ class Graph:
             }
         )
 
+        MAX_TENTATIVAS_CRITICO = 3
+
         def roteador_critico(estado: EstadoTextToInsight) -> str:
             status = estado.get("status", "")
-            # Se aprovado, enviar para nó de resposta; senão retornar ao planejador
+            tentativas = estado.get("tentativas_loop", 0)
+            # Se aprovado, enviar para nó de resposta
             if status == "aprovado":
+                return "resposta"
+            # Se atingiu limite de tentativas, encerrar mesmo reprovado
+            if tentativas >= MAX_TENTATIVAS_CRITICO:
+                print(f"[ROTEADOR_CRITICO] Limite de {MAX_TENTATIVAS_CRITICO} tentativas atingido → resposta (forçado)")
                 return "resposta"
             return "planejador"
 
@@ -112,3 +119,20 @@ class Graph:
 
     def app(self):
         return self.grafo_text_to_insight
+    def invoke(self, estado: EstadoTextToInsight):
+        return self.grafo_text_to_insight.invoke(estado)
+
+    def stream(self, estado: EstadoTextToInsight, config: dict = None):
+        """
+        Executa o grafo em modo streaming, yieldando estado após cada nó.
+
+        Args:
+            estado: Estado inicial
+            config: Configurações (ex: recursion_limit)
+
+        Yields:
+            Dicts com saída de cada nó
+        """
+        if config is None:
+            config = {}
+        return self.grafo_text_to_insight.stream(estado, config)

@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import csv
 import json
 import re
 import time
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Callable
+
+from tabulate import tabulate
 
 from .utils import salvar_metricas_csv
 
@@ -49,6 +54,164 @@ def construir_estado_inicial(pergunta: str, db_path: str) -> dict[str, Any]:
         "tentativas_loop": 0,
         "db_path": db_path,
         "espera_humana": False,
+        "linhas_resultado_completo": [],
+        "historico_tentativas": [],
+    }
+
+
+def _montar_saida_resultado_terminal(resultado: dict[str, Any]) -> str:
+    """Monta o texto do bloco de resultado para exibição no terminal."""
+    linhas = resultado.get("linhas_resultado_completo", []) or []
+    if not linhas:
+        linhas = resultado.get("linhas_resultado_preview", []) or []
+    total = int(resultado.get("total_linhas_resultado", 0) or 0)
+
+    if not linhas:
+        return "[Nenhum resultado]"
+
+    colunas = list(linhas[0].keys()) if isinstance(linhas[0], dict) else []
+    if not colunas:
+        return "[Resultado indisponivel para exibicao]"
+
+    def _formatar_tabela(amostras: list[dict[str, Any]]) -> str:
+        return tabulate(amostras, headers="keys", tablefmt="grid", showindex=False)
+
+    partes: list[str] = []
+
+    if len(linhas) <= 5:
+        partes.append(_formatar_tabela(linhas))
+    else:
+        partes.append(_formatar_tabela(linhas[:3]))
+        partes.append(f"... (omitted {len(linhas) - 5} rows) ...")
+        partes.append(_formatar_tabela(linhas[-2:]))
+
+    partes.append(f"Total de linhas retornadas: {total}")
+    return "\n".join(partes)
+
+
+def salvar_resultado_csv(resultado: dict[str, Any], pasta_resultados: Path | None = None) -> Path | None:
+    """Salva o resultado completo em CSV quando houver linhas para exportar."""
+    linhas = resultado.get("linhas_resultado_completo", []) or []
+    if not linhas:
+        return None
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    resultados_dir = pasta_resultados or (Path(__file__).parent.parent / "results")
+    resultados_dir.mkdir(exist_ok=True)
+    csv_path = resultados_dir / f"query_{timestamp}.csv"
+
+    with csv_path.open("w", newline="", encoding="utf-8") as arquivo_csv:
+        writer = csv.DictWriter(arquivo_csv, fieldnames=list(linhas[0].keys()))
+        writer.writeheader()
+        writer.writerows(linhas)
+
+    return csv_path
+
+
+def _limpar_json_markdown(conteudo: str) -> str:
+    conteudo_limpo = conteudo.strip()
+    if conteudo_limpo.startswith("```json"):
+        conteudo_limpo = conteudo_limpo[7:]
+        if conteudo_limpo.endswith("```"):
+            conteudo_limpo = conteudo_limpo[:-3]
+    elif conteudo_limpo.startswith("```"):
+        conteudo_limpo = conteudo_limpo[3:]
+        if conteudo_limpo.endswith("```"):
+            conteudo_limpo = conteudo_limpo[:-3]
+    return conteudo_limpo.strip()
+
+
+def _heuristica_nova_pergunta(resposta: str) -> bool:
+    texto = (resposta or "").strip()
+    if not texto:
+        return False
+
+    texto_lower = texto.lower()
+    # Confirmacoes curtas tipicas de prosseguimento nao devem reiniciar o fluxo.
+    confirmacoes = {
+        "sim",
+        "ok",
+        "certo",
+        "pode",
+        "pode prosseguir",
+        "pode seguir",
+        "continue",
+        "prosseguir",
+        "segue",
+    }
+    if texto_lower in confirmacoes or texto_lower.startswith(("sim ", "ok ", "certo ")):
+        return False
+
+    # Pergunta explicita e um forte sinal de nova intencao.
+    if texto_lower.endswith("?"):
+        return True
+
+    # Padroes que indicam nova solicitacao (intencao de perguntar algo novo)
+    padroes = [
+        r"\bquero saber\b",
+        r"\bgostaria de saber\b",
+        r"\bpreciso saber\b",
+        r"\bme diga\b",
+        r"\bme informe\b",
+        r"\bme mostre\b",
+        r"\bqual\b",
+        r"\bquais\b",
+        r"\bquantos?\b",
+        r"\bquanto\b",
+        r"\bquando\b",
+        r"\bonde\b",
+        r"\bcomo\b",
+        r"\bquem\b",
+        r"\bpor que\b",
+        r"\bporque\b",
+        r"\bnova pergunta\b",
+    ]
+    # se a resposta do usuario contiver alguma expressao dos padrões, devolve True; caso contrario, devolve False.
+    return any(re.search(padrao, texto_lower) for padrao in padroes)
+
+
+def classificar_resposta_usuario(
+    pergunta_original: str,
+    pergunta_atual: str,
+    user_response: str,
+    llm: Any | None = None,
+) -> dict[str, str]:
+    pergunta_original = (pergunta_original or "").strip()
+    pergunta_atual = (pergunta_atual or "").strip()
+    resposta = (user_response or "").strip()
+
+    if llm is not None:
+        prompt = PROMPT_CLASSIFICADOR_HITL.format(
+            pergunta_original=pergunta_original,
+            pergunta_atual=pergunta_atual,
+            user_response=resposta,
+        )
+        try:
+            resposta_llm = llm.invoke(prompt)
+            conteudo_bruto = _limpar_json_markdown(str(getattr(resposta_llm, "content", "")))
+            dados = json.loads(conteudo_bruto)
+            tipo = str(dados.get("tipo", "")).strip().lower()
+            pergunta_normalizada = str(dados.get("pergunta_normalizada", "")).strip()
+            if tipo in {"nova_pergunta", "esclarecimento"}:
+                if tipo == "nova_pergunta" and resposta:
+                    pergunta_normalizada = resposta
+                if not pergunta_normalizada:
+                    pergunta_normalizada = pergunta_atual if tipo == "esclarecimento" else resposta
+                if pergunta_normalizada:
+                    return {
+                        "tipo": tipo,
+                        "pergunta_normalizada": pergunta_normalizada,
+                    }
+        except Exception:
+            pass
+
+    if _heuristica_nova_pergunta(resposta):
+        pergunta_normalizada = resposta if resposta else pergunta_atual or pergunta_original
+        return {"tipo": "nova_pergunta", "pergunta_normalizada": pergunta_normalizada}
+
+    return {
+        "tipo": "esclarecimento",
+        "pergunta_normalizada": pergunta_atual or pergunta_original or resposta,
     }
 
 
@@ -180,18 +343,17 @@ def exibir_resultado_console(resultado: dict[str, Any]) -> None:
     saida = str(resultado.get("saida_terminal", "")).strip()
     print(saida if saida else "[Nenhuma saida]")
 
+    # Nova lógica: Exibir resultado como DataFrame
     print("\n" + "-" * 70)
-    print("RESULTADO (preview):")
+    print("RESULTADO:")
     print("-" * 70)
-    preview = resultado.get("linhas_resultado_preview", []) or []
-    total = int(resultado.get("total_linhas_resultado", 0) or 0)
-    if preview:
-        for row in preview[:10]:
-            print(row)
-        if total > 10:
-            print(f"... ({total - 10} linhas omitidas)")
-    else:
-        print("[Nenhum resultado]")
+
+    print(_montar_saida_resultado_terminal(resultado))
+
+    csv_path = salvar_resultado_csv(resultado)
+    if csv_path is not None:
+        total = int(resultado.get("total_linhas_resultado", 0) or 0)
+        print(f"\n✓ Resultados completos salvos em: {csv_path.as_posix()} ({total} linhas)")
 
     print("\n" + "-" * 70)
     print("FEEDBACK DO CRITICO:")

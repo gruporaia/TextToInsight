@@ -35,6 +35,7 @@ def nos_nodo_sandbox(estado: EstadoTextToInsight) -> dict:
         print(f"[EXECUTOR] SQL executada com sucesso — {resultado['total_linhas_resultado']} linhas.")
         return {
             "linhas_resultado_preview": resultado["linhas_resultado_preview"],
+            "linhas_resultado_completo": resultado["linhas_resultado_completo"],
             "total_linhas_resultado": resultado["total_linhas_resultado"],
             "saida_terminal": resultado["saida_terminal"],
             "erro_execucao": "",
@@ -44,6 +45,7 @@ def nos_nodo_sandbox(estado: EstadoTextToInsight) -> dict:
         print(f"[EXECUTOR] Erro na execução: {resultado['erro_execucao']}")
         return {
             "linhas_resultado_preview": [],
+            "linhas_resultado_completo": [],
             "total_linhas_resultado": 0,
             "saida_terminal": resultado["saida_terminal"],
             "erro_execucao": resultado["erro_execucao"],
