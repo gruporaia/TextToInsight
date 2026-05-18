@@ -231,12 +231,28 @@ def main():
         type=str,
         help="Filtrar por um trecho específico da pergunta em inglês",
     )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="gpt-4o-mini",
+        help="Modelo LLM a utilizar (default: gpt-4o-mini)",
+    )
+    parser.add_argument(
+        "--with-graphs",
+        action="store_true",
+        help="Ativar a geração de gráficos e salvamento de CSV",
+    )
+    parser.add_argument(
+        "--report-dir",
+        type=str,
+        default="",
+        help="Pasta dentro de 'reports' para salvar os relatórios .md (CSVs continuam fora)",
+    )
 
     args = parser.parse_args()
 
     # Validar API key
-    model = "gpt-4o-mini"
-    # model = "gemini-2.5-flash"
+    model = args.model
     
     api_key = os.getenv("OPENAI_API_KEY") if "gpt" in model.lower() else os.getenv("GOOGLE_API_KEY")
     if not api_key:
@@ -326,6 +342,7 @@ def main():
                     db_path=db_path,
                     hitl=False,
                     show_output=False,
+                    enable_graphs=args.with_graphs,
                 )
                 print(f"     ✓ InsightEngine inicializado para db={db_id}")
             except Exception as e:
@@ -523,7 +540,15 @@ def main():
         print(f"\n✅ CSV salvo em: {csv_path}")
 
         # 8. Gerar relatório textual em Markdown
-        report_path = csv_path.replace(".csv", "_report.md")
+        if args.report_dir:
+            md_dir = Path("reports") / args.report_dir
+            md_dir.mkdir(parents=True, exist_ok=True)
+            report_path = str(md_dir / f"{Path(csv_path).stem}_report.md")
+            empirico_path = str(md_dir / f"{Path(csv_path).stem}_empirico.md")
+        else:
+            report_path = csv_path.replace(".csv", "_report.md")
+            empirico_path = csv_path.replace(".csv", "_empirico.md")
+
         _gerar_relatorio_md(
             report_path=report_path,
             summary=summary,
@@ -539,8 +564,7 @@ def main():
         print(f"✅ Relatório salvo em: {report_path}")
 
         # 9. Gerar relatório empírico completo (análises do orientador)
-        empirico_dir = str(Path(csv_path).parent / Path(csv_path).stem) + "_empirico"
-        empirico_path = csv_path.replace(".csv", "_empirico.md")
+        empirico_dir = str((Path(csv_path).parent / Path(csv_path).stem).absolute()) + "_empirico"
         gerar_relatorio_empirico_completo(
             report_path=empirico_path,
             dataset_label="Spider",
@@ -548,7 +572,7 @@ def main():
             output_dir=empirico_dir,
         )
         print(f"✅ Relatório empírico salvo em: {empirico_path}")
-        print(f"   Gráficos e CSVs auxiliares em: {empirico_dir}/")
+        print(f"   Gráficos e CSVs auxiliares em: {Path(empirico_dir).relative_to(Path.cwd())}/")
     else:
         print("❌ Nenhum resultado para salvar")
 

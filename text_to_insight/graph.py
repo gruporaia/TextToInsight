@@ -37,9 +37,10 @@ def nos_nodo_espera_humana(estado: EstadoTextToInsight):
     return estado
 
 class Graph:
-    def __init__(self, api_key: str, model: str, hitl: bool = True):
+    def __init__(self, api_key: str, model: str, hitl: bool = True, enable_graphs: bool = True):
         self.llm = get_model(model, api_key)
         self.memory = MemorySaver()
+        self.enable_graphs = enable_graphs
         self.grafo_text_to_insight = self._compilar_grafo(hitl)
 
     def _construir_grafo_text_to_insight(self, hitl: bool) -> StateGraph:
@@ -96,13 +97,16 @@ class Graph:
         def roteador_critico(estado: EstadoTextToInsight) -> str:
             status = estado.get("status", "")
             tentativas = estado.get("tentativas_loop", 0)
-            # Se aprovado, enviar para salvar CSV (que precede a decisão de gráfico)
+            
+            next_step = "salvar_csv" if self.enable_graphs else "resposta"
+            
+            # Se aprovado, enviar para proximo passo
             if status == "aprovado":
-                return "salvar_csv"
+                return next_step
             # Se atingiu limite de tentativas, encerrar mesmo reprovado
             if tentativas >= MAX_TENTATIVAS_CRITICO:
-                print(f"[ROTEADOR_CRITICO] Limite de {MAX_TENTATIVAS_CRITICO} tentativas atingido → salvar_csv (forçado)")
-                return "salvar_csv"
+                print(f"[ROTEADOR_CRITICO] Limite de {MAX_TENTATIVAS_CRITICO} tentativas atingido → {next_step} (forçado)")
+                return next_step
             return "planejador"
 
         construtor_grafo.add_conditional_edges(
@@ -111,6 +115,7 @@ class Graph:
             {
                 "planejador": "planejador",
                 "salvar_csv": "salvar_csv",
+                "resposta": "resposta",
             }
         )
 

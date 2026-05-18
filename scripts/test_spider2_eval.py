@@ -253,12 +253,14 @@ def main():
     parser.add_argument("--data-dir", type=str, default="spider2-lite", help="Diretório base do Spider 2 Lite")
     parser.add_argument("--sqlite-dir", type=str, default="spider2-lite/resource/databases/spider2-localdb", help="Diretório contendo os bancos sqlite do Spider 2")
     parser.add_argument("--question-filter", type=str, help="Filtrar por um trecho da pergunta")
+    parser.add_argument("--model", type=str, default="gpt-4o-mini", help="Modelo LLM a utilizar")
+    parser.add_argument("--with-graphs", action="store_true", help="Ativar a geração de gráficos e salvamento de CSV")
+    parser.add_argument("--report-dir", type=str, default="", help="Pasta dentro de 'reports' para salvar os relatórios .md")
 
     args = parser.parse_args()
 
     # Validar API key
-    model = "gpt-4o-mini"
-    # model = "gemini-2.5-flash"
+    model = args.model
     
     api_key = os.getenv("OPENAI_API_KEY") if "gpt" in model.lower() else os.getenv("GOOGLE_API_KEY")
     if not api_key:
@@ -354,6 +356,7 @@ def main():
                     db_path=db_path,
                     hitl=False,
                     show_output=False,
+                    enable_graphs=args.with_graphs,
                 )
             except Exception as e:
                 print(f"     ❌ Erro ao inicializar InsightEngine: {e}")
@@ -532,7 +535,15 @@ def main():
         print(f"Exact match rate: {exact_match_rate:.1%}")
         print(f"\n✅ CSV salvo em: {csv_path}")
 
-        report_path = csv_path.replace(".csv", "_report.md")
+        if args.report_dir:
+            md_dir = Path("reports") / args.report_dir
+            md_dir.mkdir(parents=True, exist_ok=True)
+            report_path = str(md_dir / f"{Path(csv_path).stem}_report.md")
+            empirico_path = str(md_dir / f"{Path(csv_path).stem}_empirico.md")
+        else:
+            report_path = csv_path.replace(".csv", "_report.md")
+            empirico_path = csv_path.replace(".csv", "_empirico.md")
+
         _gerar_relatorio_md(
             report_path=report_path,
             summary=summary,
@@ -548,8 +559,7 @@ def main():
         print(f"✅ Relatório salvo em: {report_path}")
 
         # 9. Gerar relatório empírico completo (análises do orientador)
-        empirico_dir = str(Path(csv_path).parent / Path(csv_path).stem) + "_empirico"
-        empirico_path = csv_path.replace(".csv", "_empirico.md")
+        empirico_dir = str((Path(csv_path).parent / Path(csv_path).stem).absolute()) + "_empirico"
         gerar_relatorio_empirico_completo(
             report_path=empirico_path,
             dataset_label="Spider 2.0 Lite",
@@ -557,7 +567,7 @@ def main():
             output_dir=empirico_dir,
         )
         print(f"✅ Relatório empírico salvo em: {empirico_path}")
-        print(f"   Gráficos e CSVs auxiliares em: {empirico_dir}/")
+        print(f"   Gráficos e CSVs auxiliares em: {Path(empirico_dir).relative_to(Path.cwd())}/")
     else:
         print("❌ Nenhum resultado para salvar. (Verificou os bancos na pasta spider2-localdb?)")
 
