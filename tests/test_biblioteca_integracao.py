@@ -67,7 +67,11 @@ class _FakeCompiledGraph:
         state = self._thread_state(thread_id)
 
         if estado_execucao is not None:
-            pergunta = str(estado_execucao.get("pergunta_usuario", ""))
+            pergunta = (
+                str(estado_execucao.get("pergunta_atual", ""))
+                or str(estado_execucao.get("pergunta_original", ""))
+                or str(estado_execucao.get("pergunta_usuario", ""))
+            )
             if "hitl" in pergunta.lower():
                 state["values"] = {
                     **estado_execucao,

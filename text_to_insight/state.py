@@ -25,9 +25,11 @@ StatusExecucao = Literal[
 "reprovado",
 ]
 
-# Criação de classe mãe que será estendida para EstadoTextToInsight para que pergunta_usuario e db_path sejam obrigatórios
+# Criação de classe mãe que será estendida para EstadoTextToInsight para que
+# pergunta_original/pergunta_atual e db_path sejam obrigatorios
 class EstadoEntrada(TypedDict):
-    pergunta_usuario: str
+    pergunta_original: str
+    pergunta_atual: str
     db_path: str
 
 
@@ -36,7 +38,8 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     Estado compartilhado do grafo Text-to-Insight (MVP SQL-only).
 
     Campos obrigatórios (via EstadoEntrada):
-      - pergunta_usuario: pergunta em linguagem natural.
+      - pergunta_original: pergunta inicial do usuario (imutavel apos o primeiro set).
+      - pergunta_atual: pergunta corrente, fonte de verdade para o fluxo.
       - db_path: caminho para o arquivo SQLite (.db).
 
     Campos opcionais (preenchidos progressivamente pelos nós):

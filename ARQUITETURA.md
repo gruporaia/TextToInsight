@@ -137,7 +137,8 @@ Arquivo: `text_to_insight/state.py`
 
 Campos obrigatorios:
 
-- `pergunta_usuario`
+- `pergunta_original`
+- `pergunta_atual`
 - `db_path`
 
 Campos principais do fluxo:
@@ -146,6 +147,13 @@ Campos principais do fluxo:
 - `erro_execucao`, `saida_terminal`, `feedback_critico`, `resposta_natural`
 - `status`, `tentativas_loop`, `historico_conversa`, `espera_humana`, `pergunta_ao_usuario`
 - telemetria: `tokens_input`, `tokens_output`, `tokens_total`
+
+## HITL e perguntas
+
+- `pergunta_original` e a pergunta inicial da thread (imutavel apos o primeiro set).
+- `pergunta_atual` e a pergunta corrente e fonte de verdade para todo o fluxo.
+- Em HITL, se a resposta do usuario for classificada como "nova pergunta",
+  o sistema atualiza `pergunta_atual` e reinicia o ciclo (sem alterar a original).
 
 ## Status operacionais
 

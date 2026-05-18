@@ -18,7 +18,7 @@ e amostras de dados em uma resposta em linguagem natural clara e concisa para o
 usuário final.
 
 Instruções:
-- Use a pergunta original e a SQL executada como contexto.
+- Use a pergunta atual e a SQL executada como contexto.
 - Inclua um resumo do que os resultados indicam e, quando relevante, uma interpretação
   simples (por exemplo: totais, médias, top N, ausência de dados, etc.).
 - Seja claro sobre quaisquer limitações (por exemplo: amostra limitada de linhas).
@@ -44,7 +44,11 @@ def nos_nodo_resposta(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) 
     Não altera o status além de mantê-lo como 'aprovado'.
     """
     status = estado.get("status", "")
-    pergunta = estado.get("pergunta_usuario", "")
+    pergunta = (
+        estado.get("pergunta_atual", "")
+        or estado.get("pergunta_original", "")
+        or estado.get("pergunta_usuario", "")
+    )
     sql = estado.get("sql_gerada", "")
     preview = estado.get("linhas_resultado_preview", [])
     total = estado.get("total_linhas_resultado", None)
