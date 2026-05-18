@@ -38,7 +38,11 @@ def nos_nodo_planejador(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI
 
     Lógica determinística para schema vazio; LLM para decisões mais complexas.
     """
-    pergunta = estado.get("pergunta_usuario", "")
+    pergunta = (
+        estado.get("pergunta_atual", "")
+        or estado.get("pergunta_original", "")
+        or estado.get("pergunta_usuario", "")
+    )
     conversa_previa = estado.get("historico_conversa", "")
     schema = estado.get("contexto_schema", "")
     feedback = estado.get("feedback_critico", "")
@@ -109,7 +113,7 @@ Opções válidas para 'decisão':
         tentativas=tentativas,
         status_atual=status,
         erro=erro if erro else "Nenhum",
-        # apenas primeiros 500 caracteres do schema para evitar estourar o prompt, mas pode ser ajustado conforme necessidade
+        # passamos schema inteiro agora
         schema=schema if schema else "Nenhum",
         conversa_previa=conversa_previa if conversa_previa else "Nenhuma",
         diretrizes=diretrizes,
