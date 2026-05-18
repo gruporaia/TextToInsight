@@ -39,6 +39,7 @@ from src.spider.metrics import (
     sql_similarity_score,
 )
 from src.spider.query_executor import SpiderQueryExecutor
+from src.spider.analise_empirica import gerar_relatorio_empirico_completo
 
 load_dotenv()
 
@@ -220,7 +221,7 @@ def main():
     parser.add_argument(
         "--data-dir",
         type=str,
-        default="data/spider_data/spider_data",
+        default="spider_data",
         help="Diretório com dados do Spider",
     )
 
@@ -230,12 +231,28 @@ def main():
         type=str,
         help="Filtrar por um trecho específico da pergunta em inglês",
     )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="gpt-4o-mini",
+        help="Modelo LLM a utilizar (default: gpt-4o-mini)",
+    )
+    parser.add_argument(
+        "--with-graphs",
+        action="store_true",
+        help="Ativar a geração de gráficos e salvamento de CSV",
+    )
+    parser.add_argument(
+        "--report-dir",
+        type=str,
+        default="",
+        help="Pasta dentro de 'reports' para salvar os relatórios .md (CSVs continuam fora)",
+    )
 
     args = parser.parse_args()
 
     # Validar API key
-    model = "gpt-4o-mini"
-    # model = "gemini-2.5-flash"
+    model = args.model
     
     api_key = os.getenv("OPENAI_API_KEY") if "gpt" in model.lower() else os.getenv("GOOGLE_API_KEY")
     if not api_key:
@@ -325,6 +342,7 @@ def main():
                     db_path=db_path,
                     hitl=False,
                     show_output=False,
+                    enable_graphs=args.with_graphs,
                 )
                 print(f"     ✓ InsightEngine inicializado para db={db_id}")
             except Exception as e:
@@ -354,6 +372,23 @@ def main():
         feedback_estado = resultado.get("feedback_critico", "")
         erro_exec = resultado.get("erro_execucao", "")
         tentativas = resultado.get("tentativas_loop", 1)
+        historico_tent = resultado.get("historico_tentativas", [])
+
+        # Extrair métricas de tokens acumuladas
+        tokens_input = resultado.get("tokens_input", 0) or 0
+        tokens_output = resultado.get("tokens_output", 0) or 0
+        tokens_total = resultado.get("tokens_total", 0) or 0
+
+        # Extrair dados do agente de visualização
+        viz_acionado = "grafico_gerado" in resultado
+        viz_sucesso = resultado.get("grafico_gerado", False)
+
+        # Extrair SQL da 1ª tentativa para ablação do Crítico
+        query_1a_tentativa = ""
+        if historico_tent and isinstance(historico_tent, list) and len(historico_tent) > 0:
+            query_1a_tentativa = historico_tent[0].get("sql", "")
+        if not query_1a_tentativa:
+            query_1a_tentativa = query_agente  # fallback: se só houve 1 tentativa
 
         # Mapear status para veredito e definir feedback
         if veredito == "aprovado":
@@ -368,6 +403,8 @@ def main():
 
         # Comparar resultados se query agente foi gerada
         resultado_exato_match = None
+        resultado_exato_match_1a = None
+        resultado_f1_1a = 0.0
         similarity_score = 0.0
         f1_scores = {"f1": 0.0, "precision": 0.0, "recall": 0.0}
 
@@ -387,10 +424,30 @@ def main():
                     resultado_ouro["results"],
                     resultado_agente["results"],
                 )
+
+                # Ablação: calcular exact match e F1 da 1ª tentativa
+                if query_1a_tentativa and query_1a_tentativa != query_agente:
+                    res_1a = executor.execute_query(db_id, query_1a_tentativa)
+                    if res_1a["success"]:
+                        resultado_exato_match_1a = results_exact_match(
+                            resultado_ouro["results"], res_1a["results"]
+                        )
+                        f1_1a = results_f1_score(
+                            resultado_ouro["results"], res_1a["results"]
+                        )
+                        resultado_f1_1a = f1_1a["f1"]
+                    else:
+                        resultado_exato_match_1a = False
+                        resultado_f1_1a = 0.0
+                else:
+                    resultado_exato_match_1a = resultado_exato_match
+                    resultado_f1_1a = f1_scores["f1"]
+
                 print(
                     f"       Resultado final ({tentativas} tentativa(s)): "
                     f"similarity={similarity_score:.2f}, "
                     f"match={resultado_exato_match}, "
+                    f"match_1a={resultado_exato_match_1a}, "
                     f"F1={f1_scores['f1']:.2f}, "
                     f"veredito={veredito_critico}"
                 )
@@ -416,7 +473,7 @@ def main():
                 f"sem query gerada ou com erro de execução"
             )
 
-        # Construir linha para CSV
+        # Construir linha para CSV (com campos empíricos adicionais)
         row = build_comparison_row(
             id_exemplo=ex_id,
             tentativa_numero=tentativas,
@@ -433,6 +490,14 @@ def main():
             resultado_f1=f1_scores["f1"],
             resultado_precision=f1_scores["precision"],
             resultado_recall=f1_scores["recall"],
+            tokens_input=tokens_input,
+            tokens_output=tokens_output,
+            tokens_total=tokens_total,
+            viz_acionado=viz_acionado,
+            viz_sucesso=viz_sucesso,
+            resultado_exato_match_1a_tentativa=resultado_exato_match_1a,
+            resultado_f1_1a_tentativa=resultado_f1_1a,
+            query_1a_tentativa=query_1a_tentativa,
         )
 
         reporter.append_row(row)
@@ -454,7 +519,7 @@ def main():
     if all_rows:
         summary = reporter.generate_summary(all_rows)
         # Calcular F1 médio
-        f1_values = [float(r.get("resultado_f1", 0)) for r in all_rows if r.get("resultado_f1")]
+        f1_values = [float(r.get("resultado_f1", 0.0) or 0.0) for r in all_rows]
         f1_medio = sum(f1_values) / len(f1_values) if f1_values else 0.0
         # Calcular exact match rate
         match_values = [r.get("resultado_exato_match") for r in all_rows]
@@ -475,7 +540,15 @@ def main():
         print(f"\n✅ CSV salvo em: {csv_path}")
 
         # 8. Gerar relatório textual em Markdown
-        report_path = csv_path.replace(".csv", "_report.md")
+        if args.report_dir:
+            md_dir = Path("reports") / args.report_dir
+            md_dir.mkdir(parents=True, exist_ok=True)
+            report_path = str(md_dir / f"{Path(csv_path).stem}_report.md")
+            empirico_path = str(md_dir / f"{Path(csv_path).stem}_empirico.md")
+        else:
+            report_path = csv_path.replace(".csv", "_report.md")
+            empirico_path = csv_path.replace(".csv", "_empirico.md")
+
         _gerar_relatorio_md(
             report_path=report_path,
             summary=summary,
@@ -489,6 +562,17 @@ def main():
             data_dir=args.data_dir,
         )
         print(f"✅ Relatório salvo em: {report_path}")
+
+        # 9. Gerar relatório empírico completo (análises do orientador)
+        empirico_dir = str((Path(csv_path).parent / Path(csv_path).stem).absolute()) + "_empirico"
+        gerar_relatorio_empirico_completo(
+            report_path=empirico_path,
+            dataset_label="Spider",
+            all_rows=all_rows,
+            output_dir=empirico_dir,
+        )
+        print(f"✅ Relatório empírico salvo em: {empirico_path}")
+        print(f"   Gráficos e CSVs auxiliares em: {Path(empirico_dir).relative_to(Path.cwd())}/")
     else:
         print("❌ Nenhum resultado para salvar")
 

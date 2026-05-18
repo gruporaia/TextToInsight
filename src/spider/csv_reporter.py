@@ -32,6 +32,15 @@ class CSVReporter:
         "resultado_f1",
         "resultado_precision",
         "resultado_recall",
+        # Campos adicionais para análise empírica
+        "tokens_input",
+        "tokens_output",
+        "tokens_total",
+        "viz_acionado",
+        "viz_sucesso",
+        "resultado_exato_match_1a_tentativa",
+        "resultado_f1_1a_tentativa",
+        "query_1a_tentativa",
     ]
 
     def __init__(self, filepath: str | Path):
@@ -101,18 +110,25 @@ class CSVReporter:
         total_perguntas = len(by_exemplo)
         perguntas_aprovadas = 0
         perguntas_1a_tentativa = 0
-        total_tentativas = len(rows)
+        total_tentativas = 0
         similarities = []
         tempos = []
 
         for ex_id, tentativas in by_exemplo.items():
             # Última tentativa desta pergunta
             ultima = tentativas[-1]
+            
+            try:
+                qtd_tentativas = int(ultima.get("tentativa_numero", len(tentativas)))
+            except (ValueError, TypeError):
+                qtd_tentativas = len(tentativas)
+                
+            total_tentativas += qtd_tentativas
 
             if ultima["veredito_critico"] == "aprovado":
                 perguntas_aprovadas += 1
 
-            if len(tentativas) == 1 and ultima["veredito_critico"] == "aprovado":
+            if qtd_tentativas == 1 and ultima["veredito_critico"] == "aprovado":
                 perguntas_1a_tentativa += 1
 
             # Coletar similarity scores (de tentativas bem-sucedidas)

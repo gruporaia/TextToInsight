@@ -358,6 +358,14 @@ def build_comparison_row(
     resultado_f1: float = 0.0,
     resultado_precision: float = 0.0,
     resultado_recall: float = 0.0,
+    tokens_input: int = 0,
+    tokens_output: int = 0,
+    tokens_total: int = 0,
+    viz_acionado: bool = False,
+    viz_sucesso: bool = False,
+    resultado_exato_match_1a_tentativa: bool | None = None,
+    resultado_f1_1a_tentativa: float = 0.0,
+    query_1a_tentativa: str = "",
 ) -> dict[str, Any]:
     """
     Constrói uma linha para o CSV de avaliação.
@@ -378,9 +386,17 @@ def build_comparison_row(
         resultado_f1: F1 score row-level (0-1)
         resultado_precision: Precision row-level (0-1)
         resultado_recall: Recall row-level (0-1)
+        tokens_input: Total de tokens de entrada consumidos
+        tokens_output: Total de tokens de saída consumidos
+        tokens_total: Total de tokens consumidos
+        viz_acionado: Se o agente de visualização foi acionado
+        viz_sucesso: Se o gráfico foi gerado com sucesso
+        resultado_exato_match_1a_tentativa: Exact match da 1ª tentativa (para ablação)
+        resultado_f1_1a_tentativa: F1 score da 1ª tentativa (para ablação)
+        query_1a_tentativa: SQL gerada na 1ª tentativa
 
     Returns:
-        Dict com 15 chaves para CSV
+        Dict com chaves para CSV
     """
     return {
         "id_exemplo": id_exemplo,
@@ -398,5 +414,14 @@ def build_comparison_row(
         "resultado_f1": resultado_f1,
         "resultado_precision": resultado_precision,
         "resultado_recall": resultado_recall,
+        "tokens_input": tokens_input,
+        "tokens_output": tokens_output,
+        "tokens_total": tokens_total,
+        "viz_acionado": viz_acionado,
+        "viz_sucesso": viz_sucesso,
+        "resultado_exato_match_1a_tentativa": resultado_exato_match_1a_tentativa if resultado_exato_match_1a_tentativa is not None else "",
+        "resultado_f1_1a_tentativa": resultado_f1_1a_tentativa,
+        "query_1a_tentativa": query_1a_tentativa,
     }
+
 
