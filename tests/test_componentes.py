@@ -208,7 +208,9 @@ def test_roteador_sandbox_muitas_tentativas():
     from text_to_insight.routers.edges import roteador_sandbox
 
     estado = {"status": "exec_erro", "tentativas_loop": 5}
-    assert roteador_sandbox(estado) == "planejador"
+    ## alteração: com muitas tentativas, o roteador deve direcionar para "critico" para forçar o fim do loop, não para "planejador"
+    #asert roteador_sandbox(estado) == "planejador"
+    assert roteador_sandbox(estado) == "critico"
 
 
 def test_roteador_planejador_sem_schema():

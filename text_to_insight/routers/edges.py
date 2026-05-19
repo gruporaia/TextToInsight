@@ -51,7 +51,7 @@ def roteador_sandbox(estado: EstadoTextToInsight) -> Literal["critico", "planeja
 
     - exec_ok → critico (avaliar resultado)
     - exec_erro + tentativas < 3 → planejador (reconsiderar)
-    - tentativas >= 3 → planejador (desistir/reiniciar)
+    - tentativas >= 3 → crítico (desistir/reiniciar -> encerrar loop)
     """
     status = estado.get("status", "")
     tentativas = estado.get("tentativas_loop", 0)
