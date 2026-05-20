@@ -10,6 +10,8 @@ Nós disponíveis:
     - code_agent: Gera código Python baseado no plano.
     - sandbox: Executa o código de forma segura.
     - critic: Avalia a saída e fornece feedback.
+    - csv_saver: Salva resultado da query em CSV.
+    - graph_generator: Gera gráfico matplotlib a partir do CSV.
 """
 
 from .planner import nos_nodo_planejador
@@ -18,6 +20,8 @@ from .code_agent.code_agent import nos_nodo_agente_codigo
 from .sandbox import nos_nodo_sandbox
 from .critic import nos_nodo_critico
 from .response import nos_nodo_resposta
+from .csv_saver import nos_nodo_salvar_csv
+from .graph_generator import nos_nodo_gerador_grafico
 
 __all__ = [
     "nos_nodo_planejador",
@@ -26,4 +30,7 @@ __all__ = [
     "nos_nodo_sandbox",
     "nos_nodo_critico",
     "nos_nodo_resposta",
+    "nos_nodo_salvar_csv",
+    "nos_nodo_gerador_grafico",
 ]
+

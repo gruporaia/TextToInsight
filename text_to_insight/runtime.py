@@ -367,6 +367,15 @@ def exibir_resultado_console(resultado: dict[str, Any]) -> None:
     resposta_natural = str(resultado.get("resposta_natural", "")).strip()
     print(resposta_natural if resposta_natural else "[Nenhuma resposta natural]")
 
+    # Exibir info do gráfico gerado (se houver)
+    grafico_gerado = resultado.get("grafico_gerado", False)
+    caminho_grafico = resultado.get("caminho_grafico", "")
+    if grafico_gerado and caminho_grafico:
+        print("\n" + "-" * 70)
+        print("GRAFICO GERADO:")
+        print("-" * 70)
+        print(f"✓ Gráfico salvo em: {caminho_grafico}")
+
     print("\n" + "=" * 70 + "\n")
 
 

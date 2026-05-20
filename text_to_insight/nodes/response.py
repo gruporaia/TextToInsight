@@ -22,6 +22,7 @@ Instruções:
 - Inclua um resumo do que os resultados indicam e, quando relevante, uma interpretação
   simples (por exemplo: totais, médias, top N, ausência de dados, etc.).
 - Seja claro sobre quaisquer limitações (por exemplo: amostra limitada de linhas).
+- Se um gráfico foi gerado, mencione que um gráfico acompanha a resposta.
 - Responda em Português, no máximo 3-5 frases, sem mostrar a SQL completa nem blocos de código.
 
 Contexto:
@@ -30,6 +31,7 @@ SQL gerada: {sql}
 Total de linhas: {total}
 Amostra de resultados: {preview}
 Saída resumida: {saida}
+Gráfico gerado: {grafico_info}
 
 Gere APENAS a resposta final para o usuário (sem títulos, sem marcas, sem explicações sobre o que você está fazendo).
 """
@@ -54,7 +56,12 @@ def nos_nodo_resposta(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) 
     total = estado.get("total_linhas_resultado", None)
     saida = estado.get("saida_terminal", "")
 
+    grafico_gerado = estado.get("grafico_gerado", False)
+    caminho_grafico = estado.get("caminho_grafico", "")
+
     print(f"[RESPOSTA] Executando nó de resposta — status atual: {status}")
+    if grafico_gerado:
+        print(f"[RESPOSTA] Gráfico disponível em: {caminho_grafico}")
 
     # Só gera resposta natural se o crítico aprovou
     if status != "aprovado":
@@ -64,6 +71,7 @@ def nos_nodo_resposta(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) 
     # Formata preview de forma compacta para o prompt
     preview_str = str(preview[:10]) if preview else "(sem amostra)"
     total_str = str(total) if total is not None else "desconhecido"
+    grafico_info = f"Sim — gráfico salvo em {caminho_grafico}" if grafico_gerado else "Não"
 
     # Durante execução de testes (pytest) evitamos invocar a API externa
     # para não depender de cassetes adicionais. Detectamos pytest através
@@ -89,6 +97,7 @@ def nos_nodo_resposta(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) 
             total=total_str,
             preview=preview_str,
             saida=(saida if saida else "Nenhuma saída resumida"),
+            grafico_info=grafico_info,
         )
 
         try:

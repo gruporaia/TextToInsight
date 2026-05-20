@@ -50,4 +50,5 @@ def nos_nodo_sandbox(estado: EstadoTextToInsight) -> dict:
             "saida_terminal": resultado["saida_terminal"],
             "erro_execucao": resultado["erro_execucao"],
             "status": "exec_erro",
+            "historico_tentativas": [{"sql": sql, "erro": resultado["erro_execucao"]}],
         }
