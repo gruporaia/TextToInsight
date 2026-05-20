@@ -22,28 +22,46 @@ TextToInsight/                             (Raiz do projeto)
 │
 ├── 🚀 main.py                             Script de execução principal
 │
-└── 📁 src/                                Código-fonte principal
-    │
-    ├── __init__.py                        Package root
-    ├── state.py                           ⭐ TypedDict EstadoTextToInsight
-    ├── graph.py                           ⭐ Grafo compilado (entry point)
-    ├── model_selection.py                 Seleção de modelo/provedor LLM
-    ├── utils.py                           Telemetria de tokens e latência
-    │
-    ├── 📁 nodes/                          Nós do grafo
-    │   ├── __init__.py
-    │   ├── planner.py                     🧠 Nó: Planejador (Supervisor)
-    │   ├── response.py                    💬 Nó: Resposta Natural Final
-    │   ├── schema.py                      📊 Nó: Extrator de Schema
-    │   ├── 📁 code_agent/
-    │   │   ├── code_agent.py              💻 Nó: Gerador de SQL
-    │   │   └── code_sql.py                🔐 Validação + Execução SQL segura
-    │   ├── sandbox.py                     🏖️  Nó: Executor Seguro
-    │   └── critic.py                      🎯 Nó: Avaliador de Qualidade
-    │
-    └── 📁 routers/                        Roteadores Condicionais
-        ├── __init__.py
-        └── edges.py                       ➡️  Funções de roteamento
+├── 📁 text_to_insight/                    Código-fonte principal (pacote)
+│   ├── __init__.py                        Package root
+│   ├── state.py                           ⭐ TypedDict EstadoTextToInsight
+│   ├── graph.py                           ⭐ Grafo compilado (entry point)
+│   ├── InsightEngine.py                   API pública da biblioteca
+│   ├── model_selection.py                 Seleção de modelo/provedor LLM
+│   ├── runtime.py                         Runtime compartilhado
+│   ├── utils.py                           Telemetria de tokens e latência
+│   │
+│   ├── 📁 nodes/                          Nós do grafo
+│   │   ├── __init__.py
+│   │   ├── planner.py                     🧠 Nó: Planejador (Supervisor)
+│   │   ├── schema.py                      📊 Nó: Extrator de Schema
+│   │   ├── 📁 code_agent/
+│   │   │   ├── code_agent.py              💻 Nó: Gerador de SQL
+│   │   │   └── code_sql.py                🔐 Validação + Execução SQL segura
+│   │   ├── sandbox.py                     🏖️  Nó: Executor Seguro
+│   │   ├── critic.py                      🎯 Nó: Avaliador de Qualidade
+│   │   ├── csv_saver.py                   🧾 Nó: Salvar CSV
+│   │   ├── graph_generator.py             📈 Nó: Gerador de Gráficos
+│   │   └── response.py                    💬 Nó: Resposta Natural Final
+│   │
+│   └── 📁 routers/                        Roteadores Condicionais
+│       ├── __init__.py
+│       └── edges.py                       ➡️  Funções de roteamento
+│
+├── 📁 src/                                Módulos de benchmark Spider
+│   └── 📁 spider/
+│       ├── data_loader.py                 Loader do Spider 1.0
+│       ├── query_executor.py              Executor SQL
+│       ├── metrics.py                     Métricas (similarity/match/F1)
+│       ├── csv_reporter.py                Relatórios CSV
+│       └── analise_empirica.py            Pós-processamento e gráficos
+│
+├── 📁 scripts/                            Orquestração de benchmarks
+│   ├── test_spider_eval.py                Benchmark Spider 1.0
+│   └── test_spider2_eval.py               Benchmark Spider 2.0 Lite
+│
+├── 📁 results/                            Resultados CSV das execuções
+└── 📁 graphs/                             Gráficos gerados
 
 ═══════════════════════════════════════════════════════════════════════════════
 
@@ -54,26 +72,28 @@ GUIA DE LEITURA RECOMENDADO:
     └─► Leia: README.md → DESENVOLVIMENTO.md → main.py
 
 2️⃣  Desenvolvedor?
-    └─► Leia: ARQUITETURA.md → src/state.py → src/graph.py
+    └─► Leia: ARQUITETURA.md → text_to_insight/state.py → text_to_insight/graph.py
 
 3️⃣  Operacional?
     └─► Leia: DESENVOLVIMENTO.md → main.py → execute!
 
 4️⃣  Estudo Profundo?
-    └─► src/state.py → src/nodes/* → src/routers/edges.py → src/graph.py
+    └─► text_to_insight/state.py → text_to_insight/nodes/* → text_to_insight/routers/edges.py → text_to_insight/graph.py
 
 ═══════════════════════════════════════════════════════════════════════════════
 
 O QUE FOI CRIADO:
 ═════════════════
 
-✅ ESTRUTURA:          Projeto modular com src/, nós, roteadores e suíte de testes em 3 camadas
+✅ ESTRUTURA:          Projeto modular com text_to_insight/ + src/spider + suíte de testes em 3 camadas
 ✅ ESTADO:             TypedDict EstadoTextToInsight com campos de SQL, HITL, resposta e telemetria
-✅ 7 NÓS:              Planejador, EsperaHumana, Schema, AgenteCódigo, Sandbox, Crítico, Resposta
-✅ 3 ROTEADORES:       Sandbox, Planejador e Crítico
+✅ 9 NÓS:              Planejador, EsperaHumana, Schema, AgenteCódigo, Sandbox, Crítico, SalvarCSV, GeradorGráfico, Resposta
+✅ 4 ROTEADORES:       Sandbox, Planejador, Gráfico e Crítico
 ✅ GRAFO COMPILADO:    StateGraph + MemorySaver + interrupt_before para HITL
 ✅ DOCUMENTAÇÃO:       3 guias: README, ARQUITETURA, DESENVOLVIMENTO
 ✅ TELEMETRIA:         Tokens (input/output/total), tentativas e latência em CSV
+✅ GRÁFICOS:           Geração automática com matplotlib quando aplicável
+✅ BENCHMARKS:         Spider 1.0 e Spider 2.0 Lite (scripts/ + src/spider)
 ✅ TODA EM PT-BR:      Código, variáveis, docstrings, comentários
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -82,7 +102,7 @@ ESTATÍSTICAS:
 ═════════════
 
 📊 Linhas de Código:          ~1.400+ (incluindo nós, roteadores e utilitários)
-📚 Arquivos Python:           15+ (src/ + main.py + testes)
+📚 Arquivos Python:           15+ (text_to_insight/ + src/spider + scripts + testes)
 📖 Documentação:              3 guias principais
 🔄 Fluxos de Grafo:           4+ cenários (normal, retry, HITL, bloqueado_hitl)
 🧠 Tentativas max:            3 por padrão (configurável)
@@ -93,11 +113,11 @@ ESTATÍSTICAS:
 PRÓXIMOS PASSOS (NÃO IMPLEMENTADOS AGORA):
 ═══════════════════════════════════════════
 
-❌ LLMs reais (OpenAI, Anthropic, etc)
+❌ Novos provedores LLM (Anthropic, etc)
 ❌ Banco de dados real (PostgreSQL, MySQL, etc)
 ❌ Docker/Containerização
 ❌ Cache de schemas
-❌ Métricasde produção
+❌ Métricas de produção
 ❌ Observabilidade (LangSmith, DataDog, etc)
 ❌ Autenticação/Autorização
 ❌ Testes unitários (estrutura preparada)
