@@ -1,3 +1,4 @@
+import hashlib
 from .graph_logic import SchemaGraph
 from .rag_logic import RAGRetriever
 from pathlib import Path
@@ -11,9 +12,12 @@ class SchemaGraphRAG:
     def __init__(self, schema: dict = None):
         #definição do grafo após o get do schema
         if schema:
+            schema_string = schema.get("contexto_schema", "")
+            schema_hash = hashlib.md5(schema_string.encode('utf-8')).hexdigest()
+            collection_name = f"schema_{schema_hash}"
             chroma_client = chromadb.PersistentClient(path=str(BASE_DIR / "chroma_db"))
-            self.schema_graph = SchemaGraph(schema = schema.get("contexto_schema", ""))
-            self.rag = RAGRetriever(chroma_client = chroma_client, document_schema = schema)
+            self.schema_graph = SchemaGraph(schema = schema_string)
+            self.rag = RAGRetriever(chroma_client = chroma_client, document_schema = schema, collection_name =collection_name)
 
     def retrieve(self, query: str):
         #a query no no schema vai rolar aqui, essa função deve:
