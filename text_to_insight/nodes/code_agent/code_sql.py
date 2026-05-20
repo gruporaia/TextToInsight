@@ -52,13 +52,17 @@ def validar_sql_segura(sql: str) -> tuple[bool, str]:
 
     return True, ""
 
+import time
+
 def executar_sql_sqlite(
     db_path: str,
     sql: str,
     limite_preview: int = 5,
+    timeout_segundos: float = 15.0,
 ) -> dict[str, Any]:
     """
     Executa SQL validada em SQLite modo read-only e retorna resultado estruturado.
+    Possui um timeout embutido para evitar queries infinitas (ex: cross joins enormes).
     """
     ok, erro_validacao = validar_sql_segura(sql)
     if not ok:
@@ -86,6 +90,17 @@ def executar_sql_sqlite(
     try:
         conn = sqlite3.connect(f"file:{caminho}?mode=ro", uri=True)
         conn.row_factory = sqlite3.Row
+        
+        # Define um handler para monitorar o tempo de execução e abortar se passar do limite
+        start_time = time.time()
+        def _progress_handler():
+            if time.time() - start_time > timeout_segundos:
+                return 1 # abortar query
+            return 0
+            
+        # Invoca a cada 1000 instruções da máquina virtual do SQLite
+        conn.set_progress_handler(_progress_handler, 1000)
+        
         try:
             cur = conn.cursor()
             cur.execute(sql)
@@ -107,6 +122,18 @@ def executar_sql_sqlite(
             }
         finally:
             conn.close()
+    except sqlite3.OperationalError as e:
+        erro_msg = str(e)
+        if "interrupted" in erro_msg.lower():
+            erro_msg = f"Query abortada por timeout (> {timeout_segundos}s)."
+        return {
+            "ok": False,
+            "erro_execucao": f"Falha ao executar SQL: {erro_msg}",
+            "linhas_resultado_preview": [],
+            "linhas_resultado_completo": [],
+            "total_linhas_resultado": 0,
+            "saida_terminal": f"[SANDBOX] Erro de execucao: {erro_msg}",
+        }
     except Exception as e:
         return {
             "ok": False,

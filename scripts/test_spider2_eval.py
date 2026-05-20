@@ -1,21 +1,26 @@
 #!/usr/bin/env python3
 """
-Script de Avaliação do Agente contra Spider Dataset.
+Script de Avaliação do Agente contra Spider 2.0 Lite Dataset.
 
-Testa o agente Text-to-Insight contra perguntas reais do Spider dataset,
-usando a classe InsightEngine do pacote text_to_insight.
+Testa o agente Text-to-Insight contra perguntas reais do Spider 2.0 Lite dataset,
+usando a classe InsightEngine do pacote text_to_insight. Foca especificamente
+nas instâncias "local" que correspondem a bancos SQLite.
 
 Uso:
-    python scripts/test_spider_eval.py --sample-size 10 --seed 42
-    python scripts/test_spider_eval.py --db-filter concert_singer --output reports/eval.csv
+    python scripts/test_spider2_eval.py --sample-size 10 --seed 42
+    python scripts/test_spider2_eval.py --db-filter E_commerce --output reports/eval_spider2.csv
 """
 
 import argparse
+import json
 import os
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
+import random
+import glob
+import pandas as pd
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -26,12 +31,6 @@ from dotenv import load_dotenv
 from text_to_insight import InsightEngine
 
 from src.spider.csv_reporter import CSVReporter
-from src.spider.data_loader import (
-    filter_by_db_id,
-    get_unique_db_ids,
-    load_spider_dev_examples,
-    sample_examples,
-)
 from src.spider.metrics import (
     build_comparison_row,
     results_exact_match,
@@ -42,6 +41,72 @@ from src.spider.query_executor import SpiderQueryExecutor
 from src.spider.analise_empirica import gerar_relatorio_empirico_completo
 
 load_dotenv()
+
+
+class Spider2QueryExecutor(SpiderQueryExecutor):
+    """
+    Executor adaptado para o Spider 2.0 Lite, 
+    onde os bancos locais geralmente estão na raiz da pasta.
+    """
+    def get_db_path(self, db_id: str) -> Path:
+        # Tenta na raiz
+        db_path = self.database_dir / f"{db_id}.sqlite"
+        if not db_path.exists():
+            # Tenta na subpasta como no Spider 1.0
+            db_path = self.database_dir / db_id / f"{db_id}.sqlite"
+        if not db_path.exists():
+            raise FileNotFoundError(f"Banco não encontrado: {db_path} (nem na subpasta)")
+        return db_path
+
+
+def load_spider2_examples(data_dir: str) -> list[dict]:
+    """Carrega as instâncias do spider2-lite.jsonl"""
+    jsonl_path = Path(data_dir) / "spider2-lite.jsonl"
+    if not jsonl_path.exists():
+        raise FileNotFoundError(f"Arquivo não encontrado: {jsonl_path}")
+    
+    examples = []
+    with open(jsonl_path, "r", encoding="utf-8") as f:
+        for line in f:
+            if line.strip():
+                examples.append(json.loads(line))
+    return examples
+
+
+def get_gold_sql(data_dir: str, instance_id: str) -> str:
+    """Lê a query gold da pasta evaluation_suite/gold/sql/"""
+    sql_path = Path(data_dir) / "evaluation_suite" / "gold" / "sql" / f"{instance_id}.sql"
+    if not sql_path.exists():
+        return ""
+    with open(sql_path, "r", encoding="utf-8") as f:
+        return f.read().strip()
+
+
+def get_gold_results(data_dir: str, instance_id: str) -> list[list[dict]]:
+    """Carrega os resultados gold (CSVs) para um dado instance_id.
+    Pode haver múltiplos CSVs (e.g. local040_a.csv, local040_b.csv).
+    """
+    exec_result_dir = Path(data_dir) / "evaluation_suite" / "gold" / "exec_result"
+    
+    # Try exact match first
+    exact_match = exec_result_dir / f"{instance_id}.csv"
+    if exact_match.exists():
+        try:
+            return [pd.read_csv(exact_match).to_dict(orient="records")]
+        except Exception:
+            pass
+            
+    # Try multiple (e.g. _a, _b)
+    pattern = str(exec_result_dir / f"{instance_id}_*.csv")
+    files = sorted(glob.glob(pattern))
+    results = []
+    for f in files:
+        try:
+            results.append(pd.read_csv(f).to_dict(orient="records"))
+        except Exception:
+            pass
+            
+    return results
 
 
 def _gerar_relatorio_md(
@@ -61,7 +126,7 @@ def _gerar_relatorio_md(
     Path(report_path).parent.mkdir(parents=True, exist_ok=True)
 
     lines = []
-    lines.append("# Spider Evaluation Report")
+    lines.append("# Spider 2.0 Lite Evaluation Report")
     lines.append("")
     lines.append(f"**Gerado em:** {timestamp}")
     lines.append("")
@@ -98,8 +163,8 @@ def _gerar_relatorio_md(
     # --- Tabela por pergunta ---
     lines.append("## Resultados por Pergunta")
     lines.append("")
-    lines.append("| # | DB | Pergunta | Match | F1 | Similarity | Veredito |")
-    lines.append("|---|-----|----------|-------|----|------------|----------|")
+    lines.append("| Instance ID | DB | Pergunta | Match | F1 | Similarity | Veredito |")
+    lines.append("|-------------|----|----------|-------|----|------------|----------|")
     for r in all_rows:
         pergunta_curta = str(r['pergunta_usuario'])[:50]
         match_icon = "✅" if r['resultado_exato_match'] is True else ("❌" if r['resultado_exato_match'] is False else "⚠️")
@@ -122,26 +187,19 @@ def _gerar_relatorio_md(
         lines.append("")
 
         for i, m in enumerate(mismatches, 1):
-            lines.append(f"### Mismatch {i} — Pergunta #{m['id']} (`{m['db_id']}`)")
+            lines.append(f"### Mismatch {i} — Instância `{m['id']}` (`{m['db_id']}`)")
             lines.append("")
             lines.append(f"**Pergunta:** {m['pergunta']}")
             lines.append("")
             lines.append(f"**F1:** {m['f1']:.4f} | **Precision:** {m['precision']:.4f} | **Recall:** {m['recall']:.4f}")
             lines.append("")
 
-            # SQL comparison
             lines.append("**Query Ouro (Spider):**")
-            lines.append(f"```sql")
-            lines.append(m['query_ouro'])
-            lines.append(f"```")
-            lines.append("")
+            lines.append(f"```sql\n{m['query_ouro']}\n```\n")
+            
             lines.append("**Query Agente:**")
-            lines.append(f"```sql")
-            lines.append(m['query_agente'])
-            lines.append(f"```")
-            lines.append("")
+            lines.append(f"```sql\n{m['query_agente']}\n```\n")
 
-            # Result comparison (show up to 20 rows each)
             lines.append("**Resultado Ouro** (primeiras 20 linhas):")
             lines.append("")
             ouro_sample = m['resultado_ouro'][:20]
@@ -186,68 +244,18 @@ def _gerar_relatorio_md(
 
 
 def main():
-    """Main entry point."""
-    parser = argparse.ArgumentParser(
-        description="Avaliar agente Text-to-Insight contra Spider dataset"
-    )
-    parser.add_argument(
-        "--sample-size",
-        type=int,
-        default=10,
-        help="Quantas perguntas testar (default: 10)",
-    )
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=42,
-        help="Seed para reproducibilidade (default: 42)",
-    )
-    parser.add_argument(
-        "--db-filter",
-        type=str,
-        help="Filtrar por banco específico (ex: concert_singer)",
-    )
-    parser.add_argument(
-        "--output",
-        type=str,
-        help="Caminho para salvar CSV (default: reports/spider_eval_TIMESTAMP.csv)",
-    )
-    parser.add_argument(
-        "--max-attempts",
-        type=int,
-        default=3,
-        help="Máximo de tentativas por pergunta (default: 3)",
-    )
-    parser.add_argument(
-        "--data-dir",
-        type=str,
-        default="spider_data",
-        help="Diretório com dados do Spider",
-    )
-
-    # testar queries individualmente
-    parser.add_argument(
-        "--question-filter",
-        type=str,
-        help="Filtrar por um trecho específico da pergunta em inglês",
-    )
-    parser.add_argument(
-        "--model",
-        type=str,
-        default="gpt-4o-mini",
-        help="Modelo LLM a utilizar (default: gpt-4o-mini)",
-    )
-    parser.add_argument(
-        "--with-graphs",
-        action="store_true",
-        help="Ativar a geração de gráficos e salvamento de CSV",
-    )
-    parser.add_argument(
-        "--report-dir",
-        type=str,
-        default="",
-        help="Pasta dentro de 'reports' para salvar os relatórios .md (CSVs continuam fora)",
-    )
+    parser = argparse.ArgumentParser(description="Avaliar agente Text-to-Insight contra Spider 2.0 Lite")
+    parser.add_argument("--sample-size", type=int, default=10, help="Quantas perguntas testar")
+    parser.add_argument("--seed", type=int, default=42, help="Seed para reproducibilidade")
+    parser.add_argument("--db-filter", type=str, help="Filtrar por banco específico (ex: E_commerce)")
+    parser.add_argument("--output", type=str, help="Caminho para salvar CSV")
+    parser.add_argument("--max-attempts", type=int, default=3, help="Máximo de tentativas por pergunta")
+    parser.add_argument("--data-dir", type=str, default="spider2-lite", help="Diretório base do Spider 2 Lite")
+    parser.add_argument("--sqlite-dir", type=str, default="spider2-lite/resource/databases/spider2-localdb", help="Diretório contendo os bancos sqlite do Spider 2")
+    parser.add_argument("--question-filter", type=str, help="Filtrar por um trecho da pergunta")
+    parser.add_argument("--model", type=str, default="gpt-4o-mini", help="Modelo LLM a utilizar")
+    parser.add_argument("--with-graphs", action="store_true", help="Ativar a geração de gráficos e salvamento de CSV")
+    parser.add_argument("--report-dir", type=str, default="", help="Pasta dentro de 'reports' para salvar os relatórios .md")
 
     args = parser.parse_args()
 
@@ -259,81 +267,87 @@ def main():
         print("❌ Erro: Chave API não encontrada em .env")
         sys.exit(1)
 
-    # 1. Carregar dados
-    print(f"\n📂 Carregando exemplos do Spider de {args.data_dir}...")
+    print(f"\n📂 Carregando exemplos do Spider 2 Lite de {args.data_dir}...")
     try:
-        exemplos = load_spider_dev_examples(args.data_dir)
-        print(f"✓ Carregados {len(exemplos)} exemplos")
+        exemplos = load_spider2_examples(args.data_dir)
+        print(f"✓ Carregados {len(exemplos)} exemplos totais")
     except FileNotFoundError as e:
         print(f"❌ {e}")
         sys.exit(1)
 
-    # 2. Aplicar filtros
+    # Filtrar apenas os locais (SQLite) já que o framework suporta SQLite nativamente
+    exemplos = [ex for ex in exemplos if ex.get("instance_id", "").startswith("local")]
+    print(f"✓ Filtrados para {len(exemplos)} exemplos baseados em SQLite (prefixo 'local')")
+
     if args.db_filter:
-        exemplos = filter_by_db_id(exemplos, args.db_filter)
+        exemplos = [ex for ex in exemplos if ex.get("db") == args.db_filter]
         print(f"✓ Filtrados por db_id={args.db_filter}: {len(exemplos)} exemplos")
 
-    # --- NOVO TRECHO ADICIONADO ---
     if args.question_filter:
-        exemplos = [
-            ex for ex in exemplos 
-            if args.question_filter.lower() in ex.get("question", "").lower()
-        ]
-        print(f"✓ Filtrados pela pergunta contendo '{args.question_filter}': {len(exemplos)} exemplos")
+        exemplos = [ex for ex in exemplos if args.question_filter.lower() in ex.get("question", "").lower()]
+        print(f"✓ Filtrados pela pergunta '{args.question_filter}': {len(exemplos)} exemplos")
     
-    # 3. Fazer sampling
-    exemplos = sample_examples(exemplos, sample_size=args.sample_size, seed=args.seed)
-    print(
-        f"✓ Selecionados {len(exemplos)} exemplos (seed={args.seed}, "
-        f"bancos únicos: {len(get_unique_db_ids(exemplos))})"
-    )
+    if args.seed is not None:
+        random.seed(args.seed)
+    if args.sample_size is not None and args.sample_size < len(exemplos):
+        exemplos = random.sample(exemplos, k=args.sample_size)
+        
+    print(f"✓ Selecionados {len(exemplos)} exemplos para teste.")
 
-    # 4. Inicializar componentes
     print("\n🔧 Inicializando componentes...")
-
-    executor = SpiderQueryExecutor(database_dir=str(Path(args.data_dir) / "database"))
+    executor = Spider2QueryExecutor(database_dir=args.sqlite_dir)
     print("✓ Query executor inicializado")
 
-    # 5. Preparar CSV
-    if args.output:
-        csv_path = args.output
-    else:
-        csv_path = f"reports/{CSVReporter.generate_timestamped_filename('spider_eval')}"
-
+    csv_path = args.output if args.output else f"reports/{CSVReporter.generate_timestamped_filename('spider2_eval')}"
     reporter = CSVReporter(csv_path)
     print(f"✓ CSV reporter inicializado: {csv_path}")
 
-    # 6. Loop de testes
     print(f"\n🚀 Iniciando avaliação com {len(exemplos)} perguntas...\n")
     print("=" * 100)
 
     all_rows = []
-    mismatches = []  # Coletar detalhes dos casos que não bateram
-    ex_id = 1
-
-    # Cache de InsightEngine por db_id para evitar recompilação do grafo
-    engine_cache: dict[str, InsightEngine] = {}
+    mismatches = []
+    engine_cache = {}
 
     for idx, ex in enumerate(exemplos, 1):
+        instance_id = ex.get("instance_id")
+        db_id = ex.get("db", "")
         pergunta = ex.get("question", "")
-        query_ouro = ex.get("query", "")
-        db_id = ex.get("db_id", "")
+        
+        # Recuperar query ouro e/ou csvs ouro
+        query_ouro = get_gold_sql(args.data_dir, instance_id)
+        gold_results_list = get_gold_results(args.data_dir, instance_id)
 
-        print(f"\n[{idx}/{len(exemplos)}] Pergunta: {pergunta[:60]}...")
-        print(f"     DB: {db_id} | Query Ouro: {query_ouro[:50]}...")
+        if not query_ouro and not gold_results_list:
+            print(f"\n[{idx}/{len(exemplos)}] ⚠️ Nenhuma query ouro nem resultado CSV encontrados para {instance_id}. Pulando.")
+            continue
 
-        # Executar query ouro para obter resultado esperado
-        print(f"     → Executando query ouro...")
-        resultado_ouro = executor.execute_query(db_id, query_ouro)
+        print(f"\n[{idx}/{len(exemplos)}] Instance: {instance_id} | DB: {db_id} | Pergunta: {pergunta[:60]}...")
+        if query_ouro:
+            print(f"     → Query Ouro: {query_ouro[:50]}...")
+        else:
+            print(f"     → Query Ouro não fornecida (avaliando via CSVs oficiais).")
 
-        if not resultado_ouro["success"]:
-            print(f"     ⚠️  Erro na query ouro: {resultado_ouro['error']}")
-            continue  # Pular este exemplo
+        # Configurar resultado ouro (para relatórios e fallback)
+        if gold_results_list:
+            resultado_ouro_primeiro = {"success": True, "results": gold_results_list[0], "row_count": len(gold_results_list[0])}
+            print(f"     ✓ CSV Ouro carregado ({len(gold_results_list)} variantes, usando a primeira para display com {len(gold_results_list[0])} linhas)")
+        else:
+            resultado_ouro_primeiro = executor.execute_query(db_id, query_ouro)
+            if not resultado_ouro_primeiro["success"]:
+                print(f"     ⚠️  Erro na query ouro ou db ausente: {resultado_ouro_primeiro['error']}")
+                print("     (Aviso: Certifique-se de baixar e extrair os bancos locais em spider2-localdb)")
+                continue
+            gold_results_list = [resultado_ouro_primeiro["results"]]
+            print(f"     ✓ Query ouro retornou {resultado_ouro_primeiro['row_count']} linhas")
 
-        print(f"     ✓ Query ouro retornou {resultado_ouro['row_count']} linhas")
-
-        # Obter ou criar InsightEngine para este db_id
-        db_path = str(executor.get_db_path(db_id))
+        # Inicializar engine
+        try:
+            db_path = str(executor.get_db_path(db_id))
+        except FileNotFoundError as e:
+            print(f"     ❌ {e}")
+            continue
+            
         if db_id not in engine_cache:
             try:
                 engine_cache[db_id] = InsightEngine(
@@ -344,29 +358,22 @@ def main():
                     show_output=False,
                     enable_graphs=args.with_graphs,
                 )
-                print(f"     ✓ InsightEngine inicializado para db={db_id}")
             except Exception as e:
                 print(f"     ❌ Erro ao inicializar InsightEngine: {e}")
                 continue
 
         engine = engine_cache[db_id]
 
-        # Invocar agente via InsightEngine.run()
-        print(f"     → Invocando agente via InsightEngine...")
+        print(f"     → Invocando agente...")
         inicio_agente = time.time()
-
         try:
-            resultado = engine.run(
-                thread_id=f"spider_test_{ex_id}",
-                query=pergunta,
-            )
+            resultado = engine.run(thread_id=f"spider2_test_{instance_id}", query=pergunta)
         except Exception as e:
             print(f"     ⚠️  Erro ao processar pergunta: {str(e)}")
             continue
 
         tempo_total = (time.time() - inicio_agente) * 1000
 
-        # Extrair dados do resultado
         query_agente = resultado.get("sql_gerada", "")
         veredito = resultado.get("status", "")
         feedback_estado = resultado.get("feedback_critico", "")
@@ -390,7 +397,6 @@ def main():
         if not query_1a_tentativa:
             query_1a_tentativa = query_agente  # fallback: se só houve 1 tentativa
 
-        # Mapear status para veredito e definir feedback
         if veredito == "aprovado":
             veredito_critico = "aprovado"
             feedback_critico = feedback_estado if feedback_estado else "Aprovado"
@@ -401,7 +407,6 @@ def main():
             veredito_critico = "erro"
             feedback_critico = feedback_estado if feedback_estado else "Erro na avaliação"
 
-        # Comparar resultados se query agente foi gerada
         resultado_exato_match = None
         resultado_exato_match_1a = None
         resultado_f1_1a = 0.0
@@ -411,31 +416,40 @@ def main():
         if query_agente and not erro_exec:
             resultado_agente = executor.execute_query(db_id, query_agente)
             if resultado_agente["success"]:
-                # Imprimir os resultados das duas queries
-                print(f"Resultado Ouro: {resultado_ouro['results'][:50]}")
-                print(f"Resultado Text-to-Insight: {resultado_agente['results'][:50]}")
+                if query_ouro:
+                    similarity_score = sql_similarity_score(query_ouro, query_agente)
+                
+                # Testar contra todas as variantes de ouro e pegar a melhor pontuação
+                best_match = False
+                best_f1 = {"f1": 0.0, "precision": 0.0, "recall": 0.0}
+                
+                for gold_res in gold_results_list:
+                    match_atual = results_exact_match(gold_res, resultado_agente["results"])
+                    f1_atual = results_f1_score(gold_res, resultado_agente["results"])
+                    
+                    if match_atual:
+                        best_match = True
+                    
+                    if f1_atual["f1"] > best_f1["f1"]:
+                        best_f1 = f1_atual
+                
+                resultado_exato_match = best_match
+                f1_scores = best_f1
 
-                resultado_exato_match = results_exact_match(
-                    resultado_ouro["results"],
-                    resultado_agente["results"],
-                )
-                similarity_score = sql_similarity_score(query_ouro, query_agente)
-                f1_scores = results_f1_score(
-                    resultado_ouro["results"],
-                    resultado_agente["results"],
-                )
-
-                # Ablação: calcular exact match e F1 da 1ª tentativa
+                # Ablação: calcular exact match da 1ª tentativa
                 if query_1a_tentativa and query_1a_tentativa != query_agente:
                     res_1a = executor.execute_query(db_id, query_1a_tentativa)
                     if res_1a["success"]:
-                        resultado_exato_match_1a = results_exact_match(
-                            resultado_ouro["results"], res_1a["results"]
-                        )
-                        f1_1a = results_f1_score(
-                            resultado_ouro["results"], res_1a["results"]
-                        )
-                        resultado_f1_1a = f1_1a["f1"]
+                        best_match_1a = False
+                        best_f1_1a = 0.0
+                        for gold_res in gold_results_list:
+                            if results_exact_match(gold_res, res_1a["results"]):
+                                best_match_1a = True
+                            f1_atual_1a = results_f1_score(gold_res, res_1a["results"])
+                            if f1_atual_1a["f1"] > best_f1_1a:
+                                best_f1_1a = f1_atual_1a["f1"]
+                        resultado_exato_match_1a = best_match_1a
+                        resultado_f1_1a = best_f1_1a
                     else:
                         resultado_exato_match_1a = False
                         resultado_f1_1a = 0.0
@@ -451,15 +465,14 @@ def main():
                     f"F1={f1_scores['f1']:.2f}, "
                     f"veredito={veredito_critico}"
                 )
-                # Coletar detalhes dos mismatches
                 if not resultado_exato_match:
                     mismatches.append({
-                        "id": ex_id,
+                        "id": instance_id,
                         "db_id": db_id,
                         "pergunta": pergunta,
                         "query_ouro": query_ouro,
                         "query_agente": query_agente,
-                        "resultado_ouro": resultado_ouro["results"],
+                        "resultado_ouro": gold_results_list[0],
                         "resultado_agente": resultado_agente["results"],
                         "f1": f1_scores["f1"],
                         "precision": f1_scores["precision"],
@@ -468,14 +481,10 @@ def main():
             else:
                 erro_exec = resultado_agente["error"]
         else:
-            print(
-                f"       Resultado final ({tentativas} tentativa(s)): "
-                f"sem query gerada ou com erro de execução"
-            )
+            print(f"       Resultado final ({tentativas} tentativa(s)): sem query gerada ou com erro")
 
-        # Construir linha para CSV (com campos empíricos adicionais)
         row = build_comparison_row(
-            id_exemplo=ex_id,
+            id_exemplo=instance_id,
             tentativa_numero=tentativas,
             db_id=db_id,
             pergunta=pergunta,
@@ -508,38 +517,24 @@ def main():
         else:
             print(f"     ❌ NÃO APROVADO após {tentativas} tentativa(s)")
 
-        ex_id += 1
-        time.sleep(1)  # Delay entre perguntas
-
-    # 7. Gerar resumo
     print("\n" + "=" * 100)
-    print("📊 RESUMO FINAL")
+    print("📊 RESUMO FINAL SPIDER 2 LITE")
     print("=" * 100)
 
     if all_rows:
         summary = reporter.generate_summary(all_rows)
-        # Calcular F1 médio
         f1_values = [float(r.get("resultado_f1", 0.0) or 0.0) for r in all_rows]
         f1_medio = sum(f1_values) / len(f1_values) if f1_values else 0.0
-        # Calcular exact match rate
         match_values = [r.get("resultado_exato_match") for r in all_rows]
         exact_matches = sum(1 for v in match_values if v is True)
         exact_match_rate = exact_matches / len(all_rows) if all_rows else 0.0
 
-        print(f"Total de perguntas: {summary['total_perguntas']}")
-        print(f"Total de tentativas: {summary['total_tentativas']}")
-        print(f"Perguntas aprovadas: {summary['perguntas_aprovadas']}")
+        print(f"Total de perguntas processadas: {summary['total_perguntas']}")
         print(f"Taxa de aprovação: {summary['taxa_aprovacao']:.1%}")
-        print(f"Taxa de sucesso na 1ª tentativa: {summary['taxa_1a_tentativa']:.1%}")
-        print(f"Tentativas médias por pergunta: {summary['tentativas_media']:.2f}")
-        print(f"Similarity score médio: {summary['similarity_media']:.4f}")
         print(f"F1 score médio (resultados): {f1_medio:.4f}")
         print(f"Exact match rate: {exact_match_rate:.1%}")
-        print(f"Mismatches: {len(mismatches)}/{len(all_rows)}")
-        print(f"Tempo médio por tentativa: {summary['tempo_medio_ms']:.2f} ms")
         print(f"\n✅ CSV salvo em: {csv_path}")
 
-        # 8. Gerar relatório textual em Markdown
         if args.report_dir:
             md_dir = Path("reports") / args.report_dir
             md_dir.mkdir(parents=True, exist_ok=True)
@@ -567,14 +562,14 @@ def main():
         empirico_dir = str((Path(csv_path).parent / Path(csv_path).stem).absolute()) + "_empirico"
         gerar_relatorio_empirico_completo(
             report_path=empirico_path,
-            dataset_label="Spider",
+            dataset_label="Spider 2.0 Lite",
             all_rows=all_rows,
             output_dir=empirico_dir,
         )
         print(f"✅ Relatório empírico salvo em: {empirico_path}")
         print(f"   Gráficos e CSVs auxiliares em: {Path(empirico_dir).relative_to(Path.cwd())}/")
     else:
-        print("❌ Nenhum resultado para salvar")
+        print("❌ Nenhum resultado para salvar. (Verificou os bancos na pasta spider2-localdb?)")
 
 
 if __name__ == "__main__":

@@ -22,7 +22,7 @@ def test_schema_extrai_tabelas():
     """Schema node retorna contexto com tabelas do olist DB."""
     from text_to_insight.nodes.schema import nos_nodo_esquema
 
-    estado = {"db_path": DB_PATH, "pergunta_usuario": "teste"}
+    estado = {"db_path": DB_PATH, "pergunta_atual": "teste"}
     resultado = nos_nodo_esquema(estado)
 
     assert resultado["status"] == "schema_obtido"
@@ -34,7 +34,7 @@ def test_schema_erro_db_invalido():
     """Schema node retorna erro quando db_path não existe."""
     from text_to_insight.nodes.schema import nos_nodo_esquema
 
-    estado = {"db_path": "/caminho/inexistente.db", "pergunta_usuario": "teste"}
+    estado = {"db_path": "/caminho/inexistente.db", "pergunta_atual": "teste"}
     resultado = nos_nodo_esquema(estado)
 
     assert resultado["status"] == "exec_erro"
@@ -145,7 +145,7 @@ def test_executor_sucesso():
     estado = {
         "sql_gerada": "SELECT COUNT(*) as total FROM orders",
         "db_path": DB_PATH,
-        "pergunta_usuario": "teste",
+        "pergunta_atual": "teste",
     }
     resultado = nos_nodo_sandbox(estado)
 
@@ -161,7 +161,7 @@ def test_executor_sql_vazia():
     estado = {
         "sql_gerada": "",
         "db_path": DB_PATH,
-        "pergunta_usuario": "teste",
+        "pergunta_atual": "teste",
     }
     resultado = nos_nodo_sandbox(estado)
 
@@ -175,7 +175,7 @@ def test_executor_sql_com_erro():
     estado = {
         "sql_gerada": "SELECT * FROM tabela_que_nao_existe",
         "db_path": DB_PATH,
-        "pergunta_usuario": "teste",
+        "pergunta_atual": "teste",
     }
     resultado = nos_nodo_sandbox(estado)
 
@@ -208,7 +208,9 @@ def test_roteador_sandbox_muitas_tentativas():
     from text_to_insight.routers.edges import roteador_sandbox
 
     estado = {"status": "exec_erro", "tentativas_loop": 5}
-    assert roteador_sandbox(estado) == "planejador"
+    ## alteração: com muitas tentativas, o roteador deve direcionar para "critico" para forçar o fim do loop, não para "planejador"
+    #asert roteador_sandbox(estado) == "planejador"
+    assert roteador_sandbox(estado) == "critico"
 
 
 def test_roteador_planejador_sem_schema():

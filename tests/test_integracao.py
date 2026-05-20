@@ -39,7 +39,8 @@ def rate_limit_delay():
 
 def _estado_inicial(pergunta: str) -> dict:
     return {
-        "pergunta_usuario": pergunta,
+        "pergunta_original": pergunta,
+        "pergunta_atual": pergunta,
         "historico_conversa": [],
         "contexto_schema": "",
         "sql_gerada": "",
@@ -104,3 +105,31 @@ def test_estado_final_completo(grafo):
     assert resultado.get("sql_gerada", "") != ""
     assert resultado.get("saida_terminal", "") != ""
     assert resultado.get("tentativas_loop", 0) >= 1
+
+
+@pytest.mark.vcr
+@pytest.mark.timeout(180)
+def test_hitl_nova_pergunta_substitui(grafo):
+    """HITL com nova pergunta deve substituir pergunta_atual sem mudar a original."""
+    from text_to_insight.runtime import registrar_resposta_humana
+
+    config = {"configurable": {"thread_id": "teste_hitl_nova_pergunta"}}
+    grafo.grafo_text_to_insight.invoke(_estado_inicial("Quem e o Brad Pitt?"), config)
+
+    snapshot = grafo.grafo_text_to_insight.get_state(config)
+    assert snapshot.values.get("espera_humana") is True or snapshot.values.get("status") == "aguardando_input"
+
+    registrar_resposta_humana(
+        grafo_app=grafo.grafo_text_to_insight,
+        config=config,
+        user_response="Quero saber quantos clientes existem",
+    )
+
+    for _ in grafo.grafo_text_to_insight.stream(None, config, stream_mode="values"):
+        pass
+
+    resultado_final = grafo.grafo_text_to_insight.get_state(config).values
+
+    assert resultado_final.get("pergunta_original") == "Quem e o Brad Pitt?"
+    assert resultado_final.get("pergunta_atual") == "Quero saber quantos clientes existem"
+    assert "Brad Pitt" not in str(resultado_final.get("resposta_natural", ""))

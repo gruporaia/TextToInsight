@@ -70,7 +70,11 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativ
     """
     Nó Agente de Código: usa Gemini para gerar SQL a partir da pergunta + schema.
     """
-    pergunta = estado.get("pergunta_usuario", "")
+    pergunta = (
+        estado.get("pergunta_atual", "")
+        or estado.get("pergunta_original", "")
+        or estado.get("pergunta_usuario", "")
+    )
     conversa_previa = estado.get("historico_conversa", "")
     schema = estado.get("contexto_schema", "")
     schema_rag = estado.get("contexto_rag_schema", "")

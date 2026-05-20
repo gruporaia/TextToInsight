@@ -45,7 +45,11 @@ class _FakeCompiledGraph:
         state = self._thread_state(thread_id)
 
         if estado_execucao is not None:
-            pergunta = str(estado_execucao.get("pergunta_usuario", ""))
+            pergunta = (
+                str(estado_execucao.get("pergunta_atual", ""))
+                or str(estado_execucao.get("pergunta_original", ""))
+                or str(estado_execucao.get("pergunta_usuario", ""))
+            )
             if "hitl" in pergunta.lower():
                 state["values"] = {
                     **estado_execucao,
@@ -73,9 +77,8 @@ class _FakeCompiledGraph:
         state = self._thread_state(thread_id)
         state["values"].update(values)
 
-
 class _FakeGraph:
-    def __init__(self, api_key, model, hitl=True):
+    def __init__(self, api_key, model, hitl=True, **kwargs):
         self.grafo_text_to_insight = _FakeCompiledGraph()
 
 

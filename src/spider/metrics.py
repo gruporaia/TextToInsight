@@ -3,19 +3,34 @@ Métricas para comparação de queries SQL.
 
 Fornece:
 - Similarity score entre duas queries (difflib-based)
-- Comparação de resultados (exato match)
-- F1 score de resultados (row-level precision/recall)
+- Comparação de resultados no estilo Spider 2.0 (column-level matching)
+- F1 score de resultados (column-level precision/recall)
 - Normalização de SQL para comparação
+
+A lógica de comparação segue a métrica oficial do Spider 2.0:
+- Transpõe ambas as tabelas para obter vetores-coluna
+- Para cada coluna do gold, verifica se alguma coluna do pred bate
+- Usa tolerância de 1e-2 para comparações numéricas
+- Trata NaN/None com pd.isna
 """
 
 import difflib
+import math
 import re
-from collections import Counter
 from typing import Any
 
-import numpy as np
+import pandas as pd
 
 
+# ---------------------------------------------------------------------------
+# Constantes
+# ---------------------------------------------------------------------------
+_TOLERANCE = 1e-2
+
+
+# ---------------------------------------------------------------------------
+# Normalização de SQL
+# ---------------------------------------------------------------------------
 def normalize_sql(sql: str) -> str:
     """
     Normaliza SQL para comparação mais robusta.
@@ -75,114 +90,192 @@ def sql_similarity_score(sql1: str, sql2: str) -> float:
     return matcher.ratio()
 
 
-# def results_exact_match(
-#     results_gold: list[dict[str, Any]],
-#     results_agent: list[dict[str, Any]],
-# ) -> bool:
-#     """
-#     Compara se dois conjuntos de resultados são exatamente iguais.
+# ---------------------------------------------------------------------------
+# Helpers internos — lógica Spider 2.0
+# ---------------------------------------------------------------------------
+def _vectors_match(v1: list, v2: list, tol: float = _TOLERANCE, ignore_order: bool = False) -> bool:
+    """
+    Compara dois vetores (colunas transpostas) elemento a elemento,
+    seguindo a lógica oficial do Spider 2.0.
 
-#     Compara:
-#     - Número de linhas
-#     - Valores de cada linha (insensível a ordem das colunas)
+    - Aceita tolerância absoluta ``tol`` para pares numéricos.
+    - Trata ``pd.isna`` como iguais entre si.
+    - Se ``ignore_order`` estiver ativado, ordena ambos os vetores antes
+      de comparar.
+    """
+    if ignore_order:
+        v1 = sorted(v1, key=lambda x: (x is None, str(x), isinstance(x, (int, float))))
+        v2 = sorted(v2, key=lambda x: (x is None, str(x), isinstance(x, (int, float))))
 
-#     Args:
-#         results_gold: Resultados da query ouro
-#         results_agent: Resultados da query do agente
+    if len(v1) != len(v2):
+        return False
 
-#     Returns:
-#         True se resultados são iguais
-#     """
-#     if len(results_gold) != len(results_agent):
-#         return False
+    for a, b in zip(v1, v2):
+        if pd.isna(a) and pd.isna(b):
+            continue
+        elif isinstance(a, (int, float)) and isinstance(b, (int, float)):
+            if not math.isclose(float(a), float(b), abs_tol=tol):
+                return False
+        elif a != b:
+            return False
+    return True
 
-#     # Converter dicts para conjuntos de tuplas para comparação
-#     # (para serem agnósticos à ordem das colunas)
-#     def result_set(results: list[dict[str, Any]]) -> set:
-#         converted = []
-#         for row in results:
-#             # Converter valores para strings para lidar com tipos diferentes
-#             items = []
-#             for k in sorted(row.keys()):
-#                 # Normalizar None/NULL
-#                 v = row[k]
-#                 if v is None:
-#                     v = "NULL"
-#                 items.append((k, str(v)))
-#             converted.append(tuple(items))
-#         return set(converted)
 
-#     return result_set(results_gold) == result_set(results_agent)
+def _results_to_dataframe(results: list[dict[str, Any]]) -> pd.DataFrame:
+    """Converte list[dict] (formato do SpiderQueryExecutor) para DataFrame."""
+    if not results:
+        return pd.DataFrame()
+    return pd.DataFrame(results)
 
+
+# ---------------------------------------------------------------------------
+# Comparação principal — Spider 2.0
+# ---------------------------------------------------------------------------
+def compare_pandas_table(
+    pred: pd.DataFrame,
+    gold: pd.DataFrame,
+    condition_cols: list[int] | None = None,
+    ignore_order: bool = False,
+) -> int:
+    """
+    Compara pred vs gold seguindo a métrica oficial do Spider 2.0.
+
+    Para cada coluna do gold (opcionalmente filtrada por ``condition_cols``),
+    verifica se **alguma** coluna do pred é equivalente (dentro de tolerância
+    numérica e tratando NaN).
+
+    Args:
+        pred: DataFrame com resultados do agente.
+        gold: DataFrame com resultados esperados.
+        condition_cols: Índices das colunas do gold a avaliar.
+                        Se ``None`` ou vazio, avalia todas.
+        ignore_order: Se True, ordena os valores de cada coluna antes
+                      de comparar (útil quando não há ORDER BY).
+
+    Returns:
+        1 se todas as colunas do gold foram encontradas no pred, 0 caso contrário.
+    """
+    if condition_cols:
+        gold_cols = gold.iloc[:, condition_cols]
+    else:
+        gold_cols = gold
+
+    t_gold_list = gold_cols.transpose().values.tolist()
+    t_pred_list = pred.transpose().values.tolist()
+
+    for gold_vec in t_gold_list:
+        if not any(_vectors_match(gold_vec, pred_vec, ignore_order=ignore_order)
+                   for pred_vec in t_pred_list):
+            return 0
+    return 1
+
+
+def compare_multi_pandas_table(
+    pred: pd.DataFrame,
+    multi_gold: list[pd.DataFrame],
+    multi_condition_cols: list | None = None,
+    multi_ignore_order: bool = False,
+) -> int:
+    """
+    Compara pred contra *múltiplas* respostas ouro válidas (Spider 2.0).
+
+    Retorna 1 se o pred bater com **pelo menos uma** das respostas ouro.
+
+    Args:
+        pred: DataFrame com resultados do agente.
+        multi_gold: Lista de DataFrames de respostas ouro.
+        multi_condition_cols: Lista de listas de índices, uma por gold.
+        multi_ignore_order: Se True, aplica ignore_order em todas.
+
+    Returns:
+        1 se match com alguma resposta ouro, 0 caso contrário.
+    """
+    if (
+        multi_condition_cols is None
+        or multi_condition_cols == []
+        or multi_condition_cols == [[]]
+        or multi_condition_cols == [None]
+    ):
+        multi_condition_cols = [[] for _ in range(len(multi_gold))]
+    elif len(multi_gold) > 1 and not all(isinstance(s, list) for s in multi_condition_cols):
+        multi_condition_cols = [multi_condition_cols for _ in range(len(multi_gold))]
+
+    for i, gold in enumerate(multi_gold):
+        if compare_pandas_table(pred, gold, multi_condition_cols[i], multi_ignore_order):
+            return 1
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Funções de interface pública (mantêm assinatura list[dict])
+# ---------------------------------------------------------------------------
 def results_exact_match(
     results_gold: list[dict[str, Any]],
     results_agent: list[dict[str, Any]],
+    ignore_order: bool = True,
 ) -> bool:
     """
-    Compara se dois conjuntos de resultados são iguais baseando-se APENAS nos valores.
-    Ignora os nomes das colunas e a ordem das linhas.
+    Compara se dois conjuntos de resultados são equivalentes usando
+    a métrica oficial do Spider 2.0 (column-level matching).
+
+    Ignora nomes de colunas — apenas os *valores* das colunas importam.
+    Usa tolerância de 1e-2 para números e trata None/NaN como iguais.
+
+    Args:
+        results_gold: Resultados da query ouro (list[dict]).
+        results_agent: Resultados da query do agente (list[dict]).
+        ignore_order: Se True (padrão), a ordem das linhas é ignorada.
+
+    Returns:
+        True se todas as colunas do gold foram encontradas no pred.
     """
-    # Se não têm o mesmo número de linhas, já é False
-    if len(results_gold) != len(results_agent):
-        return False
-        
-    # Se as duas listas vierem vazias (0 linhas), é True
-    if not results_gold:
+    # Ambos vazios
+    if not results_gold and not results_agent:
         return True
 
-    def extract_values_to_numpy(results: list[dict[str, Any]]) -> np.ndarray:
-        matrix = []
-        for row in results:
-            # Pega APENAS os valores, ignora as chaves
-            # Converte tudo para string (evita falsos negativos entre 0 inteiro e 0.0 float)
-            row_values = [str(v) if v is not None else "NULL" for v in row.values()]
-            matrix.append(row_values)
-            
-        # Converte a matriz nativa do Python para um Array NumPy
-        arr = np.array(matrix)
-        
-        # Como as queries podem retornar as linhas em ordens diferentes (se não houver ORDER BY),
-        # precisamos ordenar as linhas do array numpy lexograficamente para uma comparação justa.
-        # np.lexsort ordena pelas colunas, da última para a primeira, então passamos transposto e invertido
-        sorted_indices = np.lexsort(arr.T[::-1])
-        return arr[sorted_indices]
+    # Um vazio e outro não
+    if not results_gold or not results_agent:
+        return False
 
-    # Extrai, processa e ordena os arrays
-    gold_array = extract_values_to_numpy(results_gold)
-    agent_array = extract_values_to_numpy(results_agent)
+    gold_df = _results_to_dataframe(results_gold)
+    pred_df = _results_to_dataframe(results_agent)
 
-    # np.array_equal compara a estrutura (dimensões) e o conteúdo.
-    # Usamos bool() para garantir que retorne um booleano nativo do Python e não um np.bool_
-    return bool(np.array_equal(gold_array, agent_array))
+    # Número de linhas diferente → impossível match
+    if len(gold_df) != len(pred_df):
+        return False
+
+    return compare_pandas_table(pred_df, gold_df, ignore_order=ignore_order) == 1
 
 
 def results_f1_score(
     results_gold: list[dict[str, Any]],
     results_agent: list[dict[str, Any]],
+    ignore_order: bool = True,
 ) -> dict[str, float]:
     """
-    Calcula Precision, Recall e F1 row-level entre resultados gold e agent.
+    Calcula Precision, Recall e F1 a nível de coluna, seguindo a lógica
+    do Spider 2.0.
 
-    Cada linha é convertida em uma tupla canônica (valores ordenados, como string)
-    e tratada como membro de um multiset (Counter). Isso permite medir parcialmente
-    quantas linhas o agente acertou, mesmo que não tenha acertado todas.
+    Para cada coluna do gold, verifica se alguma coluna do pred é
+    equivalente (tolerância numérica de 1e-2, NaN-aware).
 
-    - Precision: das linhas que o agente retornou, quantas estão no gold?
-    - Recall:    das linhas do gold, quantas o agente retornou?
-    - F1:        média harmônica de precision e recall.
+    - Precision: das colunas que o agente retornou, quantas batem com
+      alguma coluna do gold?
+    - Recall: das colunas do gold, quantas foram cobertas pelo agente?
+    - F1: média harmônica de precision e recall.
+
+    Quando o número de linhas difere, as linhas excedentes são tratadas
+    como colunas não-matching, penalizando precision ou recall conforme
+    o caso.
 
     Args:
-        results_gold: Resultados da query ouro
-        results_agent: Resultados da query do agente
+        results_gold: Resultados da query ouro (list[dict]).
+        results_agent: Resultados da query do agente (list[dict]).
+        ignore_order: Se True (padrão), a ordem das linhas é ignorada.
 
     Returns:
-        Dict com chaves: precision, recall, f1 (floats de 0 a 1)
+        Dict com chaves: precision, recall, f1 (floats de 0 a 1).
     """
-    def _row_to_canonical(row: dict[str, Any]) -> tuple:
-        """Converte uma linha em tupla canônica de valores (ordenados, stringificados)."""
-        values = [str(v) if v is not None else "NULL" for v in row.values()]
-        return tuple(sorted(values))
-
     # Ambos vazios → match perfeito
     if not results_gold and not results_agent:
         return {"precision": 1.0, "recall": 1.0, "f1": 1.0}
@@ -193,25 +286,62 @@ def results_f1_score(
     if not results_agent:
         return {"precision": 1.0, "recall": 0.0, "f1": 0.0}
 
-    gold_bag = Counter(_row_to_canonical(r) for r in results_gold)
-    agent_bag = Counter(_row_to_canonical(r) for r in results_agent)
+    gold_df = _results_to_dataframe(results_gold)
+    pred_df = _results_to_dataframe(results_agent)
 
-    # Interseção: min(count_gold, count_agent) para cada tupla
-    true_positives = sum((gold_bag & agent_bag).values())
-    total_agent = sum(agent_bag.values())
-    total_gold = sum(gold_bag.values())
+    # Número de linhas diferente — padroniza para o mesmo tamanho usando NaN
+    # para viabilizar a comparação coluna-a-coluna. As colunas onde os NaNs
+    # extras forem injetados não vão bater, o que penaliza corretamente.
+    max_rows = max(len(gold_df), len(pred_df))
+    if len(gold_df) < max_rows:
+        padding = pd.DataFrame(
+            [[None] * gold_df.shape[1]] * (max_rows - len(gold_df)),
+            columns=gold_df.columns,
+        )
+        gold_df = pd.concat([gold_df, padding], ignore_index=True)
+    if len(pred_df) < max_rows:
+        padding = pd.DataFrame(
+            [[None] * pred_df.shape[1]] * (max_rows - len(pred_df)),
+            columns=pred_df.columns,
+        )
+        pred_df = pd.concat([pred_df, padding], ignore_index=True)
 
-    precision = true_positives / total_agent if total_agent > 0 else 0.0
-    recall = true_positives / total_gold if total_gold > 0 else 0.0
+    t_gold_list = gold_df.transpose().values.tolist()
+    t_pred_list = pred_df.transpose().values.tolist()
+
+    total_gold = len(t_gold_list)
+    total_pred = len(t_pred_list)
+
+    # Recall: quantas colunas do gold batem com alguma coluna do pred?
+    gold_matched = sum(
+        1 for g in t_gold_list
+        if any(_vectors_match(g, p, ignore_order=ignore_order) for p in t_pred_list)
+    )
+
+    # Precision: quantas colunas do pred batem com alguma coluna do gold?
+    pred_matched = sum(
+        1 for p in t_pred_list
+        if any(_vectors_match(p, g, ignore_order=ignore_order) for g in t_gold_list)
+    )
+
+    recall = gold_matched / total_gold if total_gold > 0 else 0.0
+    precision = pred_matched / total_pred if total_pred > 0 else 0.0
 
     if precision + recall == 0:
         f1 = 0.0
     else:
         f1 = 2 * (precision * recall) / (precision + recall)
 
-    return {"precision": round(precision, 4), "recall": round(recall, 4), "f1": round(f1, 4)}
+    return {
+        "precision": round(precision, 4),
+        "recall": round(recall, 4),
+        "f1": round(f1, 4),
+    }
 
 
+# ---------------------------------------------------------------------------
+# Construtor de linha para CSV de avaliação
+# ---------------------------------------------------------------------------
 def build_comparison_row(
     id_exemplo: int,
     tentativa_numero: int,
@@ -228,6 +358,14 @@ def build_comparison_row(
     resultado_f1: float = 0.0,
     resultado_precision: float = 0.0,
     resultado_recall: float = 0.0,
+    tokens_input: int = 0,
+    tokens_output: int = 0,
+    tokens_total: int = 0,
+    viz_acionado: bool = False,
+    viz_sucesso: bool = False,
+    resultado_exato_match_1a_tentativa: bool | None = None,
+    resultado_f1_1a_tentativa: float = 0.0,
+    query_1a_tentativa: str = "",
 ) -> dict[str, Any]:
     """
     Constrói uma linha para o CSV de avaliação.
@@ -248,9 +386,17 @@ def build_comparison_row(
         resultado_f1: F1 score row-level (0-1)
         resultado_precision: Precision row-level (0-1)
         resultado_recall: Recall row-level (0-1)
+        tokens_input: Total de tokens de entrada consumidos
+        tokens_output: Total de tokens de saída consumidos
+        tokens_total: Total de tokens consumidos
+        viz_acionado: Se o agente de visualização foi acionado
+        viz_sucesso: Se o gráfico foi gerado com sucesso
+        resultado_exato_match_1a_tentativa: Exact match da 1ª tentativa (para ablação)
+        resultado_f1_1a_tentativa: F1 score da 1ª tentativa (para ablação)
+        query_1a_tentativa: SQL gerada na 1ª tentativa
 
     Returns:
-        Dict com 15 chaves para CSV
+        Dict com chaves para CSV
     """
     return {
         "id_exemplo": id_exemplo,
@@ -268,5 +414,14 @@ def build_comparison_row(
         "resultado_f1": resultado_f1,
         "resultado_precision": resultado_precision,
         "resultado_recall": resultado_recall,
+        "tokens_input": tokens_input,
+        "tokens_output": tokens_output,
+        "tokens_total": tokens_total,
+        "viz_acionado": viz_acionado,
+        "viz_sucesso": viz_sucesso,
+        "resultado_exato_match_1a_tentativa": resultado_exato_match_1a_tentativa if resultado_exato_match_1a_tentativa is not None else "",
+        "resultado_f1_1a_tentativa": resultado_f1_1a_tentativa,
+        "query_1a_tentativa": query_1a_tentativa,
     }
+
 
