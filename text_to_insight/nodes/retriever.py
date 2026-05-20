@@ -25,9 +25,11 @@ def _formatar_contexto_rag(retrieved, relations) -> str:
 
 
 def nos_nodo_retriever(estado: EstadoTextToInsight) -> dict:
-    pergunta = estado.get("pergunta_usuario", "")
+    pergunta = estado.get("pergunta_atual", "")
     schema_full = estado.get("contexto_schema", "")
-    if not schema_full or not pergunta or len(schema_full) < 500: 
+    schema_size = len(schema_full)
+    if not schema_full or not pergunta or schema_size < 500: 
+        print(f"[RETRIEVER] contexto_schema contém {schema_size} chars, mantendo original")
         return {}
 
     print(f"[RETRIEVER] schema completo: {len(schema_full)} chars (~{len(schema_full)//4} tokens)")

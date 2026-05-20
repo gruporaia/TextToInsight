@@ -104,6 +104,9 @@ def roteador_planejador(estado: EstadoTextToInsight) -> Literal["esquema", "agen
     print("[ROTEADOR_PLANEJADOR] Default → planejador")
     return "planejador"
 
+def roteador_schema(estado: EstadoTextToInsight) -> Literal["retriever", "enriquecimento_rag"]:
+    tem_descricao = estado.get("tem_descricao", False)
+    return "retriever" if tem_descricao else "enriquecimento_rag"
 
 def roteador_grafico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -> Literal["gerador_grafico", "resposta"]:
     """
@@ -111,7 +114,7 @@ def roteador_grafico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -
 
     Usa o LLM para avaliar se a pergunta e os dados justificam uma visualização.
     """
-    pergunta = estado.get("pergunta_usuario", "")
+    pergunta = estado.get("pergunta_atual", "")
     preview = estado.get("linhas_resultado_preview", [])
     total = estado.get("total_linhas_resultado", 0)
     csv_path = estado.get("caminho_csv_resultado", "")

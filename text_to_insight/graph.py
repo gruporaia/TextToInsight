@@ -29,8 +29,9 @@ from .nodes import (
     nos_nodo_resposta,
     nos_nodo_salvar_csv,
     nos_nodo_gerador_grafico,
+    nos_nodo_enrich,
 )
-from .routers import roteador_sandbox, roteador_planejador, roteador_grafico
+from .routers import roteador_sandbox, roteador_planejador, roteador_grafico, roteador_schema
 from .model_selection import get_model
 
 def nos_nodo_espera_humana(estado: EstadoTextToInsight):
@@ -55,6 +56,7 @@ class Graph:
         construtor_grafo.add_node("espera_humana", nos_nodo_espera_humana)
         construtor_grafo.add_node("esquema", nos_nodo_esquema)
         construtor_grafo.add_node("retriever", nos_nodo_retriever)
+        construtor_grafo.add_node("enriquecimento_rag", partial(nos_nodo_enrich, llm=self.llm))
         construtor_grafo.add_node("agente_codigo", partial(nos_nodo_agente_codigo, llm=self.llm))
         construtor_grafo.add_node("sandbox", nos_nodo_sandbox)
         construtor_grafo.add_node("critico", partial(nos_nodo_critico, llm=self.llm))
@@ -65,7 +67,7 @@ class Graph:
         # 2. ARESTAS FIXAS
         construtor_grafo.add_edge(START, "planejador")
         construtor_grafo.add_edge("espera_humana", "planejador")
-        construtor_grafo.add_edge("esquema", "retriever")
+        construtor_grafo.add_edge("enriquecimento_rag", "retriever")
         construtor_grafo.add_edge("retriever", "planejador")
         construtor_grafo.add_edge("agente_codigo", "sandbox")
 
@@ -94,6 +96,16 @@ class Graph:
                 "fim": END,
             }
         )
+
+        construtor_grafo.add_conditional_edges(
+            "esquema",
+            roteador_schema,
+            {
+                "retriever": "retriever",
+                "enriquecimento_rag": "enriquecimento_rag",
+            }
+        )
+
 
         MAX_TENTATIVAS_CRITICO = 3
 

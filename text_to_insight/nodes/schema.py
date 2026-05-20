@@ -134,6 +134,19 @@ def nos_nodo_esquema(estado: EstadoTextToInsight) -> dict:
             "status": "exec_erro",
         }
 
+    cache_path = caminho_db.with_name(f"{caminho_db.stem}_enriched_schema.txt")
+    if cache_path.exists():
+        print(f"[SCHEMA] Schema enriquecido em cache encontrado para {caminho_db.stem}.")
+        with open(cache_path, "r", encoding="utf-8") as f:
+            contexto_cache = f.read()
+            
+        return {
+            "contexto_schema": contexto_cache,
+            "erro_execucao": "",
+            "status": "schema_obtido",
+            "tem_descricao": True  #Já tem descrição enriquecida, então pode pular o enrich
+        }
+
     try:
         # Modo somente leitura para maior segurança
         conn = sqlite3.connect(f"file:{caminho_db}?mode=ro", uri=True)
@@ -141,12 +154,15 @@ def nos_nodo_esquema(estado: EstadoTextToInsight) -> dict:
             contexto = _formatar_schema_sqlite(conn) # formatação do schema passando a conexão aberta
         finally:
             conn.close()
-
+        # cache_path = caminho_db.with_name(f"{caminho_db.stem}_full_schema.txt")
+        # with open(cache_path, "w", encoding="utf-8") as f:
+        #     f.write(contexto)
         print("[SCHEMA] Contexto obtido com sucesso.")
         return {
             "contexto_schema": contexto,
             "erro_execucao": "",
             "status": "schema_obtido",
+            "tem_descricao": False #SQLite não vai ter descrição nunca, então sempre vai cair no enrich
         }
     except Exception as e:
         msg = f"Falha ao ler schema SQLite: {e}"

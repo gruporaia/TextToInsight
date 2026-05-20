@@ -56,6 +56,7 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     
     contexto_schema: str
     contexto_rag_schema: str
+    tem_descricao : bool
     sql_gerada: str
     linhas_resultado_preview: list[dict[str, Any]]
     total_linhas_resultado: int

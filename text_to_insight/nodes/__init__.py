@@ -16,6 +16,7 @@ Nós disponíveis:
 
 from .planner import nos_nodo_planejador
 from .schema import nos_nodo_esquema
+from .erich_schema import nos_nodo_enrich
 from .retriever import nos_nodo_retriever
 from .code_agent.code_agent import nos_nodo_agente_codigo
 from .sandbox import nos_nodo_sandbox
@@ -34,5 +35,6 @@ __all__ = [
     "nos_nodo_resposta",
     "nos_nodo_salvar_csv",
     "nos_nodo_gerador_grafico",
+    "nos_nodo_enrich",
 ]
 

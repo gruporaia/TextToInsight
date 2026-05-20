@@ -8,9 +8,10 @@ Roteadores disponíveis:
     - roteador_sandbox: Define o fluxo após execução do código
     - roteador_planejador: Define o fluxo após planejamento
     - roteador_grafico: Define se gera gráfico ou vai direto para resposta
+    - roteador_schema: Define o fluxo após definição do esquema
 """
 
-from .edges import roteador_sandbox, roteador_planejador, roteador_grafico
+from .edges import roteador_sandbox, roteador_planejador, roteador_grafico, roteador_schema
 
-__all__ = ["roteador_sandbox", "roteador_planejador", "roteador_grafico"]
+__all__ = ["roteador_sandbox", "roteador_planejador", "roteador_grafico", "roteador_schema"]
 
