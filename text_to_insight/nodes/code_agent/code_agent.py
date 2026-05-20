@@ -77,6 +77,7 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativ
     )
     conversa_previa = estado.get("historico_conversa", "")
     schema = estado.get("contexto_schema", "")
+    schema_rag = estado.get("contexto_rag_schema", "")
     historico = estado.get("historico_tentativas", [])
     tentativas = estado.get("tentativas_loop", 0)
 
@@ -85,7 +86,7 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativ
     historico_section = _formatar_historico_tentativas(historico)
 
     prompt = PROMPT_TEMPLATE.format(
-        schema=schema,
+        schema=schema_rag if schema_rag else schema,
         pergunta=pergunta,
         conversa_previa=conversa_previa if conversa_previa else "Nenhuma",
         historico_tentativas_section=historico_section,

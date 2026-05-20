@@ -30,15 +30,17 @@ class SchemaGraph:
         #aqui a ideia é pegar as tabelas retornadas pelo RAG e achar o caminho mais curto entre elas usando o grafo
         #isso deve retornar as relações necessárias para ligar os dados
         relations = []
-        print(tables)
         if len(tables) < 2:
             return relations
+        # Joins são semanticamente bidirecionais: A pode unir-se a B independentemente da direção da FK.
+        # Por isso usamos a versão não-direcionada do grafo apenas para path-finding.
+        grafo_undirected = self.graph.to_undirected()
         for i in range(len(tables)):
             for j in range(i + 1, len(tables)):
                 try:
-                    path = nx.shortest_path(self.graph, source=tables[i], target=tables[j])
+                    path = nx.shortest_path(grafo_undirected, source=tables[i], target=tables[j])
                     relations.append(path)
-                except nx.NetworkXNoPath:
+                except (nx.NetworkXNoPath, nx.NodeNotFound):
                     continue
         return relations
 
