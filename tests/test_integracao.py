@@ -74,8 +74,8 @@ def test_pergunta_com_ranking(grafo):
     """Pergunta com ranking retorna múltiplas linhas."""
     config = {"configurable": {"thread_id": "teste_simples"}}
     resultado = grafo.grafo_text_to_insight.invoke(
-        _estado_inicial("Quais sao as 5 categorias de produtos mais vendidos por quantidade?"), config
-    )
+        _estado_inicial("Quais são as 5 categorias com a maior quantidade total de itens vendidos?"), config
+    ) # antes a pergunta era "Quais são as 5 categorias de produtos mais vendidos por quantidade?" e ela era uma pergunta que necessitava de mais input de contexto para o gpt4o
 
     assert resultado["status"] == "aprovado"
     assert resultado["sql_gerada"] != ""
@@ -88,8 +88,9 @@ def test_estado_final_completo(grafo):
     """Estado final tem todos os campos-chave preenchidos."""
     config = {"configurable": {"thread_id": "teste_estado"}}
     resultado = grafo.grafo_text_to_insight.invoke(
-        _estado_inicial("Qual o valor medio dos pedidos?"), config
-    )
+        _estado_inicial("Considerando o valor total cobrado por pedido, qual é a média de valor dos pedidos?"), config
+    ) 
+    # antes era "Qual o valor médio dos pedidos?", mas o gpt4o não conseguia entender o contexto de "valor dos pedidos" sem mencionar o campo específico "valor total cobrado por pedido"
 
     # Campos que devem estar preenchidos ao final
     assert resultado.get("contexto_schema", "") != ""

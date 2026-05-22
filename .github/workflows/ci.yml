@@ -73,7 +73,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt && pip install -e .
 
-      # ✅ Mesmo setup de banco dos outros jobs
+      #  Mesmo setup de banco dos outros jobs
       - name: Download test database
         run: |
           mkdir -p data
@@ -81,7 +81,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # ✅ Verificação no nível do step com saída que controla os próximos
+      #  Verificação no nível do step com saída que controla os próximos
       - name: Check API key availability
         id: check_key
         run: |
@@ -96,12 +96,12 @@ jobs:
           fi
 
       - name: Record or update VCR cassettes
-        if: steps.check_key.outputs.available == 'true'  # ✅ só roda se tiver key
+        if: steps.check_key.outputs.available == 'true'  # só roda se tiver key
         run: |
           pytest tests/test_nodes.py tests/test_integracao.py \
             -v -s --record-mode=rewrite -m "not real_api"
 
-      # ✅ Commita os cassettes de volta no repo
+      # Commita os cassettes de volta no repo
       - name: Commit updated cassettes
         if: steps.check_key.outputs.available == 'true'
         run: |

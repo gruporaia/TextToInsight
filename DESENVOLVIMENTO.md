@@ -159,7 +159,6 @@ Observacoes:
 Use `rewrite` quando quiser **substituir completamente** as cassetes existentes, por exemplo, após uma mudança grande de prompt que torna as respostas gravadas incompatíveis com os testes atuais.
 
 ```bash
-TEXT_TO_INSIGHT_TEST_PROVIDER=openai TEXT_TO_INSIGHT_TEST_MODEL=gpt-4o-mini \
 pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=rewrite
 ```
 
@@ -182,8 +181,15 @@ Os testes de API real usam a fixture compartilhada em `tests/conftest.py` para r
 
 1. `TEXT_TO_INSIGHT_TEST_MODEL` define o modelo explicitamente.
 2. Se `TEXT_TO_INSIGHT_TEST_PROVIDER` estiver definido, ele força o provider (`google` ou `openai`).
-3. Se o modelo nao deixar o provider obvio, o provider precisa ser informado.
+3. Se o modelo não deixar o provider obvio, o provider precisa ser informado.
 4. Sem overrides, o sistema tenta `GOOGLE_API_KEY` e depois `OPENAI_API_KEY`.
+
+Resumo do funcionamento local:
+
+- `pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=none` faz replay apenas; se faltar cassette, o teste falha.
+- `pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=new_episodes` grava só as chamadas que ainda nao existem no YAML.
+- `pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=rewrite` regrava tudo do escopo.
+- o fixture monta o nome do cassette a partir do teste e adiciona sufixo quando o provider/modelo sai do padrao Gemini; por isso `gpt-4o-mini` usa cassettes com `__openai-gpt-4o-mini` e `gemini-2.5-flash` usa os nomes sem sufixo.
 
 Para gravar novas cassetes de forma previsível, escolha explicitamente provider e modelo:
 
@@ -199,7 +205,7 @@ TEXT_TO_INSIGHT_TEST_MODEL=gpt-4o-mini \
 pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=new_episodes
 ```
 
-Se voce definir as variaveis em linhas separadas no shell, use `export` para que o `pytest` e os processos filhos enxerguem os valores. Sem `export`, a atribuicao fica so no shell atual e a suite nao herda a configuracao.
+Se voce definir as variaveis em linhas separadas no shell, use `export` para que o `pytest` e os processos filhos enxerguem os valores. Sem `export`, a atribuição fica só no shell atual e a suíte de testes não herda a configuração.
 
 Uso recomendado:
 
@@ -251,8 +257,8 @@ Opções úteis: `--db-filter`, `--question-filter`, `--model`, `--with-graphs`,
 
 Arquivo: `.github/workflows/ci.yml`
 
-- job padrão determinístico em PR/push (VCR + `--record-mode=none`);
-- job manual `record-vcr-cassettes` em `workflow_dispatch` para gravar/atualizar cassetes com API real;
+- job padrão determinístico em PR/push roda em matriz com as duas combinações de cassette: `openai / gpt-4o-mini` e `google / gemini-2.5-flash`, sempre em `--record-mode=none`;
+- job manual `record-vcr-cassettes` em `workflow_dispatch` tambem roda as duas combinações e pode gravar/atualizar os dois conjuntos de cassetes;
 - job opcional real API em `workflow_dispatch` e `schedule`.
 
 ## Build e distribuição

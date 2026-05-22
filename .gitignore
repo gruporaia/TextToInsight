@@ -150,3 +150,6 @@ chroma_db/
 
 # reports testes spider
 /reports/
+
+# commit.txt (arquivo temporário usado para textos de commit personalizados)
+commit.txt
