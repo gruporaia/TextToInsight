@@ -33,7 +33,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "pandas>=2.0.0",  # uso na geração de gráficos e análise de dados
     "matplotlib>=3.8.0", # uso na geração de gráficos e visualizações
-    "networkx>=3.0"
+    "networkx>=3.0",
 ]
 
 [project.scripts]
