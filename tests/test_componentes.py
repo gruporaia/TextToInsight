@@ -242,7 +242,75 @@ def test_roteador_planejador_espera_humana():
 
     estado = {
         "espera_humana": True,
-        "contexto_schema": "tabelas...", 
+        "contexto_schema": "tabelas...",
         "status": "aguardando_input"
     }
     assert roteador_planejador(estado) == "espera_humana"
+
+
+# ============================================================
+# Retriever (GraphRAG) — componentes determinísticos
+# ============================================================
+
+def _schema_olist_real():
+    from text_to_insight.nodes.schema import nos_nodo_esquema
+    return nos_nodo_esquema({"db_path": DB_PATH, "pergunta_usuario": "x"})["contexto_schema"]
+
+
+def test_schema_graph_constroi_nos_e_arestas_do_olist():
+    """SchemaGraph extrai tabelas como nós e FKs como arestas."""
+    from text_to_insight.retriever.graph_logic import SchemaGraph
+
+    g = SchemaGraph(schema=_schema_olist_real()).graph
+    nos = set(g.nodes)
+    assert {"orders", "customers", "order_items", "products", "sellers"}.issubset(nos)
+    # FK conhecida do Olist: orders.customer_id -> customers.customer_id
+    assert ("orders", "customers") in g.edges
+
+
+def test_rag_retriever_indexa_e_recupera_tabela_relevante(tmp_path):
+    """RAGRetriever indexa chunks-por-tabela e recupera a tabela óbvia."""
+    import chromadb
+    from text_to_insight.retriever.rag_logic import RAGRetriever
+
+    client = chromadb.PersistentClient(path=str(tmp_path / "chroma"))
+    r = RAGRetriever(
+        chroma_client=client,
+        document_schema={"contexto_schema": _schema_olist_real()},
+        collection_name="t_componentes",
+    )
+    out = r._query("Which columns do we have on the table orders?", top_k=3)
+    assert "orders" in out["ids"][0]
+
+
+def test_schema_graph_rag_retrieve_reduz_e_liga(tmp_path, monkeypatch):
+    """SchemaGraphRAG.retrieve devolve tabelas relevantes + caminhos do grafo."""
+    import chromadb
+    from text_to_insight.retriever import engine as engine_mod
+
+    # Isola o índice persistente em tmp_path para não poluir o disco do projeto.
+    monkeypatch.setattr(engine_mod, "BASE_DIR", tmp_path)
+    rag = engine_mod.SchemaGraphRAG(schema={"contexto_schema": _schema_olist_real()})
+    # Query em inglês: o embedder default do Chroma (all-MiniLM-L6-v2) é treinado em inglês.
+    # PT-BR fica out-of-scope para o MVP (ver Fora de escopo no plano).
+    tabs, rels = rag.retrieve("How many orders does each customer have?")
+    nomes = set(tabs["ids"][0])
+    assert "orders" in nomes
+    assert "customers" in nomes
+    # Deve existir pelo menos um caminho conectando orders e customers.
+    assert any({"orders", "customers"}.issubset(set(p)) for p in rels)
+
+
+def test_no_retriever_reduz_contexto_schema():
+    """Nó retriever produz contexto reduzido contendo tabelas relevantes."""
+    from text_to_insight.nodes.retriever import nos_nodo_retriever
+    from text_to_insight.nodes.schema import nos_nodo_esquema
+
+    estado = {"db_path": DB_PATH, "pergunta_usuario": "How many orders does each customer have?"}
+    estado["contexto_schema"] = nos_nodo_esquema(estado)["contexto_schema"]
+    tam_original = len(estado["contexto_schema"])
+
+    out = nos_nodo_retriever(estado)
+    assert "contexto_schema" in out
+    assert len(out["contexto_schema"]) < tam_original
+    assert "orders" in out["contexto_schema"].lower()

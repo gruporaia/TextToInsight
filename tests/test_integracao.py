@@ -55,6 +55,12 @@ def test_grafo_compila(grafo):
     assert grafo is not None
 
 
+def test_grafo_compila_com_retriever(grafo):
+    """Sanidade: grafo compila e contém o nó retriever."""
+    compilado = grafo.app()
+    assert "retriever" in compilado.get_graph().nodes
+
+
 @pytest.mark.vcr
 @pytest.mark.timeout(120)
 def test_pergunta_simples(grafo):

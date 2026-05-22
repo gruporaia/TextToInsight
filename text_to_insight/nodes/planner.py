@@ -45,6 +45,7 @@ def nos_nodo_planejador(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI
     )
     conversa_previa = estado.get("historico_conversa", "")
     schema = estado.get("contexto_schema", "")
+    contexto_rag_schema = estado.get("contexto_rag_schema", "")
     feedback = estado.get("feedback_critico", "")
     tentativas = estado.get("tentativas_loop", 0)
     status = estado.get("status", "iniciado")
@@ -113,8 +114,7 @@ Opções válidas para 'decisão':
         tentativas=tentativas,
         status_atual=status,
         erro=erro if erro else "Nenhum",
-        # passamos schema inteiro agora
-        schema=schema if schema else "Nenhum",
+        schema=contexto_rag_schema if contexto_rag_schema else schema,
         conversa_previa=conversa_previa if conversa_previa else "Nenhuma",
         diretrizes=diretrizes,
     )

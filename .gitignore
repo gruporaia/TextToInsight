@@ -141,6 +141,7 @@ Thumbs.db
 config_local.py
 
 # data 
+results/
 data/
 chroma_db/
 .schema_hash
