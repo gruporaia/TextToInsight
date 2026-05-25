@@ -26,6 +26,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Ativa/desativa o modo Human-in-the-Loop. Padrão: on.",
     )
     parser.add_argument(
+        "--enrich-rag",
+        choices=["on", "off"],
+        default="off",
+        help="Ativa/desativa o enriquecimento RAG. Padrão: off.",
+    )
+    parser.add_argument(
         "--thread-id",
         default="sessao_usuario_1",
         help="Identificador da thread para execução e retomada.",
@@ -68,7 +74,7 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         print(f"Nenhuma pergunta fornecida. Usando exemplo: '{pergunta}'\n")
 
     hitl_ativado = args.hitl == "on"
-    print(f"[CONFIG] HITL: {'ATIVADO' if hitl_ativado else 'DESATIVADO'}")
+    enrich_rag_ativado = args.enrich_rag == "on"
 
     api_key = os.getenv(args.api_key_env)
     if not api_key:
@@ -82,6 +88,7 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         model=args.model,
         db_path=args.db_path,
         hitl=hitl_ativado,
+        enrich_rag=enrich_rag_ativado,
         show_output=False,
     )
 
