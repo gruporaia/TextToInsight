@@ -3,10 +3,7 @@ Nó Retriever (GraphRAG) do grafo de agentes Text-to-Insight.
 
 Lê o `contexto_schema` produzido pelo nó de schema, recupera o subconjunto de
 tabelas relevantes para a pergunta via SchemaGraphRAG (vetor + grafo de FKs),
-formata o resultado como texto e sobrescreve `contexto_schema` no estado.
-
-Política: sobrescreve `contexto_schema` para manter o CodeAgent e o template
-de prompt inalterados (decisão registrada no plano).
+formata o resultado como texto e adiciona ao campo contexto_rag_schema.
 """
 
 from ..state import EstadoTextToInsight
@@ -25,7 +22,11 @@ def _formatar_contexto_rag(retrieved, relations) -> str:
 
 
 def nos_nodo_retriever(estado: EstadoTextToInsight) -> dict:
-    pergunta = estado.get("pergunta_usuario", "")
+    pergunta = (
+        estado.get("pergunta_atual", "")
+        or estado.get("pergunta_original", "")
+        or estado.get("pergunta_usuario", "") # campo antigo de pergunta mas manter para compatibilidade com testes antigos
+    ) # usa pergunta canônica do estado
     schema_full = estado.get("contexto_schema", "")
     if not schema_full or not pergunta or len(schema_full) < 500: 
         return {}
