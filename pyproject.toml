@@ -34,6 +34,8 @@ dependencies = [
     "pandas>=2.0.0",  # uso na geração de gráficos e análise de dados
     "matplotlib>=3.8.0", # uso na geração de gráficos e visualizações
     "networkx>=3.0",
+    "chromadb>=1.5.9",
+    "tabulate>=0.10.0",
 ]
 
 [project.scripts]
