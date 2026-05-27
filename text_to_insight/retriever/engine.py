@@ -28,7 +28,20 @@ class SchemaGraphRAG:
         #o importante aqui é encontrar o caminho mais curto que liga as tabelas retornadas pelo RAG com base no grafo
         #que foi produzido com o schema fornecido
         retrieved_tables = self.rag._query(query)
-        relations = self.schema_graph._get_relations(retrieved_tables['ids'][0])
+        relations, missing_tables = self.schema_graph._get_relations(retrieved_tables['ids'][0])
+        if missing_tables:
+            print(f"[SchemaGraphRAG] Warning: The following tables were retrieved by RAG but are missing in the graph: {missing_tables}")
+        tabelas_relacionadas = set()
+        for rel in relations:
+            tabelas_relacionadas.add(rel[0])
+            tabelas_relacionadas.add(rel[1])
+
+        tabelas_faltando = tabelas_relacionadas - set(retrieved_tables['ids'][0])
+        for t in tabelas_faltando:
+            schema = self.schema_graph.table_schemas.get(t)
+            if schema:
+                retrieved_tables['ids'][0].append(t)
+                retrieved_tables['documents'][0].append(schema)
         return retrieved_tables, relations
     
 if __name__ == '__main__':

@@ -1,13 +1,15 @@
 import re
 import networkx as nx
+from networkx.algorithms.approximation import steiner_tree
 #toda a lógica do grafo deve ficar aqui (ligar tabelas e colunas por foreign keys)
 
 from .RAG_example import SCHEMA
 
+
 class SchemaGraph:
 #o objetivo aqui seria conectar as tabelas pelas FK, não pensei ainda exatamente como fazer, vou pensar
     def __init__(self, schema: str = None):
-        self.graph = nx.DiGraph()
+        self.graph = nx.Graph()
         self.table_schemas = {}
         if schema:
             self._add_schema(schema)
@@ -16,8 +18,6 @@ class SchemaGraph:
         regex_pattern = r"(Tabela: [\s\S]*?)(?=\nTabela: |$)"  
         table_chunks = [t.strip() for t in re.findall(regex_pattern, schema)]
         
-        possiveis_chaves = {}
-
         for table in table_chunks:
             name_match = re.search(r"Tabela:\s+(\w+)", table)
             if not name_match: 
@@ -30,63 +30,47 @@ class SchemaGraph:
             if 'Foreign keys:' in table:
                 fk_matches = re.findall(r"-\s+(\w+)\s+->\s+(\w+)\.(\w+)", table)
                 for col_origem, parent_id, col_destino in fk_matches:
-                    self.graph.add_edge(tabela_nome, parent_id, child_col=col_origem, parent_col=col_destino)
-                    if parent_id not in self.graph:
-                        self.graph.add_node(parent_id)
+                    self.graph.add_edge(
+                        tabela_nome, parent_id, 
+                        weight=1,
+                        tabela_origem=tabela_nome, 
+                        tabela_destino=parent_id,
+                        child_col=col_origem, 
+                        parent_col=col_destino
+                    )
             
-            colunas_match = re.findall(r"-\s+(\w+):", table)
-            for col in colunas_match:
-                if col.endswith("_id") or col.endswith("_code") or col == "zipcode":
-                    if col not in possiveis_chaves:
-                        possiveis_chaves[col] = []
-                    possiveis_chaves[col].append(tabela_nome)
-
-        for coluna, tabelas in possiveis_chaves.items():
-            if len(tabelas) > 1:
-                for i in range(len(tabelas)):
-                    for j in range(i + 1, len(tabelas)):
-                        t1, t2 = tabelas[i], tabelas[j]
-                        if not self.graph.has_edge(t1, t2) and not self.graph.has_edge(t2, t1):
-                            self.graph.add_edge(t1, t2, child_col=coluna, parent_col=coluna)
+            #Se não houver FK, roda SchemaCrawler ou qualquer outra técnica (Isso aqui é discutível, provavelmente deveriamso passar o SC para um nó antes do RAG)
 
     def _get_relations(self, tables: list):
         relations = set()
-        missing_tables = set()
-        
-        if len(tables) < 2:
+        valid_tables = [t for t in tables if t in self.graph]
+        missing_tables = [t for t in tables if t not in self.graph]
+
+        if len(valid_tables) < 2:
             return list(relations), list(missing_tables)
-            
-        grafo_undirected = self.graph.to_undirected()
         
-        for i in range(len(tables)):
-            for j in range(i + 1, len(tables)):
-                orig, dest = tables[i], tables[j]
-                if orig not in grafo_undirected or dest not in grafo_undirected:
-                    continue
+        try:
+            componente_conectado = nx.node_connected_component(self.graph, valid_tables[0])
+            
+            if all(t in componente_conectado for t in valid_tables):
+                subgrafo = self.graph.subgraph(componente_conectado)
+                path = steiner_tree(subgrafo, valid_tables)
+                edges = list(path.edges(data=True))
+                
+                for u, v, data in edges:
+                    origem = data.get('tabela_origem')
+                    destino = data.get('tabela_destino')
+                    child_col = data.get('child_col')
+                    parent_col = data.get('parent_col')
                     
-                try:
-                    path = nx.shortest_path(grafo_undirected, source=orig, target=dest)
-                    
-                    for k in range(len(path) - 1):
-                        t1, t2 = path[k], path[k+1]
-                        
-                        if self.graph.has_edge(t1, t2):
-                            c1 = self.graph[t1][t2]['child_col']
-                            c2 = self.graph[t1][t2]['parent_col']
-                            relations.add(f"{t1}.{c1} = {t2}.{c2}")
-                        elif self.graph.has_edge(t2, t1):
-                            c1 = self.graph[t2][t1]['parent_col']
-                            c2 = self.graph[t2][t1]['child_col']
-                            relations.add(f"{t1}.{c1} = {t2}.{c2}")
-                            
-                        if t1 not in tables:
-                            missing_tables.add(t1)
-                        if t2 not in tables:
-                            missing_tables.add(t2)
-                            
-                except (nx.NetworkXNoPath, nx.NodeNotFound):
-                    continue
-                    
+                    if origem and destino: 
+                        relations.add((origem, destino, child_col, parent_col))
+            else:
+                print("[GRAPH STEINER] As tabelas solicitadas não possuem caminhos (FK) entre si.")
+
+        except nx.NetworkXException as e:
+            print(f"[GRAPH ERROR] Não foi possível encontrar um caminho entre todas as tabelas: {e}")
+
         return list(relations), list(missing_tables)
 
 if __name__ == '__main__':

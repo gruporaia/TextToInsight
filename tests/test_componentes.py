@@ -254,7 +254,7 @@ def test_roteador_planejador_espera_humana():
 
 def _schema_olist_real():
     from text_to_insight.nodes.schema import nos_nodo_esquema
-    return nos_nodo_esquema({"db_path": DB_PATH, "pergunta_usuario": "x"})["contexto_schema"]
+    return nos_nodo_esquema({"db_path": DB_PATH, "pergunta_atual": "x"})["contexto_schema"]
 
 
 def test_schema_graph_constroi_nos_e_arestas_do_olist():
@@ -306,11 +306,12 @@ def test_no_retriever_reduz_contexto_schema():
     from text_to_insight.nodes.retriever import nos_nodo_retriever
     from text_to_insight.nodes.schema import nos_nodo_esquema
 
-    estado = {"db_path": DB_PATH, "pergunta_usuario": "How many orders does each customer have?"}
+    estado = {"db_path": DB_PATH, "pergunta_atual": "How many orders does each customer have?"}
     estado["contexto_schema"] = nos_nodo_esquema(estado)["contexto_schema"]
     tam_original = len(estado["contexto_schema"])
 
     out = nos_nodo_retriever(estado)
-    assert "contexto_schema" in out
-    assert len(out["contexto_schema"]) < tam_original
-    assert "orders" in out["contexto_schema"].lower()
+    assert "contexto_rag_schema" in out
+    #isso aqui pode quebrar, como nosso GraphRAG encontra relações, pode ser sim que seja maior que o original
+    assert len(out["contexto_rag_schema"]) <= tam_original
+    assert "orders" in out["contexto_rag_schema"].lower()
