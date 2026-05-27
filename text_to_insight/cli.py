@@ -9,8 +9,12 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-from .InsightEngine import InsightEngine
-from .runtime import exibir_resultado_console
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from text_to_insight.InsightEngine import InsightEngine
+from text_to_insight.runtime import exibir_resultado_console
 
 load_dotenv()
 
@@ -37,12 +41,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--model",
-        default="gemini-2.5-flash",
+        default="gpt-4o-mini",
         help="Modelo LLM a utilizar (ex: gemini-2.5-flash, gpt-5-nano).",
     )
     parser.add_argument(
         "--api-key-env",
-        default="GOOGLE_API_KEY",
+        default="OPENAI_API_KEY",
         help="Nome da variável de ambiente com a chave de API.",
     )
     parser.add_argument(

@@ -49,7 +49,6 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
       - total_linhas_resultado: total de linhas do resultado SQL.
       - erro_execucao: mensagem de erro em caso de falha.
       - saida_terminal: saída textual resumida da execução.
-      - feedback_critico: feedback do nó crítico para iteração.
       - status: estágio atual do fluxo (StatusExecucao).
       - tentativas_loop: contador de tentativas de geração/execução.
     """
@@ -61,7 +60,6 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     total_linhas_resultado: int
     erro_execucao: str
     saida_terminal: str
-    feedback_critico: str
     status: StatusExecucao
     espera_humana: bool
     pergunta_ao_usuario: str

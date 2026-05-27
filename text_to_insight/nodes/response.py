@@ -1,7 +1,7 @@
 """
 Nó Resposta do grafo de agentes Text-to-Insight.
 
-Responsabilidade única: quando o resultado foi aprovado pelo nó crítico,
+Responsabilidade única: quando o resultado foi gerado sem erro,
 produzir uma resposta em linguagem natural que responda à pergunta do usuário
 com base na SQL gerada e nos resultados obtidos.
 """
@@ -39,7 +39,7 @@ Gere APENAS a resposta final para o usuário (sem títulos, sem marcas, sem expl
 
 def nos_nodo_resposta(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -> dict:
     """
-    Nó Resposta: quando o estado estiver aprovado pelo crítico, gera uma resposta
+    Nó Resposta: quando a execução for bem-sucedida, gera uma resposta
     em linguagem natural para o usuário baseada na SQL e nos resultados.
 
     Retorna um dicionário com a chave `resposta_natural` contendo o texto final.
@@ -63,9 +63,9 @@ def nos_nodo_resposta(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) 
     if grafico_gerado:
         print(f"[RESPOSTA] Gráfico disponível em: {caminho_grafico}")
 
-    # Só gera resposta natural se o crítico aprovou
-    if status != "aprovado":
-        print("[RESPOSTA] Estado não aprovado — pulando geração de texto.")
+    # Só gera resposta natural se houver resultado válido
+    if status not in ("aprovado", "exec_ok"):
+        print("[RESPOSTA] Estado inválido para gerar resposta — pulando.")
         return {}
 
     # Formata preview de forma compacta para o prompt

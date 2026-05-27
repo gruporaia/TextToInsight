@@ -23,7 +23,6 @@ Contexto atual:
 
 - Schema: {schema}
 
-- Feedback do crítico: {feedback}
 - Tentativas realizadas: {tentativas}
 - Status atual: {status_atual}
 - Erro anterior: {erro}
@@ -46,7 +45,6 @@ def nos_nodo_planejador(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI
     conversa_previa = estado.get("historico_conversa", "")
     schema = estado.get("contexto_schema", "")
     contexto_rag_schema = estado.get("contexto_rag_schema", "")
-    feedback = estado.get("feedback_critico", "")
     tentativas = estado.get("tentativas_loop", 0)
     status = estado.get("status", "iniciado")
     erro = estado.get("erro_execucao", "")
@@ -88,7 +86,7 @@ def nos_nodo_planejador(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI
 }}
 Opções válidas para 'decisão':
 - "pronto_codificacao" → se temos schema, a pergunta faz sentido e devemos gerar/regenerar SQL
-- "revisando_estrategia" → se o crítico reprovou e devemos tentar uma abordagem diferente"""
+- "revisando_estrategia" → se houve um erro de execução e devemos tentar uma abordagem diferente"""
 
     if hitl:
         diretrizes = """AVALIAÇÃO CRÍTICA:
@@ -103,14 +101,13 @@ Responda EXATAMENTE no formato JSON abaixo, sem formatação markdown (```json):
 
 Opções válidas para 'decisão':
 - "pronto_codificacao" → se temos schema, a pergunta faz sentido e devemos gerar/regenerar SQL
-- "revisando_estrategia" → se o crítico reprovou e devemos tentar uma abordagem diferente
+- "revisando_estrategia" → se houve um erro de execução e devemos tentar uma abordagem diferente
 - "necessita_ajuda" → a pergunta não é clara, não faz sentido, falta contexto ou não há dados no schema para responder."""
 
     # Usa LLM para decidir estratégia
     prompt = PROMPT_PLANNER.format(
         pergunta=pergunta,
         schema_disponivel="Sim" if schema else "Não",
-        feedback=feedback if feedback else "Nenhum",
         tentativas=tentativas,
         status_atual=status,
         erro=erro if erro else "Nenhum",
@@ -137,7 +134,7 @@ Opções válidas para 'decisão':
     except json.JSONDecodeError:
         print(f"[PLANEJADOR] Erro ao parsear JSON: {conteudo_bruto}")
         # Fallback de segurança
-        decisao = "revisando_estrategia" if feedback else "pronto_codificacao"
+        decisao = "revisando_estrategia" if erro else "pronto_codificacao"
         pergunta_agente = ""
 
     # Mapeia para os estados do grafo e levanta a flag de HITL se necessário
@@ -158,8 +155,8 @@ Opções válidas para 'decisão':
     # Mapeia resposta para status válido
     status_validos = ["pronto_codificacao", "revisando_estrategia", "aprovado"]
     if decisao not in status_validos:
-        # Fallback: se tem feedback, revisa; senão, gera código
-        decisao = "revisando_estrategia" if feedback else "pronto_codificacao"
+        # Fallback: se tem erro, revisa; senão, gera código
+        decisao = "revisando_estrategia" if erro else "pronto_codificacao"
 
     print(f"[PLANEJADOR] Decisão LLM: {decisao}")
 

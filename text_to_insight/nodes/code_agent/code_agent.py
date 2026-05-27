@@ -59,8 +59,6 @@ def _formatar_historico_tentativas(historico: list[dict]) -> str:
         bloco += f"SQL gerada:\n{tent.get('sql', '(vazia)')}\n"
         if tent.get("erro"):
             bloco += f"Erro de execução: {tent['erro']}\n"
-        if tent.get("feedback"):
-            bloco += f"Feedback do crítico: {tent['feedback']}\n"
         partes.append(bloco)
 
     return "\n".join(partes) + "\nNÃO repita os mesmos erros. Gere uma SQL diferente e corrigida."
