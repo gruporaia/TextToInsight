@@ -50,6 +50,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Nome da variável de ambiente com a chave de API.",
     )
     parser.add_argument(
+        "--cot",
+        choices=["on", "off"],
+        default="on",
+        help="Ativa/desativa o Chain of Thought (CoT). Padrão: on.",
+    )
+    parser.add_argument(
         "pergunta",
         nargs="*",
         help="Pergunta em linguagem natural. Se omitida, usa uma pergunta padrão.",
@@ -72,6 +78,7 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         print(f"Nenhuma pergunta fornecida. Usando exemplo: '{pergunta}'\n")
 
     hitl_ativado = args.hitl == "on"
+    cot_ativado = args.cot == "on"
     print(f"[CONFIG] HITL: {'ATIVADO' if hitl_ativado else 'DESATIVADO'}")
 
     api_key = os.getenv(args.api_key_env)
@@ -87,6 +94,7 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         db_path=args.db_path,
         hitl=hitl_ativado,
         show_output=False,
+        use_cot=cot_ativado,
     )
 
     # show_output=False para evitar prints duplicados no console, já que exibir_resultado_console é chamado manualmente.

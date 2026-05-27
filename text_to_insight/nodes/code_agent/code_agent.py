@@ -11,7 +11,39 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from ...state import EstadoTextToInsight
 from ...utils import extrair_tokens
 
-PROMPT_TEMPLATE = """Você é um especialista em SQL para bancos SQLite.
+PROMPT_TEMPLATE_COT = """Você é um especialista em SQL para bancos SQLite.
+
+Sua tarefa: gerar UMA única consulta SQL SELECT que responda à pergunta do usuário,
+usando o schema do banco de dados fornecido abaixo.
+
+Regras:
+- Você DEVE primeiro pensar passo a passo sobre como resolver a pergunta. Escreva o seu raciocínio dentro das tags <thought> e </thought>.
+- Gere APENAS uma consulta SELECT (ou WITH/CTE seguido de SELECT) após o raciocínio.
+- NÃO use INSERT, UPDATE, DELETE, DROP, ALTER ou qualquer comando de escrita.
+- Use nomes de tabelas e colunas EXATAMENTE como aparecem no schema.
+- Se a pergunta for ambígua, faça a interpretação mais razoável.
+
+=== SCHEMA DO BANCO ===
+{schema}
+
+=== PERGUNTA DO USUÁRIO ===
+{pergunta}
+
+=== CONVERSA PRÉVIA (CONTEXTO ADICIONAL) ===
+{conversa_previa}
+
+=== HISTÓRICO DE TENTATIVAS ANTERIORES ===
+{historico_tentativas_section}
+
+Sua resposta DEVE ter exatamente este formato:
+<thought>
+Seu raciocínio lógico detalhado aqui.
+</thought>
+```sql
+Sua consulta SQL aqui
+```"""
+
+PROMPT_TEMPLATE_NO_COT = """Você é um especialista em SQL para bancos SQLite.
 
 Sua tarefa: gerar UMA única consulta SQL SELECT que responda à pergunta do usuário,
 usando o schema do banco de dados fornecido abaixo.
@@ -36,6 +68,7 @@ Regras:
 {historico_tentativas_section}
 
 Responda APENAS com a consulta SQL, sem markdown, sem explicação."""
+
 
 
 def _extrair_sql(resposta: str) -> str:
@@ -64,7 +97,7 @@ def _formatar_historico_tentativas(historico: list[dict]) -> str:
     return "\n".join(partes) + "\nNÃO repita os mesmos erros. Gere uma SQL diferente e corrigida."
 
 
-def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -> dict:
+def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI, use_cot: bool = True) -> dict:
     """
     Nó Agente de Código: usa Gemini para gerar SQL a partir da pergunta + schema.
     """
@@ -83,7 +116,9 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativ
 
     historico_section = _formatar_historico_tentativas(historico)
 
-    prompt = PROMPT_TEMPLATE.format(
+    template = PROMPT_TEMPLATE_COT if use_cot else PROMPT_TEMPLATE_NO_COT
+
+    prompt = template.format(
         schema=schema_rag if schema_rag else schema,
         pergunta=pergunta,
         conversa_previa=conversa_previa if conversa_previa else "Nenhuma",
@@ -91,7 +126,14 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativ
     )
     
     resposta = llm.invoke(prompt)
-    sql = _extrair_sql(resposta.content)
+    resposta_texto = resposta.content
+    
+    if use_cot:
+        thought_match = re.search(r"<thought>(.*?)</thought>", resposta_texto, re.DOTALL)
+        if thought_match:
+            print(f"[AGENTE_CODIGO] Raciocínio: {thought_match.group(1).strip()}...")
+
+    sql = _extrair_sql(resposta_texto)
 
     print(f"[AGENTE_CODIGO] SQL gerada: {sql[:100]}...")
 

@@ -36,10 +36,11 @@ def nos_nodo_espera_humana(estado: EstadoTextToInsight):
     return estado
 
 class Graph:
-    def __init__(self, api_key: str, model: str, hitl: bool = True, enable_graphs: bool = True):
+    def __init__(self, api_key: str, model: str, hitl: bool = True, enable_graphs: bool = True, use_cot: bool = True):
         self.llm = get_model(model, api_key)
         self.memory = MemorySaver()
         self.enable_graphs = enable_graphs
+        self.use_cot = use_cot
         self.grafo_text_to_insight = self._compilar_grafo(hitl)
 
     def _construir_grafo_text_to_insight(self, hitl: bool) -> StateGraph:
@@ -53,7 +54,7 @@ class Graph:
         construtor_grafo.add_node("espera_humana", nos_nodo_espera_humana)
         construtor_grafo.add_node("esquema", nos_nodo_esquema)
         construtor_grafo.add_node("retriever", nos_nodo_retriever)
-        construtor_grafo.add_node("agente_codigo", partial(nos_nodo_agente_codigo, llm=self.llm))
+        construtor_grafo.add_node("agente_codigo", partial(nos_nodo_agente_codigo, llm=self.llm, use_cot=self.use_cot))
         construtor_grafo.add_node("sandbox", nos_nodo_sandbox)
         construtor_grafo.add_node("salvar_csv", nos_nodo_salvar_csv)
         construtor_grafo.add_node("gerador_grafico", partial(nos_nodo_gerador_grafico, llm=self.llm))
