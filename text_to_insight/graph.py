@@ -17,20 +17,24 @@ from functools import partial
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.types import Send
 
-from .state import EstadoTextToInsight
+from .state import EstadoTextToInsight, EstadoCandidato
 from .nodes import (
     nos_nodo_planejador,
     nos_nodo_esquema,
     nos_nodo_retriever,
-    nos_nodo_agente_codigo,
     nos_nodo_sandbox,
     nos_nodo_critico,
     nos_nodo_resposta,
     nos_nodo_salvar_csv,
     nos_nodo_gerador_grafico,
+    nos_nodo_votacao,
+    nos_nodo_explorador,
 )
-from .routers import roteador_sandbox, roteador_planejador, roteador_grafico
+from .nodes.code_agent.code_agent import llm_gera_sql_candidato
+from .nodes.sandbox import sandbox_validacao_candidato
+from .routers import roteador_sandbox, roteador_planejador, roteador_grafico, roteador_fan_out, roteador_votacao
 from .model_selection import get_model
 
 def nos_nodo_espera_humana(estado: EstadoTextToInsight):
@@ -44,10 +48,103 @@ class Graph:
         self.enable_graphs = enable_graphs
         self.grafo_text_to_insight = self._compilar_grafo(hitl)
 
+    def _construir_subgrafo_gerador_candidato(self) -> StateGraph:
+        """
+        Constrói o sub-grafo para geração e refinement de um candidato SQL individual.
+        
+        Este sub-grafo é invocado 5 vezes em paralelo via Send (Map-Reduce).
+        
+        Estado de entrada: EstadoCandidato com:
+        - indice: 0-4 (para prompt diversity)
+        - pergunta: pergunta do usuário
+        - schema: schema do banco
+        - db_path: caminho para SQLite
+        - historico_tentativas: tentativas anteriores (context-aware)
+        - sql: "" (vazio inicialmente)
+        - tentativas_refinamento: 0
+        
+        Estado de saída: EstadoCandidato com resultado_execucao + assinatura_resultado
+        """
+        subgrafo = StateGraph(EstadoCandidato)
+        
+        # Nó 1: Gerar SQL (Map)
+        def nodo_llm_candidato(estado_candidato: EstadoCandidato) -> dict:
+            """Gera SQL para o candidato usando LLM com diversidade."""
+            indice = estado_candidato.get("indice", 0)
+            pergunta = estado_candidato.get("pergunta", "")
+            schema = estado_candidato.get("schema", "")
+            historico = estado_candidato.get("historico_tentativas", [])
+            
+            atualizado = llm_gera_sql_candidato(
+                estado_candidato=estado_candidato,
+                indice=indice,
+                pergunta=pergunta,
+                schema=schema,
+                historico_tentativas=historico,
+                llm=self.llm,
+            )
+            return atualizado
+        
+        # Nó 2: Validar/Executar (Reduce)
+        def nodo_sandbox_candidato(estado_candidato: EstadoCandidato) -> dict:
+            """Executa SQL no sandbox e calcula assinatura."""
+            indice = estado_candidato.get("indice", 0)
+            db_path = estado_candidato.get("db_path", "")
+            
+            atualizado = sandbox_validacao_candidato(
+                estado_candidato=estado_candidato,
+                indice=indice,
+                db_path=db_path,
+            )
+            return atualizado
+        
+        # Nó 3: Decisão de retry
+        def decisor_retry(estado_candidato: EstadoCandidato) -> str:
+            """Avalia se deve retentar (erro retry-able e tentativas < 3)."""
+            tentativas = estado_candidato.get("tentativas_refinamento", 0)
+            erro = estado_candidato.get("erro", "")
+            valido = estado_candidato.get("valido", False)
+            indice = estado_candidato.get("indice", 0)
+            
+            # Se válido, fim
+            if valido:
+                print(f"[CANDIDATO {indice}] ✅ Validado → fim")
+                return "fim"
+            
+            # Se erro e retry-able e tentativas < 3, retentar
+            if erro and tentativas < 3:
+                is_syntax = "syntax" in erro.lower() or "near" in erro.lower()
+                is_timeout = "timeout" in erro.lower()
+                if is_syntax or is_timeout:
+                    print(f"[CANDIDATO {indice}] ⚠️ Retentar ({tentativas+1}/3)")
+                    return "llm_candidato"
+            
+            # Caso contrário, finalizar (sucesso ou falha permanente)
+            print(f"[CANDIDATO {indice}] ⏹️ Finalizar (falha permanente)")
+            return "fim"
+        
+        # Adicionar nós
+        subgrafo.add_node("llm_candidato", nodo_llm_candidato)
+        subgrafo.add_node("sandbox_candidato", nodo_sandbox_candidato)
+        
+        # Adicionar arestas
+        subgrafo.add_edge(START, "llm_candidato")
+        subgrafo.add_edge("llm_candidato", "sandbox_candidato")
+        
+        # Condicional: retry ou fim
+        subgrafo.add_conditional_edges(
+            "sandbox_candidato",
+            decisor_retry,
+            {
+                "llm_candidato": "llm_candidato",
+                "fim": END,
+            }
+        )
+        
+        print("[GRAPH] Sub-grafo gerador_candidato construído.")
+        return subgrafo
+
     def _construir_grafo_text_to_insight(self, hitl: bool) -> StateGraph:
-        """
-        Constrói e compila o grafo de agentes Text-to-Insight.
-        """
         construtor_grafo = StateGraph(EstadoTextToInsight)
 
         # 1. ADICIONAR NÓS
@@ -55,7 +152,38 @@ class Graph:
         construtor_grafo.add_node("espera_humana", nos_nodo_espera_humana)
         construtor_grafo.add_node("esquema", nos_nodo_esquema)
         construtor_grafo.add_node("retriever", nos_nodo_retriever)
-        construtor_grafo.add_node("agente_codigo", partial(nos_nodo_agente_codigo, llm=self.llm))
+        
+        # ✅ ReFoRCE: Sub-grafo para geração paralela de candidatos
+        subgrafo_candidato = self._construir_subgrafo_gerador_candidato()
+        subgrafo_compilado = subgrafo_candidato.compile()
+        construtor_grafo.add_node("gerador_candidato", subgrafo_compilado)
+        
+        # ✅ ReFoRCE: Nó que paraleliza 5 candidatos
+        def nodo_fan_out(estado: EstadoTextToInsight) -> dict:
+            """Cria 5 Send objects, executa em paralelo agregando resultados."""
+            sends = roteador_fan_out(estado)
+            
+            # Executar cada Send object através do sub-grafo compilado
+            candidatos_saida = []
+            for send_obj in sends:
+                estado_candidato = send_obj.arg
+                # Invocar sub-grafo com o estado do candidato
+                resultado_candidato = subgrafo_compilado.invoke(estado_candidato)
+                candidatos_saida.append(resultado_candidato)
+            
+            # Retornar estado atualizado com os candidatos agregados
+            estado_atualizado = estado.copy() if isinstance(estado, dict) else dict(estado)
+            estado_atualizado["candidatos"] = candidatos_saida
+            
+            return estado_atualizado
+        
+        construtor_grafo.add_node("fan_out", nodo_fan_out)
+        
+        # ✅ ReFoRCE: Nós de votação e exploração
+        construtor_grafo.add_node("votacao", nos_nodo_votacao)
+        construtor_grafo.add_node("explorador", partial(nos_nodo_explorador, llm=self.llm))
+        
+        # Nós antigos (mantidos para fallback se necessário)
         construtor_grafo.add_node("sandbox", nos_nodo_sandbox)
         construtor_grafo.add_node("critico", partial(nos_nodo_critico, llm=self.llm))
         construtor_grafo.add_node("salvar_csv", nos_nodo_salvar_csv)
@@ -67,10 +195,15 @@ class Graph:
         construtor_grafo.add_edge("espera_humana", "planejador")
         construtor_grafo.add_edge("esquema", "retriever")
         construtor_grafo.add_edge("retriever", "planejador")
-        construtor_grafo.add_edge("agente_codigo", "sandbox")
+        
+        # ✅ ReFoRCE: Após fan-out parallelizar 5 candidatos, agregar e votar
+        construtor_grafo.add_edge("fan_out", "votacao")
 
         # Gerador de gráfico sempre vai para resposta (sucesso ou falha)
         construtor_grafo.add_edge("gerador_grafico", "resposta")
+        
+        # ✅ ReFoRCE: Após gerador_candidato, Fan-in automático + votação
+        construtor_grafo.add_edge("gerador_candidato", "votacao")
 
         # 3. ARESTAS CONDICIONAIS
         construtor_grafo.add_conditional_edges(
@@ -82,16 +215,65 @@ class Graph:
             }
         )
 
+        # ✅ ReFoRCE: Roteador planejador modificado para incluir transição Fan-out
+        def roteador_planejador_reforcado(estado: EstadoTextToInsight) -> str:
+            """
+            Roteador planejador estendido para ReFoRCE.
+            - Se pronto_codificacao → Fan-out para 5 candidatos
+            """
+            contexto = estado.get("contexto_schema", "")
+            status = estado.get("status", "")
+            esperar = estado.get("espera_humana", False)
+
+            print(f"[ROTEADOR_PLANEJADOR_REFORCADO] Status: {status}")
+
+            if esperar:
+                return "espera_humana"
+
+            if not contexto:
+                return "esquema"
+
+            # ✅ NOVO: Se pronto_codificacao, usar Fan-out para 5 candidatos (ReFoRCE)
+            if status in ("pronto_codificacao", "revisando_estrategia"):
+                print("[ROTEADOR_PLANEJADOR_REFORCADO] → gerador_candidato (ReFoRCE Map-Reduce)")
+                return "gerador_candidato_fan_out"
+
+            if status == "aprovado":
+                return "fim"
+
+            return "planejador"
+
         construtor_grafo.add_conditional_edges(
             "planejador",
-            roteador_planejador,
+            roteador_planejador_reforcado,
             {
                 "espera_humana": "espera_humana",
                 "esquema": "esquema",
-                "agente_codigo": "agente_codigo",
+                "gerador_candidato_fan_out": "fan_out",  # ✅ Nó que retorna 5 Send objects
                 "critico": "critico",
                 "planejador": "planejador",
                 "fim": END,
+            }
+        )
+
+        # ✅ ReFoRCE: Roteador após votação (Reduce + Consensus)
+        construtor_grafo.add_conditional_edges(
+            "votacao",
+            roteador_votacao,
+            {
+                "salvar_csv": "salvar_csv",
+                "nos_nodo_explorador": "explorador",  # Exploração de divergências
+                "resposta": "resposta",  # Fallback
+            }
+        )
+
+        # ✅ ReFoRCE: Se exploração detecta problema, volta ao Fan-out
+        construtor_grafo.add_conditional_edges(
+            "explorador",
+            lambda estado: "gerador_candidato" if estado.get("rodadas_exploracao", 0) < 2 else "resposta",
+            {
+                "gerador_candidato": "gerador_candidato",  # Retry com pergunta refinada
+                "resposta": "resposta",  # Encerrar se 2 rodadas
             }
         )
 

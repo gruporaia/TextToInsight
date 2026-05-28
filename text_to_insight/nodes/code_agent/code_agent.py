@@ -8,7 +8,7 @@ do contexto do schema e de feedback anterior (se houver), usando Gemini.
 import re
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-from ...state import EstadoTextToInsight
+from ...state import EstadoTextToInsight, EstadoCandidato
 from ...utils import extrair_tokens
 
 PROMPT_TEMPLATE = """Você é um especialista em SQL para bancos SQLite.
@@ -108,4 +108,74 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativ
         "tokens_output": out_tokens,
         "tokens_total": total_tokens,
     }
+
+
+# ============================================================================
+# ARQUITETURA ReFoRCE: Geração de Candidatos em Paralelo (Map-Reduce)
+# ============================================================================
+
+# Prompts com diversidade para incentivar diferentes abordagens SQL
+PROMPTS_DIVERSIDADE = {
+    0: "Foque em usar JOINs eficientes. Minimize subqueries.",
+    1: "Use agregações (GROUP BY, HAVING) de forma clara e direta.",
+    2: "Abordagem simplista: USE subqueries e CTEs se necessário.",
+    3: "Otimize para performance: minimize agregações desnecessárias.",
+    4: "Foque em clareza e legibilidade do código SQL.",
+}
+
+
+def llm_gera_sql_candidato(
+    estado_candidato: EstadoCandidato,
+    indice: int,
+    pergunta: str,
+    schema: str,
+    historico_tentativas: list[dict],
+    llm: ChatGoogleGenerativeAI,
+) -> EstadoCandidato:
+    """
+    Gera SQL para um candidato individual (Map-Reduce paralelo).
+    
+    Args:
+        estado_candidato: Estado isolado do candidato
+        indice: Índice do candidato (0-4) para diversificar prompts
+        pergunta: Pergunta do usuário
+        schema: Schema do banco (full ou RAG-reduced)
+        historico_tentativas: Tentativas anteriores (context-aware)
+        llm: Cliente LLM
+    
+    Returns:
+        EstadoCandidato atualizado com SQL gerada e tentativas_refinamento=1
+    """
+    
+    print(f"[CANDIDATO {indice}] Gerando SQL...")
+    
+    # Adicionar instrução de diversidade ao prompt
+    instrucao_diversidade = PROMPTS_DIVERSIDADE.get(indice, "")
+    historico_section = _formatar_historico_tentativas(historico_tentativas)
+    
+    prompt_diverso = PROMPT_TEMPLATE + f"\n\nDICAS PARA ESTE CANDIDATO:\n{instrucao_diversidade}"
+    
+    prompt = prompt_diverso.format(
+        schema=schema,
+        pergunta=pergunta,
+        conversa_previa="(contexto do Map-Reduce)",
+        historico_tentativas_section=historico_section,
+    )
+    
+    try:
+        resposta = llm.invoke(prompt)
+        sql = _extrair_sql(resposta.content)
+        
+        estado_candidato["sql"] = sql
+        estado_candidato["tentativas_refinamento"] = 1
+        
+        print(f"[CANDIDATO {indice}] SQL gerada: {sql[:50]}...")
+        
+        return estado_candidato
+    except Exception as e:
+        print(f"[CANDIDATO {indice}] Erro ao gerar SQL: {e}")
+        estado_candidato["sql"] = ""
+        estado_candidato["erro"] = str(e)
+        estado_candidato["tentativas_refinamento"] = 1
+        return estado_candidato
 

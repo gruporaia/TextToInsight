@@ -141,6 +141,7 @@ Thumbs.db
 config_local.py
 
 # data 
+spider2-lite/
 results/
 data/
 chroma_db/

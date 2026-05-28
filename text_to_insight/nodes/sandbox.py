@@ -5,8 +5,9 @@ Responsabilidade única: validar e executar SQL gerada contra o banco real,
 retornando resultado estruturado.
 """
 
-from ..state import EstadoTextToInsight
+from ..state import EstadoTextToInsight, EstadoCandidato
 from .code_agent.code_sql import executar_sql_sqlite
+from .voting_node import calcular_assinatura_resultado
 
 
 def nos_nodo_sandbox(estado: EstadoTextToInsight) -> dict:
@@ -52,3 +53,88 @@ def nos_nodo_sandbox(estado: EstadoTextToInsight) -> dict:
             "status": "exec_erro",
             "historico_tentativas": [{"sql": sql, "erro": resultado["erro_execucao"]}],
         }
+
+
+# ============================================================================
+# ARQUITETURA ReFoRCE: Validação de Candidatos (Self-Refinement)
+# ============================================================================
+
+def sandbox_validacao_candidato(
+    estado_candidato: EstadoCandidato,
+    indice: int,
+    db_path: str,
+) -> EstadoCandidato:
+    """
+    Executa SQL de um candidato individual e valida resultado.
+    
+    Responsabilidades:
+    1. Executar SQL em sandbox seguro (já via executar_sql_sqlite)
+    2. Se sucesso: calcular assinatura, marcar valido=True
+    3. Se erro: registrar erro, avaliar se é retry-able (sintaxe + timeout)
+    
+    Args:
+        estado_candidato: Estado do candidato com SQL preenchida
+        indice: Índice do candidato (0-4)
+        db_path: Caminho para SQLite
+    
+    Returns:
+        EstadoCandidato atualizado com resultado_execucao, erro, valido, assinatura
+    """
+    
+    sql = estado_candidato.get("sql", "").strip()
+    tentativas = estado_candidato.get("tentativas_refinamento", 0)
+    
+    print(f"[CANDIDATO {indice}] Executando SQL (tentativa {tentativas})...")
+    
+    if not sql:
+        estado_candidato["valido"] = False
+        estado_candidato["erro"] = "SQL vazia"
+        return estado_candidato
+    
+    resultado = executar_sql_sqlite(db_path, sql)
+    
+    if resultado["ok"]:
+        # ✅ Sucesso: calcular assinatura e marcar válido
+        linhas = resultado["linhas_resultado_completo"]
+        assinatura = calcular_assinatura_resultado(linhas)
+        
+        estado_candidato["resultado_execucao"] = {
+            "linhas": linhas,
+            "total_linhas": resultado["total_linhas_resultado"],
+            "preview": resultado["linhas_resultado_preview"],
+        }
+        estado_candidato["valido"] = True
+        estado_candidato["assinatura_resultado"] = assinatura
+        estado_candidato["erro"] = ""
+        
+        print(f"[CANDIDATO {indice}] ✅ Sucesso: {resultado['total_linhas_resultado']} linhas | Hash: {assinatura[:16]}...")
+        
+    else:
+        # ❌ Erro: avaliar se é retry-able
+        erro_msg = resultado["erro_execucao"]
+        
+        # Detectar tipos de erro retry-able
+        is_syntax_error = "syntax" in erro_msg.lower() or "near" in erro_msg.lower()
+        is_timeout = "timeout" in erro_msg.lower()
+        is_retry_able = is_syntax_error or is_timeout
+        
+        # Se retry-able e tentativas < 3: marcar para retry, não como falha final
+        if is_retry_able and tentativas < 3:
+            print(f"[CANDIDATO {indice}] ⚠️ Erro retry-able: {erro_msg[:60]}...")
+            estado_candidato["erro"] = erro_msg
+            estado_candidato["tentativas_refinamento"] = tentativas + 1
+            estado_candidato["valido"] = False
+            # NÃO retornar ainda: o sub-grafo vai redirecionar para retry
+        else:
+            # Falha final: erro lógico ou limite de tentativas atingido
+            print(f"[CANDIDATO {indice}] ❌ Falha final: {erro_msg[:60]}...")
+            estado_candidato["erro"] = erro_msg
+            estado_candidato["valido"] = False
+            estado_candidato["resultado_execucao"] = {
+                "linhas": [],
+                "total_linhas": 0,
+                "preview": [],
+            }
+            estado_candidato["assinatura_resultado"] = "ERROR"
+    
+    return estado_candidato

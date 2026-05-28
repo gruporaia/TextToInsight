@@ -27,6 +27,34 @@ StatusExecucao = Literal[
 
 # Criação de classe mãe que será estendida para EstadoTextToInsight para que
 # pergunta_original/pergunta_atual e db_path sejam obrigatorios
+class EstadoCandidato(TypedDict, total=False):
+    """
+    Estado isolado de um candidato SQL durante execução paralela (Map-Reduce).
+    
+    Cada candidato tem seu próprio estado que evolui através do sub-grafo:
+    1. llm_gera_sql_candidato: popula 'sql' + 'tentativas_refinamento'
+    2. sandbox_validacao_candidato: executa SQL, popula 'resultado_execucao', 'erro', 'valido'
+    3. Se erro de sintaxe/timeout e tentativas<3: retry em llm_gera_sql_candidato
+    4. Caso contrário: retorna EstadoCandidato completo ao Fan-in
+    
+    Campos de resultado:
+    """
+    # Resultado do candidato
+    sql: str                                    # SQL gerada para este candidato
+    resultado_execucao: dict[str, Any]         # {linhas_resultado, total_linhas, ...}
+    erro: str                                   # Mensagem de erro (se houver)
+    tentativas_refinamento: int                # Contador de retries (max 3)
+    valido: bool                               # True se executado com sucesso
+    assinatura_resultado: str                  # Hash para comparar consenso
+    indice: int                                # Índice do candidato (0-4) para prompt diversity
+    
+    # Contexto compartilhado (preenchido pelo Fan-out, repassado ao sub-grafo)
+    pergunta: str                              # Pergunta do usuário
+    schema: str                                # Schema do banco
+    db_path: str                               # Caminho para SQLite
+    historico_tentativas: list[dict]           # Tentativas anteriores para context-awareness
+
+
 class EstadoEntrada(TypedDict):
     pergunta_original: str
     pergunta_atual: str
@@ -81,3 +109,13 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     tokens_input: Annotated[int, operator.add]
     tokens_output: Annotated[int, operator.add]
     tokens_total: Annotated[int, operator.add]
+
+    # --- ARQUITETURA ReFoRCE: Map-Reduce + Self-Refinement + Consensus ---
+    # Candidatos gerados em paralelo (Fan-out)
+    candidatos: Annotated[list[EstadoCandidato], operator.add]
+    
+    # Status de votação e exploração
+    status_consenso: Literal["nao_votado", "consenso_encontrado", "ambiguo"]
+    rodadas_exploracao: int                    # Contador de rodadas exploração (max 2)
+    sql_vencedora: str                        # SQL aprovada pelo consenso
+    motivo_ambiguidade: str                   # Detalhes se status='ambiguo'

@@ -6,6 +6,7 @@ baseado nas condições do estado atual.
 """
 
 from typing import Literal
+from langgraph.types import Send
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from ..state import EstadoTextToInsight
@@ -152,3 +153,98 @@ def roteador_grafico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -
     except Exception as e:
         print(f"[ROTEADOR_GRAFICO] Erro ao consultar LLM: {e} → resposta (fallback)")
         return "resposta"
+
+
+# ============================================================================
+# ARQUITETURA ReFoRCE: Roteadores para Map-Reduce
+# ============================================================================
+
+def roteador_fan_out(estado: EstadoTextToInsight) -> list[Send]:
+    """
+    Roteador Fan-out: cria 5 objetos Send para execução paralela de candidatos.
+    
+    Cada Send invoca sub-grafo 'gerador_candidato' com contexto completo.
+    
+    O estado do candidato inclui:
+    - indice: 0-4 para prompt diversity
+    - pergunta, schema, db_path, historico_tentativas: contexto do estado pai
+    
+    Returns:
+        Lista com 5 Send objects para parallelização via LangGraph aggregator
+    """
+    from ..state import EstadoCandidato
+    
+    # Extrair contexto do estado pai
+    pergunta = (
+        estado.get("pergunta_atual", "")
+        or estado.get("pergunta_original", "")
+        or estado.get("pergunta_usuario", "")
+    )
+    schema = estado.get("contexto_rag_schema", "") or estado.get("contexto_schema", "")
+    db_path = estado.get("db_path", "")
+    historico = estado.get("historico_tentativas", [])
+    
+    print(f"[ROTEADOR_FAN_OUT] Criando 5 candidatos em paralelo...")
+    print(f"  Pergunta: {pergunta[:60]}...")
+    print(f"  Schema length: {len(schema)} chars")
+    print(f"  DB: {db_path}")
+    print(f"  Histórico: {len(historico)} tentativas anteriores")
+    
+    sends = []
+    for i in range(5):
+        # Estado isolado para este candidato COM CONTEXTO COMPARTILHADO
+        estado_candidato: EstadoCandidato = {
+            # Campos de resultado (inicialmente vazios)
+            "sql": "",
+            "resultado_execucao": {},
+            "erro": "",
+            "tentativas_refinamento": 0,
+            "valido": False,
+            "assinatura_resultado": "",
+            
+            # Campos de contexto (repassados do estado pai)
+            "indice": i,
+            "pergunta": pergunta,
+            "schema": schema,
+            "db_path": db_path,
+            "historico_tentativas": historico,
+        }
+        
+        # Criar Send que invoca sub-grafo com estado do candidato
+        send_obj = Send("gerador_candidato", estado_candidato)
+        sends.append(send_obj)
+        print(f"  → Send[{i}] criado")
+    
+    print(f"[ROTEADOR_FAN_OUT] {len(sends)} sends enviados para parallelização")
+    return sends
+
+
+def roteador_votacao(estado: EstadoTextToInsight) -> Literal["salvar_csv", "nos_nodo_explorador", "resposta"]:
+    """
+    Roteador após votação: decide próximo passo baseado no status_consenso.
+    
+    - consenso_encontrado → salvar_csv (SQL aprovada)
+    - ambiguo (rodadas < 2) → nos_nodo_explorador
+    - ambiguo (rodadas >= 2) → resposta (fallback)
+    """
+    status_consenso = estado.get("status_consenso", "nao_votado")
+    rodadas_exploracao = estado.get("rodadas_exploracao", 0)
+    max_rodadas = 2
+    
+    print(f"[ROTEADOR_VOTACAO] Status: {status_consenso}, Rodadas: {rodadas_exploracao}/{max_rodadas}")
+    
+    if status_consenso == "consenso_encontrado":
+        print("[ROTEADOR_VOTACAO] ✅ Consenso → salvar_csv")
+        return "salvar_csv"
+    
+    if status_consenso == "ambiguo":
+        if rodadas_exploracao < max_rodadas:
+            print("[ROTEADOR_VOTACAO] ❌ Sem consenso → nos_nodo_explorador (exploração)")
+            return "nos_nodo_explorador"
+        else:
+            print(f"[ROTEADOR_VOTACAO] ⚠️ Limite de exploração atingido → resposta (fallback)")
+            return "resposta"
+    
+    # Default: fallback para resposta
+    print("[ROTEADOR_VOTACAO] Default → resposta (status desconhecido)")
+    return "resposta"

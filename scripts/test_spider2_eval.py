@@ -46,16 +46,16 @@ load_dotenv()
 class Spider2QueryExecutor(SpiderQueryExecutor):
     """
     Executor adaptado para o Spider 2.0 Lite, 
-    onde os bancos locais geralmente estão na raiz da pasta.
+    onde os bancos estão em subpastas por nome (ex: sqlite/E_commerce/E_commerce.sqlite).
     """
     def get_db_path(self, db_id: str) -> Path:
-        # Tenta na raiz
-        db_path = self.database_dir / f"{db_id}.sqlite"
+        # Tenta na subpasta: sqlite/{db_id}/{db_id}.sqlite
+        db_path = self.database_dir / db_id / f"{db_id}.sqlite"
         if not db_path.exists():
-            # Tenta na subpasta como no Spider 1.0
-            db_path = self.database_dir / db_id / f"{db_id}.sqlite"
+            # Tenta na raiz como fallback
+            db_path = self.database_dir / f"{db_id}.sqlite"
         if not db_path.exists():
-            raise FileNotFoundError(f"Banco não encontrado: {db_path} (nem na subpasta)")
+            raise FileNotFoundError(f"Banco não encontrado: {db_path} (procurou em subpasta e raiz)")
         return db_path
 
 
@@ -251,7 +251,7 @@ def main():
     parser.add_argument("--output", type=str, help="Caminho para salvar CSV")
     parser.add_argument("--max-attempts", type=int, default=3, help="Máximo de tentativas por pergunta")
     parser.add_argument("--data-dir", type=str, default="spider2-lite", help="Diretório base do Spider 2 Lite")
-    parser.add_argument("--sqlite-dir", type=str, default="spider2-lite/resource/databases/spider2-localdb", help="Diretório contendo os bancos sqlite do Spider 2")
+    parser.add_argument("--sqlite-dir", type=str, default="spider2-lite/resource/databases/sqlite", help="Diretório contendo os bancos sqlite do Spider 2")
     parser.add_argument("--question-filter", type=str, help="Filtrar por um trecho da pergunta")
     parser.add_argument("--model", type=str, default="gpt-4o-mini", help="Modelo LLM a utilizar")
     parser.add_argument("--with-graphs", action="store_true", help="Ativar a geração de gráficos e salvamento de CSV")
