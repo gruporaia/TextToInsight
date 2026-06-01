@@ -173,3 +173,8 @@ pip install -e .
 `429 RESOURCE_EXHAUSTED`:
 - aguardar reset de quota;
 - preferir testes com VCR no dia a dia.
+
+## Configuração do .env (variáveis de ambiente)
+- `GOOGLE_API_KEY`: chave de API para Google Gemini (se usar modelo Gemini).
+- `OPENAI_API_KEY`: chave de API para OpenAI (se usar modelo OpenAI).
+- `SCHEMACRAWLER_BIN`: caminho para o binário do SchemaCrawler (se usar este recurso).

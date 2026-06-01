@@ -7,6 +7,9 @@ executor node e routers.
 
 import os
 import sys
+import pytest
+from dotenv import load_dotenv
+load_dotenv()
 
 # Garante que o diretório raiz do projeto está no path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -315,3 +318,39 @@ def test_no_retriever_reduz_contexto_schema():
     #isso aqui pode quebrar, como nosso GraphRAG encontra relações, pode ser sim que seja maior que o original
     assert len(out["contexto_rag_schema"]) <= tam_original
     assert "orders" in out["contexto_rag_schema"].lower()
+
+# ============================================================
+# TESTES DO SCHEMA CRAWLER
+# ============================================================
+SC_BIN = os.getenv("SCHEMACRAWLER_BIN")
+DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "olist_relational.db")
+
+
+# --- Camada 1: sem SC, sempre roda no CI ---
+def test_deteccao_dialeto_sqlite():
+    from text_to_insight.nodes.schema import _detectar_dialeto
+    assert _detectar_dialeto("banco.db") == "sqlite"
+    assert _detectar_dialeto("dados.duckdb") == "duckdb"
+    assert _detectar_dialeto("arquivo.unknown") == "sqlite"  # fallback
+
+
+# --- Camada 2: requer SC instalado ---
+
+@pytest.mark.schemacrawler
+@pytest.mark.skipif(not SC_BIN, reason="SCHEMACRAWLER_BIN não configurado no .env")
+def test_extracao_schema_com_schemacrawler():
+    """Testa extração de schema usando Schema Crawler. Requer SC instalado e Java."""
+    from text_to_insight.nodes.schema import _rodar_schemacrawler
+
+    schema = _rodar_schemacrawler(
+        db_path=DB_PATH,
+        dialeto="sqlite",
+        sc_bin=SC_BIN,
+        cfg={},
+    )
+
+    assert "orders" in schema.lower()
+    assert "customers" in schema.lower()
+    assert "products" in schema.lower()
+    assert "customer_id" in schema.lower()
+    assert "order_id" in schema.lower()  

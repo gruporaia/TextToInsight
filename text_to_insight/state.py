@@ -71,6 +71,8 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     resposta_natural: str
     historico_tentativas: Annotated[list[dict[str, str]], operator.add]
     linhas_resultado_completo: list[dict[str, Any]]
+    schemacrawler_bin : str | None
+    db_config: dict[str, Any] | None
 
     # Campos para geração de gráficos
     caminho_csv_resultado: str

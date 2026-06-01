@@ -7,7 +7,9 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
-
+from dotenv import load_dotenv
+load_dotenv()
+import os
 from tabulate import tabulate
 
 from .utils import salvar_metricas_csv
@@ -56,6 +58,7 @@ def construir_estado_inicial(pergunta: str, db_path: str) -> dict[str, Any]:
         "espera_humana": False,
         "linhas_resultado_completo": [],
         "historico_tentativas": [],
+        "schemacrawler_bin": os.getenv("SCHEMACRAWLER_BIN", ""),
     }
 
 
