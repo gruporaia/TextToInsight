@@ -110,7 +110,7 @@ def nos_nodo_votacao(estado: EstadoTextToInsight) -> EstadoTextToInsight:
         
         # Contar rodadas de exploração
         rodadas = estado.get("rodadas_exploracao", 0)
-        max_rodadas = 2
+        max_rodadas = 5
         
         if rodadas >= max_rodadas:
             # Marcar como definitivamente ambíguo

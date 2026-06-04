@@ -161,16 +161,8 @@ def roteador_grafico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -
 
 def roteador_fan_out(estado: EstadoTextToInsight) -> list[Send]:
     """
-    Roteador Fan-out: cria 5 objetos Send para execução paralela de candidatos.
-    
-    Cada Send invoca sub-grafo 'gerador_candidato' com contexto completo.
-    
-    O estado do candidato inclui:
-    - indice: 0-4 para prompt diversity
-    - pergunta, schema, db_path, historico_tentativas: contexto do estado pai
-    
-    Returns:
-        Lista com 5 Send objects para parallelização via LangGraph aggregator
+    Roteador Fan-out: cria 5 objetos Send para execução paralela de candidatos,
+    injetando diversidade térmica (temperaturas diferentes).
     """
     from ..state import EstadoCandidato
     
@@ -184,17 +176,17 @@ def roteador_fan_out(estado: EstadoTextToInsight) -> list[Send]:
     db_path = estado.get("db_path", "")
     historico = estado.get("historico_tentativas", [])
     
+    # Diversidade Térmica: Do mais determinístico (0.0) ao mais criativo (0.9)
+    temperaturas = [0.0, 0.2, 0.5, 0.7, 0.9]
+    
     print(f"[ROTEADOR_FAN_OUT] Criando 5 candidatos em paralelo...")
     print(f"  Pergunta: {pergunta[:60]}...")
-    print(f"  Schema length: {len(schema)} chars")
-    print(f"  DB: {db_path}")
-    print(f"  Histórico: {len(historico)} tentativas anteriores")
+    print(f"  Temperaturas: {temperaturas}")
     
     sends = []
-    for i in range(5):
+    for i, temp in enumerate(temperaturas):
         # Estado isolado para este candidato COM CONTEXTO COMPARTILHADO
         estado_candidato: EstadoCandidato = {
-            # Campos de resultado (inicialmente vazios)
             "sql": "",
             "resultado_execucao": {},
             "erro": "",
@@ -202,20 +194,21 @@ def roteador_fan_out(estado: EstadoTextToInsight) -> list[Send]:
             "valido": False,
             "assinatura_resultado": "",
             
-            # Campos de contexto (repassados do estado pai)
-            "indice": i,
+            # A mágica da diversidade acontece aqui
+            "temperatura": temp,
+            
+            # Contexto repassado
             "pergunta": pergunta,
             "schema": schema,
             "db_path": db_path,
             "historico_tentativas": historico,
         }
         
-        # Criar Send que invoca sub-grafo com estado do candidato
+        # O nome do nó "gerador_candidato" deve corresponder ao add_node no graph.py
         send_obj = Send("gerador_candidato", estado_candidato)
         sends.append(send_obj)
-        print(f"  → Send[{i}] criado")
+        print(f"  → Send[{i}] criado com Temp={temp}")
     
-    print(f"[ROTEADOR_FAN_OUT] {len(sends)} sends enviados para parallelização")
     return sends
 
 
@@ -229,7 +222,7 @@ def roteador_votacao(estado: EstadoTextToInsight) -> Literal["salvar_csv", "nos_
     """
     status_consenso = estado.get("status_consenso", "nao_votado")
     rodadas_exploracao = estado.get("rodadas_exploracao", 0)
-    max_rodadas = 2
+    max_rodadas = 5
     
     print(f"[ROTEADOR_VOTACAO] Status: {status_consenso}, Rodadas: {rodadas_exploracao}/{max_rodadas}")
     

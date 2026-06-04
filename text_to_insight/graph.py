@@ -69,59 +69,46 @@ class Graph:
         
         # Nó 1: Gerar SQL (Map)
         def nodo_llm_candidato(estado_candidato: EstadoCandidato) -> dict:
-            """Gera SQL para o candidato usando LLM com diversidade."""
-            indice = estado_candidato.get("indice", 0)
-            pergunta = estado_candidato.get("pergunta", "")
-            schema = estado_candidato.get("schema", "")
-            historico = estado_candidato.get("historico_tentativas", [])
-            
+            """Gera SQL para o candidato usando LLM com diversidade térmica."""
+            # Agora a função do code_agent puxa o que precisa direto do estado isolado
             atualizado = llm_gera_sql_candidato(
                 estado_candidato=estado_candidato,
-                indice=indice,
-                pergunta=pergunta,
-                schema=schema,
-                historico_tentativas=historico,
                 llm=self.llm,
             )
             return atualizado
-        
+
+
         # Nó 2: Validar/Executar (Reduce)
         def nodo_sandbox_candidato(estado_candidato: EstadoCandidato) -> dict:
             """Executa SQL no sandbox e calcula assinatura."""
-            indice = estado_candidato.get("indice", 0)
-            db_path = estado_candidato.get("db_path", "")
-            
             atualizado = sandbox_validacao_candidato(
-                estado_candidato=estado_candidato,
-                indice=indice,
-                db_path=db_path,
+                estado_candidato=estado_candidato
             )
             return atualizado
         
+
         # Nó 3: Decisão de retry
         def decisor_retry(estado_candidato: EstadoCandidato) -> str:
             """Avalia se deve retentar (erro retry-able e tentativas < 3)."""
             tentativas = estado_candidato.get("tentativas_refinamento", 0)
             erro = estado_candidato.get("erro", "")
             valido = estado_candidato.get("valido", False)
-            indice = estado_candidato.get("indice", 0)
+            temp = estado_candidato.get("temperatura", 0.0)
             
-            # Se válido, fim
             if valido:
-                print(f"[CANDIDATO {indice}] ✅ Validado → fim")
+                print(f"[CANDIDATO Temp {temp}] ✅ Validado → fim")
                 return "fim"
             
-            # Se erro e retry-able e tentativas < 3, retentar
-            if erro and tentativas < 3:
+            if erro and tentativas < 5:
                 is_syntax = "syntax" in erro.lower() or "near" in erro.lower()
                 is_timeout = "timeout" in erro.lower()
                 if is_syntax or is_timeout:
-                    print(f"[CANDIDATO {indice}] ⚠️ Retentar ({tentativas+1}/3)")
+                    print(f"[CANDIDATO Temp {temp}] ⚠️ Retentar ({tentativas+1}/3)")
                     return "llm_candidato"
             
-            # Caso contrário, finalizar (sucesso ou falha permanente)
-            print(f"[CANDIDATO {indice}] ⏹️ Finalizar (falha permanente)")
+            print(f"[CANDIDATO Temp {temp}] ⏹️ Finalizar (falha permanente)")
             return "fim"
+
         
         # Adicionar nós
         subgrafo.add_node("llm_candidato", nodo_llm_candidato)
@@ -270,14 +257,14 @@ class Graph:
         # ✅ ReFoRCE: Se exploração detecta problema, volta ao Fan-out
         construtor_grafo.add_conditional_edges(
             "explorador",
-            lambda estado: "gerador_candidato" if estado.get("rodadas_exploracao", 0) < 2 else "resposta",
+            lambda estado: "gerador_candidato" if estado.get("rodadas_exploracao", 0) < 5 else "resposta",
             {
                 "gerador_candidato": "gerador_candidato",  # Retry com pergunta refinada
                 "resposta": "resposta",  # Encerrar se 2 rodadas
             }
         )
 
-        MAX_TENTATIVAS_CRITICO = 3
+        MAX_TENTATIVAS_CRITICO = 5
 
         def roteador_critico(estado: EstadoTextToInsight) -> str:
             status = estado.get("status", "")

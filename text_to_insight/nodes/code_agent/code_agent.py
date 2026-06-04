@@ -114,48 +114,27 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativ
 # ARQUITETURA ReFoRCE: Geração de Candidatos em Paralelo (Map-Reduce)
 # ============================================================================
 
-# Prompts com diversidade para incentivar diferentes abordagens SQL
-PROMPTS_DIVERSIDADE = {
-    0: "Foque em usar JOINs eficientes. Minimize subqueries.",
-    1: "Use agregações (GROUP BY, HAVING) de forma clara e direta.",
-    2: "Abordagem simplista: USE subqueries e CTEs se necessário.",
-    3: "Otimize para performance: minimize agregações desnecessárias.",
-    4: "Foque em clareza e legibilidade do código SQL.",
-}
-
-
 def llm_gera_sql_candidato(
     estado_candidato: EstadoCandidato,
-    indice: int,
-    pergunta: str,
-    schema: str,
-    historico_tentativas: list[dict],
     llm: ChatGoogleGenerativeAI,
 ) -> EstadoCandidato:
     """
     Gera SQL para um candidato individual (Map-Reduce paralelo).
-    
-    Args:
-        estado_candidato: Estado isolado do candidato
-        indice: Índice do candidato (0-4) para diversificar prompts
-        pergunta: Pergunta do usuário
-        schema: Schema do banco (full ou RAG-reduced)
-        historico_tentativas: Tentativas anteriores (context-aware)
-        llm: Cliente LLM
-    
-    Returns:
-        EstadoCandidato atualizado com SQL gerada e tentativas_refinamento=1
+    Usa a diversidade térmica (temperatura) injetada pelo roteador Fan-out.
     """
     
-    print(f"[CANDIDATO {indice}] Gerando SQL...")
+    # Extraindo as variáveis diretamente do estado isolado do candidato
+    temp_atual = estado_candidato.get("temperatura", 0.0)
+    pergunta = estado_candidato.get("pergunta", "")
+    schema = estado_candidato.get("schema", "")
+    historico = estado_candidato.get("historico_tentativas", [])
     
-    # Adicionar instrução de diversidade ao prompt
-    instrucao_diversidade = PROMPTS_DIVERSIDADE.get(indice, "")
-    historico_section = _formatar_historico_tentativas(historico_tentativas)
+    print(f"[CANDIDATO Temp {temp_atual}] Gerando SQL...")
     
-    prompt_diverso = PROMPT_TEMPLATE + f"\n\nDICAS PARA ESTE CANDIDATO:\n{instrucao_diversidade}"
+    historico_section = _formatar_historico_tentativas(historico)
     
-    prompt = prompt_diverso.format(
+    # Usamos o prompt base sem adicionar dicas artificiais
+    prompt = PROMPT_TEMPLATE.format(
         schema=schema,
         pergunta=pergunta,
         conversa_previa="(contexto do Map-Reduce)",
@@ -163,17 +142,20 @@ def llm_gera_sql_candidato(
     )
     
     try:
-        resposta = llm.invoke(prompt)
+        # A mágica acontece aqui: usamos .bind() para sobrescrever a temperatura
+        # exclusivamente para esta chamada do LangGraph.
+        resposta = llm.bind(temperature=temp_atual).invoke(prompt)
         sql = _extrair_sql(resposta.content)
         
         estado_candidato["sql"] = sql
         estado_candidato["tentativas_refinamento"] = 1
         
-        print(f"[CANDIDATO {indice}] SQL gerada: {sql[:50]}...")
+        print(f"[CANDIDATO Temp {temp_atual}] SQL gerada: {sql[:50]}...")
         
         return estado_candidato
+        
     except Exception as e:
-        print(f"[CANDIDATO {indice}] Erro ao gerar SQL: {e}")
+        print(f"[CANDIDATO Temp {temp_atual}] Erro ao gerar SQL: {e}")
         estado_candidato["sql"] = ""
         estado_candidato["erro"] = str(e)
         estado_candidato["tentativas_refinamento"] = 1

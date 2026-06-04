@@ -61,8 +61,6 @@ def nos_nodo_sandbox(estado: EstadoTextToInsight) -> dict:
 
 def sandbox_validacao_candidato(
     estado_candidato: EstadoCandidato,
-    indice: int,
-    db_path: str,
 ) -> EstadoCandidato:
     """
     Executa SQL de um candidato individual e valida resultado.
@@ -74,8 +72,6 @@ def sandbox_validacao_candidato(
     
     Args:
         estado_candidato: Estado do candidato com SQL preenchida
-        indice: Índice do candidato (0-4)
-        db_path: Caminho para SQLite
     
     Returns:
         EstadoCandidato atualizado com resultado_execucao, erro, valido, assinatura
@@ -83,8 +79,10 @@ def sandbox_validacao_candidato(
     
     sql = estado_candidato.get("sql", "").strip()
     tentativas = estado_candidato.get("tentativas_refinamento", 0)
+    db_path = estado_candidato.get("db_path", "")
+    temp = estado_candidato.get("temperatura", 0.0)
     
-    print(f"[CANDIDATO {indice}] Executando SQL (tentativa {tentativas})...")
+    print(f"[CANDIDATO Temp {temp}] Executando SQL (tentativa {tentativas})...")
     
     if not sql:
         estado_candidato["valido"] = False
@@ -107,7 +105,7 @@ def sandbox_validacao_candidato(
         estado_candidato["assinatura_resultado"] = assinatura
         estado_candidato["erro"] = ""
         
-        print(f"[CANDIDATO {indice}] ✅ Sucesso: {resultado['total_linhas_resultado']} linhas | Hash: {assinatura[:16]}...")
+        print(f"[CANDIDATO Temp {temp}] ✅ Sucesso: {resultado['total_linhas_resultado']} linhas | Hash: {assinatura[:16]}...")
         
     else:
         # ❌ Erro: avaliar se é retry-able
@@ -119,15 +117,15 @@ def sandbox_validacao_candidato(
         is_retry_able = is_syntax_error or is_timeout
         
         # Se retry-able e tentativas < 3: marcar para retry, não como falha final
-        if is_retry_able and tentativas < 3:
-            print(f"[CANDIDATO {indice}] ⚠️ Erro retry-able: {erro_msg[:60]}...")
+        if is_retry_able and tentativas < 5:
+            print(f"[CANDIDATO Temp {temp}] ⚠️ Erro retry-able: {erro_msg[:60]}...")
             estado_candidato["erro"] = erro_msg
             estado_candidato["tentativas_refinamento"] = tentativas + 1
             estado_candidato["valido"] = False
             # NÃO retornar ainda: o sub-grafo vai redirecionar para retry
         else:
             # Falha final: erro lógico ou limite de tentativas atingido
-            print(f"[CANDIDATO {indice}] ❌ Falha final: {erro_msg[:60]}...")
+            print(f"[CANDIDATO Temp {temp}] ❌ Falha final: {erro_msg[:60]}...")
             estado_candidato["erro"] = erro_msg
             estado_candidato["valido"] = False
             estado_candidato["resultado_execucao"] = {

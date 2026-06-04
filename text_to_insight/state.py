@@ -46,7 +46,7 @@ class EstadoCandidato(TypedDict, total=False):
     tentativas_refinamento: int                # Contador de retries (max 3)
     valido: bool                               # True se executado com sucesso
     assinatura_resultado: str                  # Hash para comparar consenso
-    indice: int                                # Índice do candidato (0-4) para prompt diversity
+    temperatura: float                                # temperatura pra substituir indice do prompt na geracao de candidatos
     
     # Contexto compartilhado (preenchido pelo Fan-out, repassado ao sub-grafo)
     pergunta: str                              # Pergunta do usuário
