@@ -254,13 +254,25 @@ class Graph:
             }
         )
 
-        # ✅ ReFoRCE: Se exploração detecta problema, volta ao Fan-out
+        # ✅ ReFoRCE: Se exploração detecta problema, volta ao Fan-out para nova rodada
+        def roteador_explorador(estado: EstadoTextToInsight) -> str:
+            """Após exploração, decide: nova rodada de 5 candidatos ou fallback."""
+            rodadas = estado.get("rodadas_exploracao", 0)
+            max_rodadas = 5
+            
+            if rodadas < max_rodadas:
+                print(f"[ROTEADOR_EXPLORADOR] Rodada {rodadas + 1}/{max_rodadas} → fan_out (5 novos candidatos)")
+                return "fan_out"
+            else:
+                print(f"[ROTEADOR_EXPLORADOR] Limite atingido ({rodadas}/{max_rodadas}) → resposta (fallback)")
+                return "resposta"
+        
         construtor_grafo.add_conditional_edges(
             "explorador",
-            lambda estado: "gerador_candidato" if estado.get("rodadas_exploracao", 0) < 5 else "resposta",
+            roteador_explorador,
             {
-                "gerador_candidato": "gerador_candidato",  # Retry com pergunta refinada
-                "resposta": "resposta",  # Encerrar se 2 rodadas
+                "fan_out": "fan_out",         # ✅ CORRIGIDO: Voltar ao fan_out, não gerador_candidato
+                "resposta": "resposta",
             }
         )
 

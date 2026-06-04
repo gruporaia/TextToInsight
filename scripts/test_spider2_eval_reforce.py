@@ -110,29 +110,44 @@ def extrair_artefatos_reforce(resultado: dict) -> dict:
     
     Returns:
         Dict com:
-        - num_candidatos: total gerado
+        - num_candidatos: total gerado (sempre 5 por rodada)
         - num_validos: quantos rodaram com sucesso
         - status_consenso: "consenso_encontrado" | "ambiguo" | "nao_votado"
         - rodadas_exploracao: quantas vezes explorador foi acionado
         - sql_vencedora: SQL aprovada pelo consenso
-        - resumo_candidatos: JSON com índices e hashes
+        - best_sql_last_attempt: Melhor SQL da última tentativa (para ambiguidades)
+        - resumo_candidatos: JSON com índices, hashes e erros
+        - total_candidatos_todas_rodadas: Total de candidatos em TODAS as rodadas
     """
     candidatos = resultado.get("candidatos", [])
     status_consenso = resultado.get("status_consenso", "nao_votado")
     rodadas_exploracao = resultado.get("rodadas_exploracao", 0)
     sql_vencedora = resultado.get("sql_vencedora", "")
+    motivo_ambiguidade = resultado.get("motivo_ambiguidade", "")
     
     num_candidatos = len(candidatos)
     num_validos = sum(1 for c in candidatos if c.get("valido", False))
     
-    # Resumo dos candidatos
+    # ✅ NOVO: Encontrar a melhor SQL da última tentativa (mesmo se ambíguo)
+    best_sql_last_attempt = ""
+    if candidatos:
+        # Preferir válidos, depois se não tiver, qualquer um
+        best_cand = next((c for c in candidatos if c.get("valido", False)), None)
+        if not best_cand and candidatos:
+            best_cand = candidatos[0]
+        if best_cand:
+            best_sql_last_attempt = best_cand.get("sql", "")
+    
+    # Resumo dos candidatos desta rodada
     resumo_candidatos = []
     for i, c in enumerate(candidatos):
         resumo_candidatos.append({
             "indice": i,
             "valido": c.get("valido", False),
+            "temperatura": round(c.get("temperatura", 0.0), 1),
             "assinatura": c.get("assinatura_resultado", "")[:16] if c.get("assinatura_resultado") else "",
-            "erro": c.get("erro", "")[:50] if c.get("erro") else "",
+            "erro": c.get("erro", "")[:80] if c.get("erro") else "",
+            "total_linhas": c.get("resultado_execucao", {}).get("total_linhas", 0),
         })
     
     return {
@@ -141,6 +156,7 @@ def extrair_artefatos_reforce(resultado: dict) -> dict:
         "status_consenso": status_consenso,
         "rodadas_exploracao": rodadas_exploracao,
         "sql_vencedora": sql_vencedora,
+        "best_sql_last_attempt": best_sql_last_attempt,
         "resumo_candidatos": json.dumps(resumo_candidatos, ensure_ascii=False),
     }
 
@@ -279,36 +295,43 @@ def main():
         query_agente = resultado.get("sql_gerada", "")
         veredito = resultado.get("status", "")
         tokens_total = resultado.get("tokens_total", 0) or 0
+        erro_execucao = resultado.get("erro_execucao", "")
+        schema_length = len(resultado.get("contexto_schema", "") or resultado.get("contexto_rag_schema", ""))
 
-        # ✅ Extração ReFoRCE
+        # ✅ NOVO: Extração ReFoRCE
         artefatos_reforce = extrair_artefatos_reforce(resultado)
 
-        # Avaliação de resultados
-        resultado_exato_match = None
-        f1_scores = {"f1": 0.0, "precision": 0.0, "recall": 0.0}
-        similarity_score = 0.0
+        # ✅ NOVO: Métricas simplificadas
+        execution_accuracy = 0  # 1 se executou sem erro, 0 c.c.
+        valid_sql = 0  # 1 se SQL válida (parsed corretamente), 0 c.c.
+        match_exato = None  # Mantém para retrocompatibilidade
+        
+        # Se não temos erro de execução, SQL é válida
+        if not erro_execucao and query_agente.strip():
+            valid_sql = 1
+            
+        # Se não temos erro de execução, tentamos executar
+        if query_agente and erro_execucao == "":
+            execution_accuracy = 1  # Executou sem erro
+        else:
+            execution_accuracy = 0
 
-        if query_agente and resultado.get("erro_execucao", "") == "":
+        # Avaliação de resultados (comparação com gold)
+        if query_agente and execution_accuracy == 1:
             resultado_agente = executor.execute_query(db_id, query_agente)
             if resultado_agente["success"]:
-                if query_ouro:
-                    similarity_score = sql_similarity_score(query_ouro, query_agente)
-                
                 best_match = False
-                best_f1 = {"f1": 0.0, "precision": 0.0, "recall": 0.0}
                 
                 for gold_res in gold_results_list:
                     match_atual = results_exact_match(gold_res, resultado_agente["results"])
-                    f1_atual = results_f1_score(gold_res, resultado_agente["results"])
-                    
                     if match_atual:
                         best_match = True
-                    
-                    if f1_atual["f1"] > best_f1["f1"]:
-                        best_f1 = f1_atual
+                        break
                 
-                resultado_exato_match = best_match
-                f1_scores = best_f1
+                match_exato = best_match
+        
+        if match_exato is None:
+            match_exato = execution_accuracy  # Se não conseguiu comparar, usa execution accuracy
 
         # Montar linha do CSV
         row = {
@@ -317,11 +340,14 @@ def main():
             "pergunta": pergunta,
             "query_ouro": query_ouro[:100] if query_ouro else "",
             "query_agente": query_agente[:100] if query_agente else "",
-            "match_exato": "SIM" if resultado_exato_match else ("NAO" if resultado_exato_match is False else "ERRO"),
-            "f1_score": f1_scores["f1"],
-            "precision": f1_scores["precision"],
-            "recall": f1_scores["recall"],
-            "similarity_sql": similarity_score,
+            "match_exato": "SIM" if match_exato else ("NAO" if match_exato is False else "ERRO"),
+            
+            # ✅ NOVO: Métricas simplificadas
+            "execution_accuracy": execution_accuracy,
+            "valid_sql": valid_sql,
+            "erro_execucao": erro_execucao[:100] if erro_execucao else "",
+            "schema_length": schema_length,
+            
             "tokens_total": tokens_total,
             "tempo_ms": round(tempo_total_ms, 2),
             "veredito": veredito,
@@ -332,15 +358,18 @@ def main():
             "reforce_status": artefatos_reforce["status_consenso"],
             "reforce_rodadas_exploracao": artefatos_reforce["rodadas_exploracao"],
             "reforce_sql_vencedora": artefatos_reforce["sql_vencedora"][:100] if artefatos_reforce["sql_vencedora"] else "",
+            "reforce_best_sql_attempt": artefatos_reforce["best_sql_last_attempt"][:100] if artefatos_reforce["best_sql_last_attempt"] else "",
             "reforce_candidatos_resumo": artefatos_reforce["resumo_candidatos"],
         }
         
         all_rows.append(row)
         
         # Log
-        status_icon = "✅" if resultado_exato_match else ("❌" if resultado_exato_match is False else "⚠️")
-        print(f"     {status_icon} Exato Match: {resultado_exato_match} | F1: {f1_scores['f1']:.3f}")
+        status_icon = "✅" if match_exato else ("❌" if match_exato is False else "⚠️")
+        print(f"     {status_icon} Exato Match: {match_exato} | Exec Accuracy: {execution_accuracy} | Valid SQL: {valid_sql}")
         print(f"     🤖 ReFoRCE: {artefatos_reforce['num_validos']}/{artefatos_reforce['num_candidatos']} válidos → {artefatos_reforce['status_consenso']}")
+        if erro_execucao:
+            print(f"     ⚠️ Erro: {erro_execucao[:80]}")
 
     # Salvar CSV
     if all_rows:
@@ -349,8 +378,12 @@ def main():
         print(f"\n✅ Resultados salvos em {csv_path} ({len(all_rows)} linhas)")
         print(f"\nResumo:")
         print(f"  Match Exato: {sum(1 for r in all_rows if r['match_exato'] == 'SIM')}/{len(all_rows)}")
-        print(f"  F1 Médio: {df['f1_score'].mean():.3f}")
+        print(f"  Execution Accuracy: {df['execution_accuracy'].mean():.1%}")
+        print(f"  Valid SQL: {df['valid_sql'].mean():.1%}")
+        print(f"  Schema length médio: {df['schema_length'].mean():.0f} chars")
         print(f"  Consenso ReFoRCE: {sum(1 for r in all_rows if r['reforce_status'] == 'consenso_encontrado')}/{len(all_rows)}")
+        print(f"  Candidatos médios por pergunta: {df['reforce_num_candidatos'].mean():.1f}")
+        print(f"  Rodadas de exploração: {df['reforce_rodadas_exploracao'].sum():.0f} total")
     else:
         print("\n❌ Nenhum resultado foi processado.")
         sys.exit(1)

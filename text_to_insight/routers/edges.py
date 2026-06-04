@@ -163,6 +163,8 @@ def roteador_fan_out(estado: EstadoTextToInsight) -> list[Send]:
     """
     Roteador Fan-out: cria 5 objetos Send para execução paralela de candidatos,
     injetando diversidade térmica (temperaturas diferentes).
+    
+    GARANTIA: Sempre retorna exatamente 5 Send objects.
     """
     from ..state import EstadoCandidato
     
@@ -175,13 +177,15 @@ def roteador_fan_out(estado: EstadoTextToInsight) -> list[Send]:
     schema = estado.get("contexto_rag_schema", "") or estado.get("contexto_schema", "")
     db_path = estado.get("db_path", "")
     historico = estado.get("historico_tentativas", [])
+    rodadas_exploracao = estado.get("rodadas_exploracao", 0)
     
     # Diversidade Térmica: Do mais determinístico (0.0) ao mais criativo (0.9)
     temperaturas = [0.0, 0.2, 0.5, 0.7, 0.9]
     
-    print(f"[ROTEADOR_FAN_OUT] Criando 5 candidatos em paralelo...")
+    print(f"\n[ROTEADOR_FAN_OUT] Criando 5 candidatos em paralelo (Rodada {rodadas_exploracao + 1})...")
     print(f"  Pergunta: {pergunta[:60]}...")
-    print(f"  Temperaturas: {temperaturas}")
+    print(f"  Schema length: {len(schema)} chars")
+    print(f"  Temperaturas (diversidade): {temperaturas}")
     
     sends = []
     for i, temp in enumerate(temperaturas):
@@ -207,7 +211,11 @@ def roteador_fan_out(estado: EstadoTextToInsight) -> list[Send]:
         # O nome do nó "gerador_candidato" deve corresponder ao add_node no graph.py
         send_obj = Send("gerador_candidato", estado_candidato)
         sends.append(send_obj)
-        print(f"  → Send[{i}] criado com Temp={temp}")
+        print(f"  ✓ Send[{i}] criado com Temp={temp}")
+    
+    # ✅ VERIFICAÇÃO: Sempre deve ser 5
+    assert len(sends) == 5, f"❌ ERRO CRÍTICO: Fan-out criou {len(sends)} candidatos, esperava 5!"
+    print(f"✅ Fan-out verificado: {len(sends)} candidatos prontos para execução paralela\n")
     
     return sends
 

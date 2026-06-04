@@ -134,9 +134,12 @@ Candidato {i}:
             estado["pergunta_atual"] = pergunta_refinada
             print(f"   ✓ Pergunta refinada: {pergunta_refinada}")
         
-        # Limpar candidatos para próxima rodada
+        # ✅ NOVO: Garantir que candidatos são zerados para próxima rodada
+        # (evita acúmulo mesmo sem operator.add)
         estado["candidatos"] = []
         estado["status_consenso"] = "nao_votado"
+        
+        print(f"   ✓ Candidatos resetados (lista vazia para próxima rodada Fan-out)")
         
         # Token tracking
         in_tokens, out_tokens, total_tokens = extrair_tokens(resposta_llm)

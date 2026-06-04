@@ -108,6 +108,18 @@ def nos_nodo_votacao(estado: EstadoTextToInsight) -> EstadoTextToInsight:
         # ❌ SEM CONSENSO → Ambiguidade
         print(f"   ❌ SEM CONSENSO: máximo {max_grupo_count} de {len(candidatos_validos)} (precisa >= 3)")
         
+        # ✅ NOVO: Guardar a melhor SQL mesmo em ambiguidade
+        # Priorizar pelo maior grupo (mais votos), depois pelo total de linhas
+        grupo_maior = max(
+            assinatura_counts.values(),
+            key=len
+        )
+        candidato_melhor = max(
+            grupo_maior,
+            key=lambda c: c.get("resultado_execucao", {}).get("total_linhas", 0)
+        )
+        sql_melhor_tentativa = candidato_melhor.get("sql", "")
+        
         # Contar rodadas de exploração
         rodadas = estado.get("rodadas_exploracao", 0)
         max_rodadas = 5
@@ -115,8 +127,11 @@ def nos_nodo_votacao(estado: EstadoTextToInsight) -> EstadoTextToInsight:
         if rodadas >= max_rodadas:
             # Marcar como definitivamente ambíguo
             print(f"   ⚠️ Limite de exploração atingido ({rodadas}/{max_rodadas})")
+            print(f"   → Guardando melhor SQL da tentativa: {sql_melhor_tentativa[:50]}...")
             estado["status_consenso"] = "ambiguo"
             estado["status"] = "ambiguo"  # Irá para resposta final (fallback)
+            estado["sql_vencedora"] = sql_melhor_tentativa  # ✅ NOVO: Gravar melhor tentativa
+            estado["sql_gerada"] = sql_melhor_tentativa
             estado["motivo_ambiguidade"] = (
                 f"Divergência persistente após {rodadas} rodadas de exploração. "
                 f"Assinaturas encontradas: {len(assinatura_counts)}. "
@@ -129,6 +144,7 @@ def nos_nodo_votacao(estado: EstadoTextToInsight) -> EstadoTextToInsight:
             estado["status_consenso"] = "ambiguo"
             estado["status"] = "ambiguo_precisa_exploracao"
             estado["rodadas_exploracao"] = rodadas + 1
+            estado["sql_vencedora"] = sql_melhor_tentativa  # ✅ NOVO: Guardar tentativa antes de explorar
             
             # Construir motivo da ambiguidade
             lista_assinaturas = "\n".join(

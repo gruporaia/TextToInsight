@@ -145,6 +145,8 @@ def nos_nodo_esquema(estado: EstadoTextToInsight) -> dict:
         print("[SCHEMA] Contexto obtido com sucesso.")
         return {
             "contexto_schema": contexto,
+            "contexto_rag_schema": contexto,  # ✅ Cópia para compatibilidade
+            "schema_length": len(contexto),   # ✅ NOVO: Guardar tamanho do schema
             "erro_execucao": "",
             "status": "schema_obtido",
         }

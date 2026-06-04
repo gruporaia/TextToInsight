@@ -84,6 +84,7 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     
     contexto_schema: str
     contexto_rag_schema: str
+    schema_length: int                         # ✅ NOVO: Tamanho do schema injetado (bytes)
     sql_gerada: str
     linhas_resultado_preview: list[dict[str, Any]]
     total_linhas_resultado: int
@@ -96,7 +97,7 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     historico_conversa: list[tuple[str, str]]
     tentativas_loop: int
     resposta_natural: str
-    historico_tentativas: Annotated[list[dict[str, str]], operator.add]
+    historico_tentativas: list[dict[str, str]]  # ✅ REMOVIDO operator.add (evita acúmulo)
     linhas_resultado_completo: list[dict[str, Any]]
 
     # Campos para geração de gráficos
@@ -111,8 +112,8 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     tokens_total: Annotated[int, operator.add]
 
     # --- ARQUITETURA ReFoRCE: Map-Reduce + Self-Refinement + Consensus ---
-    # Candidatos gerados em paralelo (Fan-out)
-    candidatos: Annotated[list[EstadoCandidato], operator.add]
+    # ✅ REMOVIDO operator.add - candidatos são sempre uma nova lista (5 por rodada), não acumulam
+    candidatos: list[EstadoCandidato]
     
     # Status de votação e exploração
     status_consenso: Literal["nao_votado", "consenso_encontrado", "ambiguo"]
