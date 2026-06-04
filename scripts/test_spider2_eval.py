@@ -467,7 +467,18 @@ def main():
         instance_id = ex.get("instance_id")
         db_id = ex.get("db", "")
         pergunta = ex.get("question", "")
-        
+
+        # Carregar contexto externo (external_knowledge) se disponível
+        external_knowledge_file = ex.get("external_knowledge")
+        if external_knowledge_file:
+            ek_path = Path(args.data_dir) / "resource" / "documents" / external_knowledge_file
+            if ek_path.exists():
+                ek_content = ek_path.read_text(encoding="utf-8").strip()
+                pergunta = f"{pergunta}\n\n<additional_context>\n{ek_content}\n</additional_context>"
+                print(f"     📎 Contexto externo carregado: {external_knowledge_file} ({len(ek_content)} chars)")
+            else:
+                print(f"     ⚠️  Arquivo de external_knowledge não encontrado: {ek_path}")
+
         # Recuperar query ouro e/ou csvs ouro
         query_ouro = get_gold_sql(args.data_dir, instance_id)
         gold_results_list = get_gold_results(args.data_dir, instance_id)
