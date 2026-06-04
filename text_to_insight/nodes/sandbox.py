@@ -33,6 +33,13 @@ def nos_nodo_sandbox(estado: EstadoTextToInsight) -> dict:
 
     if resultado["ok"]:
         print(f"[EXECUTOR] SQL executada com sucesso — {resultado['total_linhas_resultado']} linhas.")
+        attempt_info = {
+            "sql": sql,
+            "erro": "",
+            "prompt": estado.get("ultimo_prompt", ""),
+            "contexto": estado.get("contexto_prompt_agente", ""),
+            "raciocinio": estado.get("raciocinio_agente", ""),
+        }
         return {
             "linhas_resultado_preview": resultado["linhas_resultado_preview"],
             "linhas_resultado_completo": resultado["linhas_resultado_completo"],
@@ -40,9 +47,17 @@ def nos_nodo_sandbox(estado: EstadoTextToInsight) -> dict:
             "saida_terminal": resultado["saida_terminal"],
             "erro_execucao": "",
             "status": "exec_ok",
+            "historico_tentativas": [attempt_info],
         }
     else:
         print(f"[EXECUTOR] Erro na execução: {resultado['erro_execucao']}")
+        attempt_info = {
+            "sql": sql,
+            "erro": resultado["erro_execucao"],
+            "prompt": estado.get("ultimo_prompt", ""),
+            "contexto": estado.get("contexto_prompt_agente", ""),
+            "raciocinio": estado.get("raciocinio_agente", ""),
+        }
         return {
             "linhas_resultado_preview": [],
             "linhas_resultado_completo": [],
@@ -50,5 +65,5 @@ def nos_nodo_sandbox(estado: EstadoTextToInsight) -> dict:
             "saida_terminal": resultado["saida_terminal"],
             "erro_execucao": resultado["erro_execucao"],
             "status": "exec_erro",
-            "historico_tentativas": [{"sql": sql, "erro": resultado["erro_execucao"]}],
+            "historico_tentativas": [attempt_info],
         }

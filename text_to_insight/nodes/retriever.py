@@ -21,7 +21,7 @@ def _formatar_contexto_rag(retrieved, relations) -> str:
     )
 
 
-def nos_nodo_retriever(estado: EstadoTextToInsight) -> dict:
+def nos_nodo_retriever(estado: EstadoTextToInsight, use_rag: bool = True) -> dict:
     pergunta = (
         estado.get("pergunta_atual", "")
         or estado.get("pergunta_original", "")
@@ -30,6 +30,10 @@ def nos_nodo_retriever(estado: EstadoTextToInsight) -> dict:
     schema_full = estado.get("contexto_schema", "")
     if not schema_full or not pergunta or len(schema_full) < 500: 
         return {}
+
+    if not use_rag:
+        print("[RETRIEVER] RAG desativado. Passando o schema completo.")
+        return {"contexto_rag_schema": f"=== SCHEMA COMPLETO (RAG desativado) ===\n\n{schema_full}"}
 
     print(f"[RETRIEVER] schema completo: {len(schema_full)} chars (~{len(schema_full)//4} tokens)")
     rag = SchemaGraphRAG(schema={"contexto_schema": schema_full})
@@ -40,3 +44,4 @@ def nos_nodo_retriever(estado: EstadoTextToInsight) -> dict:
         f"| tabelas: {retrieved['ids'][0]}"
     )
     return {"contexto_rag_schema": reduzido}
+

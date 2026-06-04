@@ -22,6 +22,8 @@ from .nodes import (
     nos_nodo_planejador,
     nos_nodo_esquema,
     nos_nodo_retriever,
+    nos_nodo_data_exploration,
+    nos_nodo_exploration_selector,
     nos_nodo_agente_codigo,
     nos_nodo_sandbox,
     nos_nodo_resposta,
@@ -36,11 +38,14 @@ def nos_nodo_espera_humana(estado: EstadoTextToInsight):
     return estado
 
 class Graph:
-    def __init__(self, api_key: str, model: str, hitl: bool = True, enable_graphs: bool = True, use_cot: bool = True):
+    def __init__(self, api_key: str, model: str, hitl: bool = True, enable_graphs: bool = True, use_cot: bool = True, use_data_exploration: bool = True, use_exploration_selector: bool = False, use_rag: bool = True):
         self.llm = get_model(model, api_key)
         self.memory = MemorySaver()
         self.enable_graphs = enable_graphs
         self.use_cot = use_cot
+        self.use_data_exploration = use_data_exploration
+        self.use_exploration_selector = use_exploration_selector
+        self.use_rag = use_rag
         self.grafo_text_to_insight = self._compilar_grafo(hitl)
 
     def _construir_grafo_text_to_insight(self, hitl: bool) -> StateGraph:
@@ -53,7 +58,9 @@ class Graph:
         construtor_grafo.add_node("planejador", partial(nos_nodo_planejador, llm=self.llm, hitl=hitl))
         construtor_grafo.add_node("espera_humana", nos_nodo_espera_humana)
         construtor_grafo.add_node("esquema", nos_nodo_esquema)
-        construtor_grafo.add_node("retriever", nos_nodo_retriever)
+        construtor_grafo.add_node("retriever", partial(nos_nodo_retriever, use_rag=self.use_rag))
+        construtor_grafo.add_node("exploration_selector", partial(nos_nodo_exploration_selector, llm=self.llm, use_exploration_selector=self.use_exploration_selector))
+        construtor_grafo.add_node("data_exploration", partial(nos_nodo_data_exploration, use_data_exploration=self.use_data_exploration))
         construtor_grafo.add_node("agente_codigo", partial(nos_nodo_agente_codigo, llm=self.llm, use_cot=self.use_cot))
         construtor_grafo.add_node("sandbox", nos_nodo_sandbox)
         construtor_grafo.add_node("salvar_csv", nos_nodo_salvar_csv)
@@ -64,7 +71,9 @@ class Graph:
         construtor_grafo.add_edge(START, "planejador")
         construtor_grafo.add_edge("espera_humana", "planejador")
         construtor_grafo.add_edge("esquema", "retriever")
-        construtor_grafo.add_edge("retriever", "planejador")
+        construtor_grafo.add_edge("retriever", "exploration_selector")
+        construtor_grafo.add_edge("exploration_selector", "data_exploration")
+        construtor_grafo.add_edge("data_exploration", "planejador")
         construtor_grafo.add_edge("agente_codigo", "sandbox")
 
         # Gerador de gráfico sempre vai para resposta (sucesso ou falha)

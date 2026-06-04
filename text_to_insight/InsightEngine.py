@@ -16,7 +16,7 @@ class InsightEngine:
     - `resume(...)` continua uma consulta que ficou pausada em HITL.
     """
 
-    def __init__(self, api_key: str, model: str, db_path: str, hitl: bool = False, show_output: bool = False, enable_graphs: bool = True, use_cot: bool = True):
+    def __init__(self, api_key: str, model: str, db_path: str, hitl: bool = False, show_output: bool = False, enable_graphs: bool = True, use_cot: bool = True, use_data_exploration: bool = True, use_exploration_selector: bool = False, use_rag: bool = True):
         self._hitl_ativado = hitl
         # `show_output` controla se a engine imprime o resultado final no terminal.
         # Em cenários com CLI, normalmente deixamos False para evitar saída duplicada.
@@ -25,13 +25,28 @@ class InsightEngine:
         self._model = model
         self._db_path = db_path
         self._use_cot = use_cot
+        self._use_data_exploration = use_data_exploration
+        self._use_exploration_selector = use_exploration_selector
+        self._use_rag = use_rag
         # O grafo compila os nós/roteadores e guarda memória por thread_id.
-        self._grafo = Graph(api_key=api_key, model=self._model, hitl=self._hitl_ativado, enable_graphs=self._enable_graphs, use_cot=self._use_cot)
+        self._grafo = Graph(
+            api_key=api_key,
+            model=self._model,
+            hitl=self._hitl_ativado,
+            enable_graphs=self._enable_graphs,
+            use_cot=self._use_cot,
+            use_data_exploration=self._use_data_exploration,
+            use_exploration_selector=self._use_exploration_selector,
+            use_rag=self._use_rag,
+        )
 
         print(f"[CONFIG] HITL: {'ATIVADO' if self._hitl_ativado else 'DESATIVADO'}")
         print(f"[CONFIG] SHOW_OUTPUT: {'ATIVADO' if self._show_output else 'DESATIVADO'}")
         print(f"[CONFIG] GRÁFICOS: {'ATIVADO' if self._enable_graphs else 'DESATIVADO'}")
         print(f"[CONFIG] COT: {'ATIVADO' if self._use_cot else 'DESATIVADO'}")
+        print(f"[CONFIG] DATA_EXPLORATION: {'ATIVADO' if self._use_data_exploration else 'DESATIVADO'}")
+        print(f"[CONFIG] EXPLORATION_SELECTOR: {'ATIVADO' if self._use_exploration_selector else 'DESATIVADO'}")
+        print(f"[CONFIG] RAG: {'ATIVADO' if self._use_rag else 'DESATIVADO'}")
 
     def _config(self, thread_id: str) -> dict[str, Any]:
         # O LangGraph usa esse bloco "configurable" para identificar a conversa.

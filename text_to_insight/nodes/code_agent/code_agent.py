@@ -22,9 +22,13 @@ Regras:
 - NÃO use INSERT, UPDATE, DELETE, DROP, ALTER ou qualquer comando de escrita.
 - Use nomes de tabelas e colunas EXATAMENTE como aparecem no schema.
 - Se a pergunta for ambígua, faça a interpretação mais razoável.
+- Use as estatísticas de dados (DATA EXPLORATION) para entender distribuições, formatos e valores reais das colunas.
 
 === SCHEMA DO BANCO ===
 {schema}
+
+=== DATA EXPLORATION (estatísticas amostrais) ===
+{data_exploration}
 
 === PERGUNTA DO USUÁRIO ===
 {pergunta}
@@ -54,9 +58,13 @@ Regras:
 - NÃO inclua explicações, apenas a SQL pura.
 - Use nomes de tabelas e colunas EXATAMENTE como aparecem no schema.
 - Se a pergunta for ambígua, faça a interpretação mais razoável.
+- Use as estatísticas de dados (DATA EXPLORATION) para entender distribuições, formatos e valores reais das colunas e raciocinar sobre a natureza do D.
 
 === SCHEMA DO BANCO ===
 {schema}
+
+=== DATA EXPLORATION (estatísticas amostrais) ===
+{data_exploration}
 
 === PERGUNTA DO USUÁRIO ===
 {pergunta}
@@ -109,6 +117,7 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativ
     conversa_previa = estado.get("historico_conversa", "")
     schema = estado.get("contexto_schema", "")
     schema_rag = estado.get("contexto_rag_schema", "")
+    data_exploration = estado.get("contexto_data_exploration", "")
     historico = estado.get("historico_tentativas", [])
     tentativas = estado.get("tentativas_loop", 0)
 
@@ -120,18 +129,24 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativ
 
     prompt = template.format(
         schema=schema_rag if schema_rag else schema,
+        data_exploration=data_exploration if data_exploration else "Não disponível.",
         pergunta=pergunta,
         conversa_previa=conversa_previa if conversa_previa else "Nenhuma",
         historico_tentativas_section=historico_section,
     )
+
+    # print("\n\n[AGENTE_CODIGO] Prompt: \n", prompt, "\n\n")
     
     resposta = llm.invoke(prompt)
     resposta_texto = resposta.content
-    
+
+    # Extrair raciocínio CoT (se disponível)
+    raciocinio = ""
     if use_cot:
         thought_match = re.search(r"<thought>(.*?)</thought>", resposta_texto, re.DOTALL)
         if thought_match:
-            print(f"[AGENTE_CODIGO] Raciocínio: {thought_match.group(1).strip()}...")
+            raciocinio = thought_match.group(1).strip()
+            print(f"[AGENTE_CODIGO] Raciocínio: {raciocinio[:200]}...")
 
     sql = _extrair_sql(resposta_texto)
 
@@ -139,10 +154,17 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativ
 
     in_tokens, out_tokens, total_tokens = extrair_tokens(resposta)
 
+    # Montar contexto compacto para diagnóstico (schema + data exploration usados)
+    contexto_usado = schema_rag if schema_rag else schema
+    contexto_prompt = f"{contexto_usado}\n\n{data_exploration}" if data_exploration else contexto_usado
+
     return {
         "sql_gerada": sql,
         "status": "sql_gerada",
         "tentativas_loop": tentativas + 1,
+        "raciocinio_agente": raciocinio,
+        "contexto_prompt_agente": contexto_prompt,
+        "ultimo_prompt": prompt,
         # Retornando o número de tokens nessa chamada do Gemini
         "tokens_input": in_tokens,
         "tokens_output": out_tokens,

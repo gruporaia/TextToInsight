@@ -55,6 +55,10 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     
     contexto_schema: str
     contexto_rag_schema: str
+    contexto_data_exploration: str
+    colunas_para_explorar: dict[str, list[str]]
+    raciocinio_agente: str  # CoT <thought> extraído do agente de código
+    contexto_prompt_agente: str  # schema + data exploration enviados ao agente
     sql_gerada: str
     linhas_resultado_preview: list[dict[str, Any]]
     total_linhas_resultado: int
@@ -73,6 +77,7 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     caminho_csv_resultado: str
     caminho_grafico: str
     grafico_gerado: bool
+    ultimo_prompt: str
 
     # Campos exclusivos para métricas. Possibilita a soma automática dos tokens utilizados
     # por cada chamada do Gemini nos vários diferentes nós.

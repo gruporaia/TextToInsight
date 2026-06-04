@@ -41,7 +41,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--model",
-        default="gpt-4o-mini",
+        default="gpt-5-mini",
         help="Modelo LLM a utilizar (ex: gemini-2.5-flash, gpt-5-nano).",
     )
     parser.add_argument(
@@ -54,6 +54,18 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         choices=["on", "off"],
         default="on",
         help="Ativa/desativa o Chain of Thought (CoT). Padrão: on.",
+    )
+    parser.add_argument(
+        "--data-exploration",
+        choices=["on", "off"],
+        default="on",
+        help="Ativa/desativa a etapa de data exploration. Padrão: on.",
+    )
+    parser.add_argument(
+        "--exploration-selector",
+        choices=["on", "off"],
+        default="off",
+        help="Ativa/desativa a seleção de colunas por LLM para exploração. Padrão: off.",
     )
     parser.add_argument(
         "pergunta",
@@ -79,6 +91,8 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
 
     hitl_ativado = args.hitl == "on"
     cot_ativado = args.cot == "on"
+    data_exploration_ativado = args.data_exploration == "on"
+    exploration_selector_ativado = args.exploration_selector == "on"
     print(f"[CONFIG] HITL: {'ATIVADO' if hitl_ativado else 'DESATIVADO'}")
 
     api_key = os.getenv(args.api_key_env)
@@ -95,6 +109,8 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         hitl=hitl_ativado,
         show_output=False,
         use_cot=cot_ativado,
+        use_data_exploration=data_exploration_ativado,
+        use_exploration_selector=exploration_selector_ativado,
     )
 
     # show_output=False para evitar prints duplicados no console, já que exibir_resultado_console é chamado manualmente.
