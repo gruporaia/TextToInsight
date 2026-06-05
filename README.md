@@ -43,6 +43,8 @@ engine = InsightEngine(
     model="gemini-2.5-flash",
     db_path="data/olist_relational.db",
     hitl=True,
+    inferir_fks_virtuais=False, # (Opcional) Infere FKs baseadas em colunas _id (ex: tabelas do Spider 2)
+    usar_schemacrawler=True,    # (Opcional) Desative para forçar o fallback ao PRAGMA do SQLite
 )
 
 resultado = engine.run(
@@ -75,6 +77,9 @@ python main.py --hitl on "Quais categorias vendem mais?"
 
 # modo nao interativo
 python main.py --hitl off "Quais categorias vendem mais?"
+
+# desativando schemacrawler e forçando FKs virtuais (Spider 2 local)
+python main.py --hitl off --infer-fks on --use-schemacrawler off "Quantos times tem no banco?"
 
 # via entrypoint instalado pelo pacote
 text-to-insight --hitl on "Quantos pedidos existem no banco?"

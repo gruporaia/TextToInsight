@@ -256,6 +256,8 @@ def main():
     parser.add_argument("--model", type=str, default="gpt-4o-mini", help="Modelo LLM a utilizar")
     parser.add_argument("--with-graphs", action="store_true", help="Ativar a geração de gráficos e salvamento de CSV")
     parser.add_argument("--report-dir", type=str, default="", help="Pasta dentro de 'reports' para salvar os relatórios .md")
+    parser.add_argument("--infer-fks", action="store_true", help="Ativar inferência de FKs virtuais (Spider 2 Lite local)")
+    parser.add_argument("--no-schemacrawler", action="store_true", help="Desativar o uso do SchemaCrawler")
 
     args = parser.parse_args()
 
@@ -314,6 +316,17 @@ def main():
         db_id = ex.get("db", "")
         pergunta = ex.get("question", "")
         
+        # Carregar contexto externo (external_knowledge) se disponível
+        external_knowledge_file = ex.get("external_knowledge")
+        if external_knowledge_file:
+            ek_path = Path(args.data_dir) / "resource" / "documents" / external_knowledge_file
+            if ek_path.exists():
+                ek_content = ek_path.read_text(encoding="utf-8").strip()
+                pergunta = f"{pergunta}\n\n<additional_context>\n{ek_content}\n</additional_context>"
+                print(f"     📎 Contexto externo carregado: {external_knowledge_file} ({len(ek_content)} chars)")
+            else:
+                print(f"     ⚠️  Arquivo de external_knowledge não encontrado: {ek_path}")
+
         # Recuperar query ouro e/ou csvs ouro
         query_ouro = get_gold_sql(args.data_dir, instance_id)
         gold_results_list = get_gold_results(args.data_dir, instance_id)
@@ -357,6 +370,8 @@ def main():
                     hitl=False,
                     show_output=False,
                     enable_graphs=args.with_graphs,
+                    inferir_fks_virtuais=args.infer_fks,
+                    usar_schemacrawler=not args.no_schemacrawler,
                 )
             except Exception as e:
                 print(f"     ❌ Erro ao inicializar InsightEngine: {e}")

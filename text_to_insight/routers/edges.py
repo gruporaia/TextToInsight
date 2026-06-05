@@ -81,6 +81,9 @@ def roteador_planejador(estado: EstadoTextToInsight) -> Literal["esquema", "agen
     contexto = estado.get("contexto_schema", "")
     status = estado.get("status", "")
     esperar = estado.get("espera_humana", False)
+    tentativas_revisao = estado.get("tentativas_revisao_retriever", 0)
+
+    MAX_TENTATIVAS_REVISAO = 2
 
     print(f"[ROTEADOR_PLANEJADOR] Status: {status}, Schema preenchido: {bool(contexto)}")
 
@@ -92,17 +95,33 @@ def roteador_planejador(estado: EstadoTextToInsight) -> Literal["esquema", "agen
         print("[ROTEADOR_PLANEJADOR] Schema vazio → esquema")
         return "esquema"
 
-    if status in ("pronto_codificacao", "revisando_estrategia"):
+    if status == "pronto_codificacao":
         print("[ROTEADOR_PLANEJADOR] → agente_codigo")
         return "agente_codigo"
+
+    if status == "revisando_estrategia":
+        if len(contexto) < 1500:
+            print(
+                f"[ROTEADOR_PLANEJADOR] Schema pequeno ({len(contexto)} chars), "
+                f"RAG não ajudaria → agente_codigo (direto)"
+            )
+            return "agente_codigo"
+        if tentativas_revisao >= MAX_TENTATIVAS_REVISAO:
+            print(
+                f"[ROTEADOR_PLANEJADOR] Limite de {MAX_TENTATIVAS_REVISAO} expansões "
+                f"RAG atingido → agente_codigo (forçado)"
+            )
+            return "agente_codigo"
+        print("[ROTEADOR_PLANEJADOR] Revisando estratégia → retriever (expandir contexto RAG)")
+        return "retriever"
 
     if status == "aprovado":
         print("[ROTEADOR_PLANEJADOR] Aprovado → fim")
         return "fim"
 
-    # Default: gera código
-    print("[ROTEADOR_PLANEJADOR] Default → planejador")
-    return "planejador"
+    # Default: status não reconhecido — forçar geração de código para evitar auto-loop
+    print(f"[ROTEADOR_PLANEJADOR] Status não reconhecido '{status}' → agente_codigo (safety net)")
+    return "agente_codigo"
 
 def roteador_schema(estado: EstadoTextToInsight) -> Literal["retriever", "enriquecimento_rag"]:
     tem_descricao = estado.get("tem_descricao", False)

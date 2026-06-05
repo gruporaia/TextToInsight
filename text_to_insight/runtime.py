@@ -41,7 +41,7 @@ Retorne apenas:
 """
 
 
-def construir_estado_inicial(pergunta: str, db_path: str) -> dict[str, Any]:
+def construir_estado_inicial(pergunta: str, db_path: str, inferir_fks_virtuais: bool = False, usar_schemacrawler: bool = True) -> dict[str, Any]:
     """Cria o estado inicial padrão para uma execução do grafo."""
     return {
         "pergunta_original": pergunta,
@@ -59,6 +59,8 @@ def construir_estado_inicial(pergunta: str, db_path: str) -> dict[str, Any]:
         "linhas_resultado_completo": [],
         "historico_tentativas": [],
         "schemacrawler_bin": os.getenv("SCHEMACRAWLER_BIN", ""),
+        "inferir_fks_virtuais": inferir_fks_virtuais,
+        "usar_schemacrawler": usar_schemacrawler,
     }
 
 

@@ -96,7 +96,7 @@ class Graph:
                 "esquema": "esquema",
                 "agente_codigo": "agente_codigo",
                 "critico": "critico",
-                "planejador": "planejador",
+                "retriever": path,
                 "fim": END,
             }
         )

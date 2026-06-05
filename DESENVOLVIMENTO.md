@@ -7,13 +7,13 @@ Imports antigos via `src` nao devem mais ser usados.
 
 ## Setup local
 
-### Pre-requisitos
+### Pré-requisitos
 
 - Python 3.10+
 - venv/conda
 - chave de API (Gemini ou OpenAI, conforme modelo escolhido)
 
-### Instalacao
+### Instalação
 
 ```bash
 python -m venv .venv
@@ -59,7 +59,7 @@ Criterios minimos:
 - Em HITL, se a resposta do usuario for classificada como "nova pergunta",
   o sistema atualiza `pergunta_atual` e reinicia o ciclo, sem alterar a original.
 
-## Execucao
+## Execução
 
 ```bash
 # adaptador local
@@ -71,6 +71,9 @@ text-to-insight --hitl off "Quais categorias vendem mais?"
 # com modelo OpenAI
 set -a && source .env && set +a
 python main.py --hitl off --model gpt-4o-mini --api-key-env OPENAI_API_KEY "Quantos pedidos existem?"
+
+# testes locais com bancos do Spider 2 (SQLite sem FK explícita e PRAGMA nativo)
+python main.py --hitl off --infer-fks on --use-schemacrawler off "Qual a soma dos resultados?"
 ```
 
 O resultado e exibido no terminal em formato tabular sob o bloco `RESULTADO:`, junto com SQL gerada, feedback do critico e resposta natural.
@@ -119,7 +122,7 @@ pytest tests/test_integracao.py -v -s --record-mode=new_episodes
 pytest tests/test_main_engine_integracao.py -v -s
 ```
 
-### Gravacao de cassetes VCR (fluxo recomendado)
+### Gravação de cassetes VCR (fluxo recomendado)
 
 Use este fluxo quando mudar prompts, comportamento de nos ou quando adicionar testes com `@pytest.mark.vcr`:
 
@@ -131,7 +134,7 @@ pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=new_epis
 pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=none
 ```
 
-Observacoes:
+Observacões:
 
 - cassetes ficam em `tests/cassettes/`;
 - `new_episodes` grava apenas chamadas que ainda nao existem no YAML;

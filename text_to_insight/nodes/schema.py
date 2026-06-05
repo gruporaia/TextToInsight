@@ -293,7 +293,6 @@ def _rodar_schemacrawler(
         raise ValueError(f"Dialeto não suportado pelo Schema Crawler: {dialeto}")
 
     args_dialeto = dialeto_config["args"](db_path, cfg)
-
     cmd = [
         sc_bin,
         *args_dialeto,
@@ -301,6 +300,8 @@ def _rodar_schemacrawler(
         "--command=schema",
         "--output-format=text",
         "--no-info",
+        "-schemacrawler.format.hide_weakassociations=false", # mostra as FKs mesmo que não estejam mapeadas como FK no banco 
+        "-schemacrawler.format.hide_weakassociation_names=false", # mostra o nome das FKs mesmo que sejam weak 
     ]
 
     print(f"[SCHEMA] Executando Schema Crawler ({dialeto})...")
@@ -383,6 +384,145 @@ def _formatar_schema_sqlite(conn: sqlite3.Connection) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Heurística para analisar a estrutura do schema e injegar relações implícitas
+# ---------------------------------------------------------------------------
+def _inferir_fks_virtuais(schema_canonico: str) -> str:                               
+    """                                                                               
+    Varre o schema canônico gerado e infere FKs virtuais se não houver FKs mapeadas.  
+    Busca colunas com padrão '<tabela>_id' ou correspondência direta de ID,
+    incluindo tabelas com prefixos (ex: olist_orders para order_id).
+    Também detecta colunas com nomes idênticos entre tabelas (ex: product_category_name).
+    """                                                                               
+    linhas = schema_canonico.splitlines()                                             
+    tabelas_colunas = {}  # {tabela: [colunas]}                                       
+    tabela_atual = None                                                               
+                                                                                        
+    # 1. Mapeia tabelas e suas colunas                                                
+    for linha in linhas:                                                              
+        if linha.startswith("Tabela: "):                                              
+            tabela_atual = linha.split("Tabela: ")[1].strip()                         
+            tabelas_colunas[tabela_atual] = []                                        
+        elif linha.startswith("- ") and tabela_atual:                                 
+            col_nome = linha.split("- ")[1].split(":")[0].strip()                     
+            tabelas_colunas[tabela_atual].append(col_nome)                            
+    
+    # 2. Pré-computa índice reverso: base_name → lista de tabelas que contêm esse base
+    #    Ex: "order" → ["olist_orders", "orders"], "product" → ["olist_products", "products"]
+    nomes_tabelas = list(tabelas_colunas.keys())
+    nomes_lower = {t: t.lower() for t in nomes_tabelas}
+                                                                                        
+    novas_linhas = []                                                                 
+    tabela_atual = None                                                               
+    fks_existentes = set()                                                            
+                                                                                        
+    # 3. Varre o schema e injeta as FKs virtuais onde faltarem                        
+    for linha in linhas:                                                              
+        if linha.startswith("Tabela: "):                                              
+            tabela_atual = linha.split("Tabela: ")[1].strip()                         
+            fks_existentes.clear()                                                    
+            novas_linhas.append(linha)                                                
+            continue                                                                  
+                                                                                        
+        if tabela_atual and " -> " in linha:                                          
+            # Registra FKs que já existem fisicamente                                 
+            fks_existentes.add(linha.strip())                                         
+                                                                                        
+        novas_linhas.append(linha)                                                    
+                                                                                        
+        # Se terminou de listar a tabela (próxima linha em branco ou fim)             
+        # E não há FKs físicas ou queremos complementar:                              
+        if tabela_atual and (linha == "" or linha == linhas[-1]):                     
+            fks_injetar = []                                                          
+            colunas_da_tabela = tabelas_colunas.get(tabela_atual, [])                 
+                                                                                        
+            for col in colunas_da_tabela:                                             
+                # --- Estratégia 1: colunas terminadas em _id, _code, _no ---
+                match = re.match(r"^(\w+?)(?:_id|_code|_no)$", col, re.IGNORECASE)                   
+                if match:                                                             
+                    base_name = match.group(1).lower()                                
+                    
+                    # Gera candidatas: match exato, plurais, e variantes com prefixos
+                    candidatas_exatas = [
+                        base_name,
+                        f"{base_name}s",
+                        f"{base_name}es",
+                        f"{base_name}_data",
+                        f"{base_name}s_data",
+                    ]
+                    
+                    tabela_destino = None
+                    
+                    # Tenta match exato primeiro
+                    for cand in candidatas_exatas:
+                        if cand in tabelas_colunas and cand != tabela_atual:
+                            tabela_destino = cand
+                            break
+                    
+                    # Se não achou, tenta match parcial (tabelas com prefixo)
+                    # Ex: base_name="order" → acha "olist_orders" (termina com "orders" ou "order")
+                    if not tabela_destino:
+                        sufixos_busca = [base_name, f"{base_name}s", f"{base_name}es"]
+                        for t in nomes_tabelas:
+                            if t == tabela_atual:
+                                continue
+                            t_low = nomes_lower[t]
+                            for sufixo in sufixos_busca:
+                                # Tabela termina com o sufixo após um separador (_) ou é o nome completo
+                                if t_low.endswith(f"_{sufixo}") or t_low == sufixo:
+                                    tabela_destino = t
+                                    break
+                            if tabela_destino:
+                                break
+                    
+                    if tabela_destino:
+                        colunas_destino = tabelas_colunas[tabela_destino]
+                        coluna_chave = None
+                        
+                        # Tenta descobrir qual coluna liga no destino
+                        if col in colunas_destino:
+                            coluna_chave = col
+                        elif "id" in colunas_destino:
+                            coluna_chave = "id"
+                            
+                        if coluna_chave:
+                            fk_str = f"  - {col} -> {tabela_destino}.{coluna_chave} (virtual)"     
+                            if fk_str not in fks_existentes:                              
+                                fks_injetar.append(fk_str)
+                    continue
+                
+                # --- Estratégia 2: colunas com nome idêntico em outra tabela ---
+                # Ex: product_category_name aparece em olist_products E em product_category_name_translation
+                # Ignora colunas genéricas demais (id, name, type, status, etc.)
+                colunas_genericas = {"id", "name", "type", "status", "date", "value", "description", "code"}
+                if col.lower() in colunas_genericas:
+                    continue
+                    
+                for outra_tabela, outra_colunas in tabelas_colunas.items():
+                    if outra_tabela == tabela_atual:
+                        continue
+                    if col in outra_colunas:
+                        # Verifica se a coluna faz parte do nome da outra tabela
+                        # (forte sinal de FK, ex: product_category_name → product_category_name_translation)
+                        col_base = col.lower().replace("_", "")
+                        outra_base = outra_tabela.lower().replace("_", "")
+                        if col_base in outra_base or outra_base.startswith(col_base[:8]):
+                            fk_str = f"  - {col} -> {outra_tabela}.{col} (virtual)"
+                            if fk_str not in fks_existentes:
+                                fks_injetar.append(fk_str)
+                                break
+                                                                                        
+            if fks_injetar:
+                # Remove a última linha em branco temporariamente para injetar as FKs 
+                if novas_linhas and novas_linhas[-1] == "":
+                    novas_linhas.pop()
+                if not any("Foreign keys:" in l for l in novas_linhas[-20:]): # Verifica se o cabeçalho existe
+                    novas_linhas.append("  Foreign keys:")
+                novas_linhas.extend(fks_injetar)
+                novas_linhas.append("")
+
+    return "\n".join(novas_linhas)
+
+# ---------------------------------------------------------------------------
 # Nó do grafo
 # ---------------------------------------------------------------------------
 
@@ -413,6 +553,8 @@ def nos_nodo_esquema(estado: EstadoTextToInsight) -> dict:
     db_path = estado.get("db_path", "").strip()
     sc_bin  = estado.get("schemacrawler_bin", "").strip()
     db_cfg  = estado.get("db_config", {})
+    usar_schemacrawler = estado.get("usar_schemacrawler", True)
+    inferir_fks_virtuais = estado.get("inferir_fks_virtuais", False)
 
     # --- Validação ---
     if not db_path:
@@ -452,7 +594,7 @@ def nos_nodo_esquema(estado: EstadoTextToInsight) -> dict:
 
     sc_disponivel = bool(sc_bin) and Path(sc_bin).exists()
 
-    if sc_disponivel:
+    if usar_schemacrawler and sc_disponivel:
         try:
             contexto = _rodar_schemacrawler(db_path, dialeto, sc_bin, db_cfg)
             print("[SCHEMA] Schema Crawler: introspecção concluída.")
@@ -471,15 +613,23 @@ def nos_nodo_esquema(estado: EstadoTextToInsight) -> dict:
         if dialeto != "sqlite":
             msg = (
                 f"Dialeto '{dialeto}' requer Schema Crawler, mas schemacrawler_bin "
-                f"não está configurado no estado."
+                f"não está configurado (ou usar_schemacrawler está desativado)."
             )
             print(f"[SCHEMA] Erro: {msg}")
             return {"contexto_schema": "", "erro_execucao": msg, "status": "exec_erro"}
 
-        print("[SCHEMA] schemacrawler_bin não configurado — usando PRAGMA SQLite.")
+        if not usar_schemacrawler:
+            print("[SCHEMA] usar_schemacrawler desativado — usando PRAGMA SQLite.")
+        else:
+            print("[SCHEMA] schemacrawler_bin não configurado — usando PRAGMA SQLite.")
         conn = sqlite3.connect(f"file:{caminho_db}?mode=ro", uri=True)
         with conn:
             contexto = _formatar_schema_sqlite(conn)
+
+    # --- Heurística de FKs virtuais ---
+    if inferir_fks_virtuais:
+        print("[SCHEMA] Inferindo FKs virtuais.")
+        contexto = _inferir_fks_virtuais(contexto)
 
     return {
         "contexto_schema": contexto,

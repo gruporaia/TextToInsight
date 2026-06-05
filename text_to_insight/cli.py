@@ -32,6 +32,18 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Ativa/desativa o enriquecimento RAG. Padrão: off.",
     )
     parser.add_argument(
+        "--infer-fks",
+        choices=["on", "off"],
+        default="off",
+        help="Ativa/desativa a inferência virtual de chaves estrangeiras. Padrão: off.",
+    )
+    parser.add_argument(
+        "--use-schemacrawler",
+        choices=["on", "off"],
+        default="on",
+        help="Ativa/desativa o uso do SchemaCrawler. Se off, usa PRAGMA SQLite. Padrão: on.",
+    )
+    parser.add_argument(
         "--thread-id",
         default="sessao_usuario_1",
         help="Identificador da thread para execução e retomada.",
@@ -75,6 +87,8 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
 
     hitl_ativado = args.hitl == "on"
     enrich_rag_ativado = args.enrich_rag == "on"
+    inferir_fks_ativado = args.infer_fks == "on"
+    use_schemacrawler_ativado = args.use_schemacrawler == "on"
 
     api_key = os.getenv(args.api_key_env)
     if not api_key:
@@ -89,6 +103,8 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         db_path=args.db_path,
         hitl=hitl_ativado,
         enrich_rag=enrich_rag_ativado,
+        inferir_fks_virtuais=inferir_fks_ativado,
+        usar_schemacrawler=use_schemacrawler_ativado,
         show_output=False,
     )
 

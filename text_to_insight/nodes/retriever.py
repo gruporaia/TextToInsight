@@ -34,13 +34,24 @@ def nos_nodo_retriever(estado: EstadoTextToInsight) -> dict:
     pergunta = estado.get("pergunta_atual", "")
     schema_full = estado.get("contexto_schema", "")
     schema_size = len(schema_full)
+    tentativas_revisao = estado.get("tentativas_revisao_retriever", 0)
+
     if not schema_full or not pergunta or schema_size < 1500: 
         print(f"[RETRIEVER] contexto_schema contém {schema_size} chars, mantendo original")
-        return {}
+        return {
+            "status": "schema_obtido",
+            "tentativas_revisao_retriever": tentativas_revisao + 1,
+        }
 
     print(f"[RETRIEVER] schema completo: {len(schema_full)} chars (~{len(schema_full)//4} tokens)")
+    
+    tentativas = estado.get("tentativas_loop", 0)
+    top_k_dinamico = 5 + (tentativas * 4)
+    
     rag = SchemaGraphRAG(schema={"contexto_schema": schema_full})
-    retrieved, relations = rag.retrieve(pergunta)
+    print(f"[RETRIEVER] Recuperando top_k={top_k_dinamico} tabelas (loop atual: {tentativas})...")
+    retrieved, relations = rag.retrieve(pergunta, top_k=top_k_dinamico)
+    
     print(f"[RETRIEVER] Tabelas recuperadas: {retrieved['ids'][0]}")
     print(f"[RETRIEVER] Relations: {relations}")
     reduzido = _formatar_contexto_rag(retrieved, relations)
@@ -48,4 +59,9 @@ def nos_nodo_retriever(estado: EstadoTextToInsight) -> dict:
         f"[RETRIEVER] schema reduzido: {len(reduzido)} chars (~{len(reduzido)//4} tokens) "
         f"| tabelas: {retrieved['ids'][0]}"
     )
-    return {"contexto_rag_schema": reduzido}
+    # Retorna o contexto novo e reseta o status
+    return {
+        "contexto_rag_schema": reduzido,
+        "status": "schema_obtido",
+        "tentativas_revisao_retriever": tentativas_revisao + 1,
+    }
