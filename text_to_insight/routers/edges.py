@@ -45,29 +45,31 @@ Responda APENAS com uma palavra: SIM ou NAO
 """
 
 
-def roteador_sandbox(estado: EstadoTextToInsight) -> Literal["critico", "planejador"]:
+def roteador_sandbox(estado: EstadoTextToInsight, enable_graphs: bool = True) -> Literal["salvar_csv", "resposta", "planejador"]:
     """
     Roteador após execução do Executor (sandbox).
 
-    - exec_ok → critico (avaliar resultado)
+    - exec_ok → salvar_csv/resposta
     - exec_erro + tentativas < 3 → planejador (reconsiderar)
-    - tentativas >= 3 → crítico (desistir/reiniciar -> encerrar loop)
+    - tentativas >= 3 → salvar_csv/resposta (desistir/reiniciar -> encerrar loop)
     """
     status = estado.get("status", "")
     tentativas = estado.get("tentativas_loop", 0)
 
     print(f"[ROTEADOR_SANDBOX] Status: {status}, Tentativas: {tentativas}")
 
+    next_step = "salvar_csv" if enable_graphs else "resposta"
+
     if status == "exec_ok":
-        print("[ROTEADOR_SANDBOX] Execução OK → critico")
-        return "critico"
+        print(f"[ROTEADOR_SANDBOX] Execução OK → {next_step}")
+        return next_step
 
     if status == "exec_erro" and tentativas < 3:
         print("[ROTEADOR_SANDBOX] Erro detectado → planejador para retry")
         return "planejador"
 
-    print("[ROTEADOR_SANDBOX] Muitas tentativas ou erro → critico (para forçar o fim do loop)")
-    return "critico"
+    print(f"[ROTEADOR_SANDBOX] Muitas tentativas ou erro → {next_step} (para forçar o fim do loop)")
+    return next_step
 
 
 def roteador_planejador(estado: EstadoTextToInsight) -> Literal["esquema", "agente_codigo", "planejador", "fim", "espera_humana"]:

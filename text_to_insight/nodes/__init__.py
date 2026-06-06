@@ -25,7 +25,6 @@ from .sandbox import nos_nodo_sandbox
 from .response import nos_nodo_resposta
 from .csv_saver import nos_nodo_salvar_csv
 from .graph_generator import nos_nodo_gerador_grafico
-from .critic import nos_nodo_critico
 
 __all__ = [
     "nos_nodo_planejador",
@@ -39,6 +38,5 @@ __all__ = [
     "nos_nodo_salvar_csv",
     "nos_nodo_gerador_grafico",
     "nos_nodo_enrich",
-    "nos_nodo_critico",
 ]
 
