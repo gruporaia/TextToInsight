@@ -19,7 +19,7 @@ class SchemaGraphRAG:
             self.schema_graph = SchemaGraph(schema = schema_string)
             self.rag = RAGRetriever(chroma_client = chroma_client, document_schema = schema, collection_name =collection_name)
 
-    def retrieve(self, query: str):
+    def retrieve(self, query: str, top_k: int = 5):
         #a query no no schema vai rolar aqui, essa função deve:
         # 1. acessar as tables e colunas relevantes
         # 2. usar as relações do grafo para navegar entre as tabelas e colunas
@@ -27,8 +27,21 @@ class SchemaGraphRAG:
 
         #o importante aqui é encontrar o caminho mais curto que liga as tabelas retornadas pelo RAG com base no grafo
         #que foi produzido com o schema fornecido
-        retrieved_tables = self.rag._query(query)
-        relations = self.schema_graph._get_relations(retrieved_tables['ids'][0])
+        retrieved_tables = self.rag._query(query, top_k=top_k)
+        relations, missing_tables = self.schema_graph._get_relations(retrieved_tables['ids'][0])
+        if missing_tables:
+            print(f"[SchemaGraphRAG] Warning: The following tables were retrieved by RAG but are missing in the graph: {missing_tables}")
+        tabelas_relacionadas = set()
+        for rel in relations:
+            tabelas_relacionadas.add(rel[0])
+            tabelas_relacionadas.add(rel[1])
+
+        tabelas_faltando = tabelas_relacionadas - set(retrieved_tables['ids'][0])
+        for t in tabelas_faltando:
+            schema = self.schema_graph.table_schemas.get(t)
+            if schema:
+                retrieved_tables['ids'][0].append(t)
+                retrieved_tables['documents'][0].append(schema)
         return retrieved_tables, relations
     
 if __name__ == '__main__':

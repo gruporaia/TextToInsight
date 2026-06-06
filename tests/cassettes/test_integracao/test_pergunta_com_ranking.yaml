@@ -3,42 +3,39 @@ interactions:
     body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 o planejador de um
       sistema que transforma perguntas em consultas SQL.\n\nSeu papel: analisar a
       situa\u00e7\u00e3o atual e decidir a pr\u00f3xima a\u00e7\u00e3o.\n\nContexto
-      atual:\n- Pergunta do usu\u00e1rio: \"Quais s\u00e3o as 5 categorias com a maior
-      quantidade total de itens vendidos?\"\n\n- conversa_previa: Nenhuma\n\n- Schema:
-      === SCHEMA SQLITE (INTROSPECCAO REAL) ===\n\nTabela: customers\n- customer_id:
-      TEXT (PK)\n- customer_unique_id: TEXT\n- customer_zip_code_prefix: INTEGER\n-
-      customer_city: TEXT\n- customer_state: TEXT\n\nTabela: geolocation\n- geolocation_zip_code_prefix:
-      INTEGER\n- geolocation_lat: REAL\n- geolocation_lng: REAL\n- geolocation_city:
-      TEXT\n- geolocation_state: TEXT\n\nTabela: order_items\n- order_id: TEXT (PK)\n-
-      order_item_id: INTEGER (PK)\n- product_id: TEXT\n- seller_id: TEXT\n- shipping_limit_date:
-      TEXT\n- price: REAL\n- freight_value: REAL\n  Foreign keys:\n  - seller_id ->
-      sellers.seller_id (on_update=NO ACTION, on_delete=NO ACTION)\n  - product_id
-      -> products.product_id (on_update=NO ACTION, on_delete=NO ACTION)\n  - order_id
-      -> orders.order_id (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela: order_payments\n-
-      order_id: TEXT (PK)\n- payment_sequential: INTEGER (PK)\n- payment_type: TEXT\n-
-      payment_installments: INTEGER\n- payment_value: REAL\n  Foreign keys:\n  - order_id
-      -> orders.order_id (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela: order_reviews\n-
-      review_id: TEXT (PK)\n- order_id: TEXT\n- review_score: INTEGER\n- review_comment_title:
-      TEXT\n- review_comment_message: TEXT\n- review_creation_date: TEXT\n- review_answer_timestamp:
-      TEXT\n  Foreign keys:\n  - order_id -> orders.order_id (on_update=NO ACTION,
-      on_delete=NO ACTION)\n\nTabela: orders\n- order_id: TEXT (PK)\n- customer_id:
-      TEXT\n- order_status: TEXT\n- order_purchase_timestamp: TEXT\n- order_approved_at:
-      TEXT\n- order_delivered_carrier_date: TEXT\n- order_delivered_customer_date:
+      atual:\n- Pergunta do usu\u00e1rio: \"Quais sao as 5 categorias de produtos
+      mais vendidos por quantidade?\"\n\n- conversa_previa: Nenhuma\n\n- Schema: ===
+      SCHEMA RELEVANTE (via RAG) ===\n\nTabela: products\n- product_id: TEXT (PK)\n-
+      product_category_name: TEXT\n- product_name_length: REAL\n- product_description_length:
+      REAL\n- product_photos_qty: REAL\n- product_weight_g: REAL\n- product_length_cm:
+      REAL\n- product_height_cm: REAL\n- product_width_cm: REAL\n\nTabela: sellers\n-
+      seller_id: TEXT (PK)\n- seller_zip_code_prefix: INTEGER\n- seller_city: TEXT\n-
+      seller_state: TEXT\n\nTabela: customers\n- customer_id: TEXT (PK)\n- customer_unique_id:
+      TEXT\n- customer_zip_code_prefix: INTEGER\n- customer_city: TEXT\n- customer_state:
+      TEXT\n\nTabela: geolocation\n- geolocation_zip_code_prefix: INTEGER\n- geolocation_lat:
+      REAL\n- geolocation_lng: REAL\n- geolocation_city: TEXT\n- geolocation_state:
+      TEXT\n\nTabela: order_items\n- order_id: TEXT (PK)\n- order_item_id: INTEGER
+      (PK)\n- product_id: TEXT\n- seller_id: TEXT\n- shipping_limit_date: TEXT\n-
+      price: REAL\n- freight_value: REAL\n  Foreign keys:\n  - seller_id -> sellers.seller_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\n  - product_id -> products.product_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\n  - order_id -> orders.order_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela: orders\n- order_id: TEXT
+      (PK)\n- customer_id: TEXT\n- order_status: TEXT\n- order_purchase_timestamp:
+      TEXT\n- order_approved_at: TEXT\n- order_delivered_carrier_date: TEXT\n- order_delivered_customer_date:
       TEXT\n- order_estimated_delivery_date: TEXT\n  Foreign keys:\n  - customer_id
-      -> customers.customer_id (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela:
-      products\n- product_id: TEXT (PK)\n- product_category_name: TEXT\n- product_name_length:
-      REAL\n- product_description_length: REAL\n- product_photos_qty: REAL\n- product_weight_g:
-      REAL\n- product_length_cm: REAL\n- product_height_cm: REAL\n- product_width_cm:
-      REAL\n\nTabela: sellers\n- seller_id: TEXT (PK)\n- seller_zip_code_prefix: INTEGER\n-
-      seller_city: TEXT\n- seller_state: TEXT\n\n\n- Feedback do cr\u00edtico: Nenhum\n-
-      Tentativas realizadas: 0\n- Status atual: schema_obtido\n- Erro anterior: Nenhum\n\nAVALIA\u00c7\u00c3O
-      CR\u00cdTICA:\nVerifique se a \"Pergunta do usu\u00e1rio\" pode ser respondida
-      com as tabelas e colunas do Schema.\nSe houver ambiguidade, conceitos n\u00e3o
-      mapeados no banco de dados, ou se a inten\u00e7\u00e3o do usu\u00e1rio n\u00e3o
-      estiver clara, voc\u00ea DEVE pedir mais informa\u00e7\u00f5es.\n\nResponda
-      EXATAMENTE no formato JSON abaixo, sem formata\u00e7\u00e3o markdown (```json):\n{{\n    \"decisao\":
+      -> customers.customer_id (on_update=NO ACTION, on_delete=NO ACTION)\n\n=== RELA\u00c7\u00d5ES
+      NECESS\u00c1RIAS (caminhos de JOIN) ===\norders JOIN customers ON orders.customer_id
+      = customers.customer_id\norder_items JOIN orders ON order_items.order_id = orders.order_id\norder_items
+      JOIN products ON order_items.product_id = products.product_id\norder_items JOIN
+      sellers ON order_items.seller_id = sellers.seller_id\n\n\n- Feedback do cr\u00edtico:
+      Nenhum\n- Tentativas realizadas: 0\n- Status atual: schema_obtido\n- Erro anterior:
+      Nenhum\n\nAVALIA\u00c7\u00c3O CR\u00cdTICA:\nVerifique se a \"Pergunta do usu\u00e1rio\"
+      pode ser respondida com as tabelas e colunas do Schema.\nSe houver ambiguidade,
+      conceitos n\u00e3o mapeados no banco de dados, ou se a inten\u00e7\u00e3o do
+      usu\u00e1rio n\u00e3o estiver clara, voc\u00ea DEVE pedir mais informa\u00e7\u00f5es.\n\nResponda
+      EXATAMENTE no formato JSON abaixo, sem formata\u00e7\u00e3o markdown (```json):\n{\n    \"decisao\":
       \"escolha_uma_opcao\",\n    \"pergunta_ao_usuario\": \"escreva a pergunta aqui
-      se precisar de ajuda, ou deixe vazio se n\u00e3o precisar\"\n}}\n\nOp\u00e7\u00f5es
+      se precisar de ajuda, ou deixe vazio se n\u00e3o precisar\"\n}\n\nOp\u00e7\u00f5es
       v\u00e1lidas para ''decis\u00e3o'':\n- \"pronto_codificacao\" \u2192 se temos
       schema, a pergunta faz sentido e devemos gerar/regenerar SQL\n- \"revisando_estrategia\"
       \u2192 se o cr\u00edtico reprovou e devemos tentar uma abordagem diferente\n-
@@ -68,13 +65,13 @@ interactions:
   response:
     body:
       string: !!binary |
-        H4sIAAAAAAAC/2WRXUvDMBSG7/srSq432Sau6J1MLyaowwURrIxjc9oGu5ySpDIt/e8m7bp1s4WS
-        vOc9X0/rIAxZAkpIARYNuwnfnRKGdfv1MVIWlXWBXnJiCdoevd1TD87OYnHnk1gdK3+PmcBEGqDY
-        iTErtStLm4SETGUCiddHvbNEnVXKwgZoU5kKtNxnuVc1bNCnOZw/RsfpNBXoW29JYNHbm97AUqmk
-        yV8QDClvW/PnFTtEpRK4c/Ik6Bu0pVllIMNHtOA4wYGGX2RbWk5fqBZUtZymk8m8KzcAe+KYXe/j
-        liwUp8mX09noX2lz5xrLYoh88DfcnlBI++OX4fdvnA1Y2PPJehzBgBqzOVVZbs+mjKJ92KD+lgly
-        idr3MNatBVp4tC3WjvQraiM7pBluHeTx7OJqnBZg8nYiptGUpAwuhfcsSlqBjj4fiK9/o+VKpfxp
-        fkssaII/XdXs1JUCAAA=
+        H4sIAAAAAAAC/2WRXU+DMBSG7/kVpNeb2RYXnXfGGZ3GuCg6oxhyQs+gylrSHnST8N9tYWw4aULa
+        97w9H09Lz/dZDJILDoSGnflvVvH9sv67mJKEkmyglayYg6a9t/nKzt5aCNfuEitD6c4h4xgLAyq0
+        YshybdOqKFZcLEUMsdN7rTNHnRSSIAIVFaYALba37JIV69Spdvv33r47rTJ0pVeKY9baq9bAlkIK
+        kz4gGCWd7TG4n7NdVEiOaysPvLZAnZoVBhK8QwLLCXY03CCrnAL1ifJCFTWnyfC0ydbh+scwmmzj
+        pAiyP6Hh6Hjc+5fZTG1dkXWJdx7DjgmZoI2bJbh8CVgHBR001sLwOswYpapIUjpssp3CoP4SMQYC
+        tSthyE4FmjuwNdSG8zNqIxqgCa4s4v7oaNxfZmDSuiGm0eRKGpxx57lZDD4gv3q9vl1Mf05m82+c
+        RpvzJ+ZV3i9mxDgMkwIAAA==
     headers:
       Alt-Svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
@@ -83,11 +80,11 @@ interactions:
       Content-Type:
       - application/json; charset=UTF-8
       Date:
-      - Thu, 21 May 2026 23:49:32 GMT
+      - Sat, 06 Jun 2026 00:43:19 GMT
       Server:
       - scaffolding on HTTPServer2
       Server-Timing:
-      - gfet4t7; dur=2133
+      - gfet4t7; dur=2138
       Transfer-Encoding:
       - chunked
       Vary:
@@ -114,38 +111,35 @@ interactions:
       comando de escrita.\n- N\u00c3O inclua explica\u00e7\u00f5es, apenas a SQL pura.\n-
       Use nomes de tabelas e colunas EXATAMENTE como aparecem no schema.\n- Se a pergunta
       for amb\u00edgua, fa\u00e7a a interpreta\u00e7\u00e3o mais razo\u00e1vel.\n\n===
-      SCHEMA DO BANCO ===\n=== SCHEMA SQLITE (INTROSPECCAO REAL) ===\n\nTabela: customers\n-
-      customer_id: TEXT (PK)\n- customer_unique_id: TEXT\n- customer_zip_code_prefix:
-      INTEGER\n- customer_city: TEXT\n- customer_state: TEXT\n\nTabela: geolocation\n-
-      geolocation_zip_code_prefix: INTEGER\n- geolocation_lat: REAL\n- geolocation_lng:
-      REAL\n- geolocation_city: TEXT\n- geolocation_state: TEXT\n\nTabela: order_items\n-
-      order_id: TEXT (PK)\n- order_item_id: INTEGER (PK)\n- product_id: TEXT\n- seller_id:
-      TEXT\n- shipping_limit_date: TEXT\n- price: REAL\n- freight_value: REAL\n  Foreign
-      keys:\n  - seller_id -> sellers.seller_id (on_update=NO ACTION, on_delete=NO
-      ACTION)\n  - product_id -> products.product_id (on_update=NO ACTION, on_delete=NO
-      ACTION)\n  - order_id -> orders.order_id (on_update=NO ACTION, on_delete=NO
-      ACTION)\n\nTabela: order_payments\n- order_id: TEXT (PK)\n- payment_sequential:
-      INTEGER (PK)\n- payment_type: TEXT\n- payment_installments: INTEGER\n- payment_value:
-      REAL\n  Foreign keys:\n  - order_id -> orders.order_id (on_update=NO ACTION,
-      on_delete=NO ACTION)\n\nTabela: order_reviews\n- review_id: TEXT (PK)\n- order_id:
-      TEXT\n- review_score: INTEGER\n- review_comment_title: TEXT\n- review_comment_message:
-      TEXT\n- review_creation_date: TEXT\n- review_answer_timestamp: TEXT\n  Foreign
-      keys:\n  - order_id -> orders.order_id (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela:
-      orders\n- order_id: TEXT (PK)\n- customer_id: TEXT\n- order_status: TEXT\n-
-      order_purchase_timestamp: TEXT\n- order_approved_at: TEXT\n- order_delivered_carrier_date:
-      TEXT\n- order_delivered_customer_date: TEXT\n- order_estimated_delivery_date:
-      TEXT\n  Foreign keys:\n  - customer_id -> customers.customer_id (on_update=NO
-      ACTION, on_delete=NO ACTION)\n\nTabela: products\n- product_id: TEXT (PK)\n-
-      product_category_name: TEXT\n- product_name_length: REAL\n- product_description_length:
-      REAL\n- product_photos_qty: REAL\n- product_weight_g: REAL\n- product_length_cm:
-      REAL\n- product_height_cm: REAL\n- product_width_cm: REAL\n\nTabela: sellers\n-
-      seller_id: TEXT (PK)\n- seller_zip_code_prefix: INTEGER\n- seller_city: TEXT\n-
-      seller_state: TEXT\n\n\n=== PERGUNTA DO USU\u00c1RIO ===\nQuais s\u00e3o as
-      5 categorias com a maior quantidade total de itens vendidos?\n\n=== CONVERSA
-      PR\u00c9VIA (CONTEXTO ADICIONAL) ===\nNenhuma\n\n=== HIST\u00d3RICO DE TENTATIVAS
-      ANTERIORES ===\nNenhuma tentativa anterior.\n\nResponda APENAS com a consulta
-      SQL, sem markdown, sem explica\u00e7\u00e3o."}], "role": "user"}], "safetySettings":
-      [], "generationConfig": {"temperature": 0.7, "candidateCount": 1}}'
+      SCHEMA DO BANCO ===\n=== SCHEMA RELEVANTE (via RAG) ===\n\nTabela: products\n-
+      product_id: TEXT (PK)\n- product_category_name: TEXT\n- product_name_length:
+      REAL\n- product_description_length: REAL\n- product_photos_qty: REAL\n- product_weight_g:
+      REAL\n- product_length_cm: REAL\n- product_height_cm: REAL\n- product_width_cm:
+      REAL\n\nTabela: sellers\n- seller_id: TEXT (PK)\n- seller_zip_code_prefix: INTEGER\n-
+      seller_city: TEXT\n- seller_state: TEXT\n\nTabela: customers\n- customer_id:
+      TEXT (PK)\n- customer_unique_id: TEXT\n- customer_zip_code_prefix: INTEGER\n-
+      customer_city: TEXT\n- customer_state: TEXT\n\nTabela: geolocation\n- geolocation_zip_code_prefix:
+      INTEGER\n- geolocation_lat: REAL\n- geolocation_lng: REAL\n- geolocation_city:
+      TEXT\n- geolocation_state: TEXT\n\nTabela: order_items\n- order_id: TEXT (PK)\n-
+      order_item_id: INTEGER (PK)\n- product_id: TEXT\n- seller_id: TEXT\n- shipping_limit_date:
+      TEXT\n- price: REAL\n- freight_value: REAL\n  Foreign keys:\n  - seller_id ->
+      sellers.seller_id (on_update=NO ACTION, on_delete=NO ACTION)\n  - product_id
+      -> products.product_id (on_update=NO ACTION, on_delete=NO ACTION)\n  - order_id
+      -> orders.order_id (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela: orders\n-
+      order_id: TEXT (PK)\n- customer_id: TEXT\n- order_status: TEXT\n- order_purchase_timestamp:
+      TEXT\n- order_approved_at: TEXT\n- order_delivered_carrier_date: TEXT\n- order_delivered_customer_date:
+      TEXT\n- order_estimated_delivery_date: TEXT\n  Foreign keys:\n  - customer_id
+      -> customers.customer_id (on_update=NO ACTION, on_delete=NO ACTION)\n\n=== RELA\u00c7\u00d5ES
+      NECESS\u00c1RIAS (caminhos de JOIN) ===\norders JOIN customers ON orders.customer_id
+      = customers.customer_id\norder_items JOIN orders ON order_items.order_id = orders.order_id\norder_items
+      JOIN products ON order_items.product_id = products.product_id\norder_items JOIN
+      sellers ON order_items.seller_id = sellers.seller_id\n\n\n=== PERGUNTA DO USU\u00c1RIO
+      ===\nQuais sao as 5 categorias de produtos mais vendidos por quantidade?\n\n===
+      CONVERSA PR\u00c9VIA (CONTEXTO ADICIONAL) ===\nNenhuma\n\n=== HIST\u00d3RICO
+      DE TENTATIVAS ANTERIORES ===\nNenhuma tentativa anterior.\n\nResponda APENAS
+      com a consulta SQL, sem markdown, sem explica\u00e7\u00e3o."}], "role": "user"}],
+      "safetySettings": [], "generationConfig": {"temperature": 0.7, "candidateCount":
+      1}}'
     headers:
       Accept:
       - '*'
@@ -168,14 +162,14 @@ interactions:
   response:
     body:
       string: !!binary |
-        H4sIAAAAAAAC/31SXU/CMBR9369o+qSJGvEDPxIfEKbOCMMxDcYZ0tArNG7t0t4ZkPDf7QaD4oN7
-        WLp7Ts+599wtPELomEkuOEMw9Jq82wohi+pdYkoiSLRAXbLFnGncclfPwjlbCsKsvEQH/pPfjhNJ
-        SH6Ua8WLMY7G1mqi9HwkWQaJvIvCLlljhrQGJE/kYxj0iNIc9EggZFVZiVIm7DlKgpMbW3e+E3kf
-        hS99cvv2r2cYdfxoTWqHL714z6ps/azQPun4g3Yin4JuEJNz6oy33Jw/DrahaJVCOXGmOKQ1fVkT
-        6KeQwkwjYEbJKpg47NMNKiSHmS0fe7VBJU0LwybQBWR2PWyzBGqnynKM1RfItiqq9Vwdn63UnHXu
-        EJqXaxwVsnQHajROa9BRNh3rK1J30c4/YMdkqcB5OUvsD2PqRIF/GqvD8JzMKE5VMZnibpONZnMN
-        G9DfYgyxAF1aGLRTMc3LYKtQVzm/gjZiFegEMhvx4cnR+eFnysy0aohqMLmSBgJecjqPqs9wDuHl
-        4OHnIujPusPnomWot/R+AXMww50KAwAA
+        H4sIAAAAAAAC/31SXU/CMBR9369o+qSJEplBwMQHhWlGZCOj+BFnSEOvo7q1pC1EIfx3u83B0MQ9
+        NM09p+fce+42DkJ4RgXjjBrQ+BK92ApCm+LMMSkMCGOBqmSLC6rMnlt+m9rdUgx85o/w2Lv3eiQW
+        CBG3sVCSLWdmOrNeiVRfU0EziMVtFA6RVAzUlBvINLoeI9KMhR8EXoQGoR+gn5cl5OZyYWA5O0XO
+        0FXdgbNY3EXhZIRunv83D6O+NSlZvXASkCMru2/GKh2jvjfuxeLeH/oEtXBt0O3u/nqyj0fJFPLZ
+        M8kgrejbioDfuOB6HgHVUhQRkXCEdygXDD5t+cypDAppvNQ0gSEYahdFd+vAdqpsYYj8ANGTy2JR
+        neZFqVZb7AGhXeFGGpoeQN1O++SPsO5bW57WN177GeyUNOXmKx+FeE8E15Iwv/qqsnBqkWEzl8tk
+        bg577LZ+UA1qxWdAOKjcQRs7E1Usj7WItEz5AZTmZZwJZDbgU7fROn1LqZ4X/WAFeiGFBp/lnIF7
+        9k5Xj+swOI/WbX+k6NPavU6ws3W+ASgDyfESAwAA
     headers:
       Alt-Svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
@@ -184,11 +178,11 @@ interactions:
       Content-Type:
       - application/json; charset=UTF-8
       Date:
-      - Thu, 21 May 2026 23:49:34 GMT
+      - Sat, 06 Jun 2026 00:43:21 GMT
       Server:
       - scaffolding on HTTPServer2
       Server-Timing:
-      - gfet4t7; dur=1676
+      - gfet4t7; dur=1466
       Transfer-Encoding:
       - chunked
       Vary:
@@ -210,8 +204,8 @@ interactions:
     body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 um revisor de qualidade
       para consultas SQL geradas por IA.\n\nSua tarefa: avaliar se a consulta SQL
       e seus resultados respondem adequadamente\n\u00e0 pergunta original do usu\u00e1rio.\n\n===
-      PERGUNTA DO USU\u00c1RIO ===\nQuais s\u00e3o as 5 categorias com a maior quantidade
-      total de itens vendidos?\n\n=== SCHEMA DO BANCO ===\n=== SCHEMA SQLITE (INTROSPECCAO
+      PERGUNTA DO USU\u00c1RIO ===\nQuais sao as 5 categorias de produtos mais vendidos
+      por quantidade?\n\n=== SCHEMA DO BANCO ===\n=== SCHEMA SQLITE (INTROSPECCAO
       REAL) ===\n\nTabela: customers\n- customer_id: TEXT (PK)\n- customer_unique_id:
       TEXT\n- customer_zip_code_prefix: INTEGER\n- customer_city: TEXT\n- customer_state:
       TEXT\n\nTabela: geolocation\n- geolocation_zip_code_prefix: INTEGER\n- geolocation_lat:
@@ -238,9 +232,9 @@ interactions:
       REAL\n- product_length_cm: REAL\n- product_height_cm: REAL\n- product_width_cm:
       REAL\n\nTabela: sellers\n- seller_id: TEXT (PK)\n- seller_zip_code_prefix: INTEGER\n-
       seller_city: TEXT\n- seller_state: TEXT\n\n\n=== CONVERSA COM O AGENTE (se houver)
-      ===\nNenhuma\n\n=== SQL GERADA ===\nSELECT\n  p.product_category_name\nFROM
-      products AS p\nJOIN order_items AS oi\n  ON p.product_id = oi.product_id\nGROUP
-      BY\n  p.product_category_name\nORDER BY\n  COUNT(oi.order_item_id) DESC\nLIMIT
+      ===\nNenhuma\n\n=== SQL GERADA ===\nSELECT\n  T2.product_category_name\nFROM
+      order_items AS T1\nINNER JOIN products AS T2\n  ON T1.product_id = T2.product_id\nGROUP
+      BY\n  T2.product_category_name\nORDER BY\n  COUNT(T1.order_item_id) DESC\nLIMIT
       5\n\n=== RESULTADO DA EXECU\u00c7\u00c3O ===\nStatus: exec_ok\nTotal de linhas:
       5\nAmostra dos resultados (primeiras linhas):\n[{''product_category_name'':
       ''cama_mesa_banho''}, {''product_category_name'': ''beleza_saude''}, {''product_category_name'':
@@ -326,16 +320,16 @@ interactions:
   response:
     body:
       string: !!binary |
-        H4sIAAAAAAAC/2VSwW4aMRC98xUjnwlCUSlVbjRsJdS0ULJCkZqomPVksbq2tx5vlIL4l+Q3euXH
-        Ol6ysLQcWOvNzJs3b2bbARCZtEorGZDEFXxnBGBb/8eYswFt4EADMVhKH065h9+29eaUgM+xSCyS
-        eTKepNMrGM3m08VoPL23n5Jk/HF0/ZkxYH6qiiDh9tsNVBYZ8B6DNNwUQRIEucKCv8vSO1VlgZaA
-        sHReof+hAxpadkHmviollFg4AusMEiguyXik3HnNz8hruYsDu/9j0DsILsgCFAKTWIInjB5wOc8m
-        uVLJU3kPEgOEecUmdYHVQGxv+UPgsZYfK9HUuGHSjOGsngCh0EZz5/0LwaAtqfTaZrqUmrqRpXSW
-        OZVjHDNNbwbsX3gqn1dRO8cqqvavXrueaLm9O74fuqcdeVdgXIBxCosmfdckiEdtNa3nKMnZmHab
-        TmfiGNWs5ZnhfqdpUFOLimSOX3g9fC3yeBOCV2PKkLqfaK9dVV/LZf/D+wNd67zOMoaDt3i9ifPi
-        YX/Y/Y+axtxYF+3Da90kzykLHX7HYdLkLhUtL8K/yho7Oi3XRFi7Kl+Hc5WDd80YhP5JZ5hq9LEH
-        BR5LehWtrW09OL1AT/pgaY6GTb647A0uHvmC17UicVg14UTFnPHAzeSvm7vk62qxGU5mm9lm1R/1
-        RWfX+Qs0AbvPmwMAAA==
+        H4sIAAAAAAAC/11S227aQBB95ytG+5RKgBARos0bCa6ESAUlLqrUVmFqD2Ybe9fZS5QU8S/pt/Bj
+        nTUxmCAEq7mdy8y2BSASVKlM0ZEVV/CDIwDb6jfktHKkHCfqEAdLNO5Ue/hsG28ucfQcmsQyWkTj
+        STy7gtF8MVuOxrOf6nMUja9HN1OOAc+3PncId19vwSvigDHksGBQArTg8Dfl/L/SJiVzLx0VdgUE
+        q9Lo1CfOrtqAmfElgrZgqJqW8rPUBhIWlWkjEVKCqsFpCBiKEREePSrHyjnJXx6tLDxRMIP7LxqI
+        9zJdfQCWjTwyxdPcLkQFWMo8T2lDaFAYWB8LmAfTbyJRUdUVDJkw3aQSSpDLQjIpfZIA+1cLA6Yt
+        VSJLlLYdcqVWDMLZksyaZO3U/jUEMh+EcdJbv/9npO6Kxlp2x/ev9mmZRucUNlXolPK6fFcXiLVU
+        0m4WhFarUHYXz+bimJVM5pnDvVYNUI0W3mJGX3iPfFZ4PB7BKyhKF+sHUjfaV2fV733qH8Y17vCs
+        4uPwLe+0w/y8eXhZNzdG2zEDy7x5oY3jZZ2YS/cSxMTR91g0vHDvmdV2tBquCbfRPtu4c5aDweVb
+        2pJ5kgnFkkzAsI5loUmDtZWtB6eXZKw8WJpRwSZ3+t1BZ82nvqkYicOuLU3SUDMten/wcZhdzzrj
+        v8PJPL9dTx9G30Rr1/oPEp6J+sQDAAA=
     headers:
       Alt-Svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
@@ -344,11 +338,11 @@ interactions:
       Content-Type:
       - application/json; charset=UTF-8
       Date:
-      - Thu, 21 May 2026 23:49:38 GMT
+      - Sat, 06 Jun 2026 00:43:25 GMT
       Server:
       - scaffolding on HTTPServer2
       Server-Timing:
-      - gfet4t7; dur=3282
+      - gfet4t7; dur=3960
       Transfer-Encoding:
       - chunked
       Vary:
@@ -370,23 +364,23 @@ interactions:
     body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 um assistente que decide
       se os resultados de uma consulta SQL\ndevem ser acompanhados de um gr\u00e1fico
       (visualiza\u00e7\u00e3o).\n\nAnalise a pergunta do usu\u00e1rio e as caracter\u00edsticas
-      dos dados retornados.\n\n=== PERGUNTA DO USU\u00c1RIO ===\n\n\n=== COLUNAS DO
-      RESULTADO ===\nproduct_category_name\n\n=== TOTAL DE LINHAS ===\n5\n\n=== AMOSTRA
-      DOS DADOS ===\n[{''product_category_name'': ''cama_mesa_banho''}, {''product_category_name'':
-      ''beleza_saude''}, {''product_category_name'': ''esporte_lazer''}, {''product_category_name'':
-      ''moveis_decoracao''}, {''product_category_name'': ''informatica_acessorios''}]\n\nUm
-      gr\u00e1fico \u00e9 \u00fatil quando:\n- A pergunta envolve compara\u00e7\u00f5es
-      entre categorias (ex: vendas por regi\u00e3o)\n- H\u00e1 dados temporais ou
-      tend\u00eancias (ex: evolu\u00e7\u00e3o ao longo dos meses)\n- H\u00e1 distribui\u00e7\u00f5es
-      ou rankings (ex: top 10 produtos)\n- H\u00e1 agrega\u00e7\u00f5es num\u00e9ricas
-      que se beneficiam de visualiza\u00e7\u00e3o\n- O resultado tem mais de 1 linha
-      com pelo menos uma coluna num\u00e9rica\n\nUm gr\u00e1fico N\u00c3O \u00e9 \u00fatil
-      quando:\n- O resultado \u00e9 um \u00fanico valor escalar (ex: total geral)\n-
-      A pergunta pede um dado espec\u00edfico pontual (ex: nome de um cliente)\n-
-      O resultado tem apenas 1 linha\n- N\u00e3o h\u00e1 colunas num\u00e9ricas para
-      plotar\n\nResponda APENAS com uma palavra: SIM ou NAO\n"}], "role": "user"}],
-      "safetySettings": [], "generationConfig": {"temperature": 0.7, "candidateCount":
-      1}}'
+      dos dados retornados.\n\n=== PERGUNTA DO USU\u00c1RIO ===\nQuais sao as 5 categorias
+      de produtos mais vendidos por quantidade?\n\n=== COLUNAS DO RESULTADO ===\nproduct_category_name\n\n===
+      TOTAL DE LINHAS ===\n5\n\n=== AMOSTRA DOS DADOS ===\n[{''product_category_name'':
+      ''cama_mesa_banho''}, {''product_category_name'': ''beleza_saude''}, {''product_category_name'':
+      ''esporte_lazer''}, {''product_category_name'': ''moveis_decoracao''}, {''product_category_name'':
+      ''informatica_acessorios''}]\n\nUm gr\u00e1fico \u00e9 \u00fatil quando:\n-
+      A pergunta envolve compara\u00e7\u00f5es entre categorias (ex: vendas por regi\u00e3o)\n-
+      H\u00e1 dados temporais ou tend\u00eancias (ex: evolu\u00e7\u00e3o ao longo
+      dos meses)\n- H\u00e1 distribui\u00e7\u00f5es ou rankings (ex: top 10 produtos)\n-
+      H\u00e1 agrega\u00e7\u00f5es num\u00e9ricas que se beneficiam de visualiza\u00e7\u00e3o\n-
+      O resultado tem mais de 1 linha com pelo menos uma coluna num\u00e9rica\n\nUm
+      gr\u00e1fico N\u00c3O \u00e9 \u00fatil quando:\n- O resultado \u00e9 um \u00fanico
+      valor escalar (ex: total geral)\n- A pergunta pede um dado espec\u00edfico pontual
+      (ex: nome de um cliente)\n- O resultado tem apenas 1 linha\n- N\u00e3o h\u00e1
+      colunas num\u00e9ricas para plotar\n\nResponda APENAS com uma palavra: SIM ou
+      NAO\n"}], "role": "user"}], "safetySettings": [], "generationConfig": {"temperature":
+      0.7, "candidateCount": 1}}'
     headers:
       Accept:
       - '*'
@@ -409,12 +403,17 @@ interactions:
   response:
     body:
       string: !!binary |
-        H4sIAAAAAAAC/2WQQU/DMAyF7/0VVc4b2sqmIW4T7DBNsAoqhIQ4WKvXRqRJSdwxqPrfSdq1yyCH
-        KPJ7sf2+OghDtgOZ8hQIDbsN32wlDOv2dpqShJKs0JdssQRNZ293au9tLYRH94k9LrfMU5rh/T46
-        99NKoDMXKkXR25vewPZccpM/IRglne052cZsULlM8WjLk6Af0LZmlYEMH5DAJoNhf1ZqVZSUqA+U
-        d6pqk11H866bR+LCEJ1kUgTiQplOZjejf43NvR3LhY/Io2dTguD07aIkq9eEeSToz149i8BDxihX
-        VZbT5Y6LaHqSDeoD32HCUbsRhmwo0Knj2jLtML+gNrzjmWFhCY+jq/l4L8Dk7UJMoymVNLhOnWdV
-        qhiqT7nROvtZrOMDwWa2/GJBE/wC6uEO9EQCAAA=
+        H4sIAAAAAAAC/7VUXW/aMBR951dc5XEKydTApvK0akCLtGqM0mnTOiHjXIJXx079gYoq/vtsx22h
+        Q5o2bRJSbHN9zj33nOShA5CgUlIlA3hwG7elskS3652cpu1BjVqTyp8lX6UFvKeIJZawlVYBtUqh
+        MHBnpSEpNByJRqBrpLdtQcOJACJKWDLOmaigREMY1xmMpYJaKgQmVlLVxDApwP3MmmkITaWwRlKC
+        kQNYG9PoQZ4TllVSVhyzEjd5hTUTrEsalpeS6lwRg13OamYc/lw6eMGMozlo1Xo1x6E95jNGBjfi
+        FXzyyp5Vr3zXaBSjA6hQoCtnG3QiK+tgY3OuIZ1RWeexAhdUCuPIFyuFuDAM1ULhnUVtdAqBbAD9
+        1PVbIve4QdZJ1u+uONHrGzFt56oc8dbNC4oie/2mOH3b7/UKnSXRKW2IsdobNRtdfbyevR8tRl8u
+        zq6v5qPhY00cvyv6Fg4g+h7+fGe2TTDaP3/R0s5dNTS7QN5EwHDPGXu7D3kIG3k1VazxJnuCD0iU
+        aO0nS2kNnAfNcDadtFnSe/gBwCruL/5xEJI9mN3T+ntc7dK/n0JIxthN0yrcn8aGSR7S/JuRBJ2X
+        IUue7Z+k6eXUAsek9Pjn8fYslk5RXTJhDbrFVMkfSI0/8hHsjh3w3OEehRuyGoWO+g41+c+FB2j1
+        HKb4BZaPjaTkMRAVl0vCk4OS3TH2z4Tb4E7//zk78+/ZxH2W9m0NL9/QmbP1CEXxlKyW2/PuOrvO
+        Txn74dRUBQAA
     headers:
       Alt-Svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
@@ -423,11 +422,426 @@ interactions:
       Content-Type:
       - application/json; charset=UTF-8
       Date:
-      - Thu, 21 May 2026 23:49:42 GMT
+      - Sat, 06 Jun 2026 00:43:26 GMT
       Server:
       - scaffolding on HTTPServer2
       Server-Timing:
-      - gfet4t7; dur=3904
+      - gfet4t7; dur=878
+      Transfer-Encoding:
+      - chunked
+      Vary:
+      - Origin
+      - X-Origin
+      - Referer
+      X-Content-Type-Options:
+      - nosniff
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Gemini-Service-Tier:
+      - standard
+      X-XSS-Protection:
+      - '0'
+    status:
+      code: 429
+      message: Too Many Requests
+- request:
+    body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 um assistente que decide
+      se os resultados de uma consulta SQL\ndevem ser acompanhados de um gr\u00e1fico
+      (visualiza\u00e7\u00e3o).\n\nAnalise a pergunta do usu\u00e1rio e as caracter\u00edsticas
+      dos dados retornados.\n\n=== PERGUNTA DO USU\u00c1RIO ===\nQuais sao as 5 categorias
+      de produtos mais vendidos por quantidade?\n\n=== COLUNAS DO RESULTADO ===\nproduct_category_name\n\n===
+      TOTAL DE LINHAS ===\n5\n\n=== AMOSTRA DOS DADOS ===\n[{''product_category_name'':
+      ''cama_mesa_banho''}, {''product_category_name'': ''beleza_saude''}, {''product_category_name'':
+      ''esporte_lazer''}, {''product_category_name'': ''moveis_decoracao''}, {''product_category_name'':
+      ''informatica_acessorios''}]\n\nUm gr\u00e1fico \u00e9 \u00fatil quando:\n-
+      A pergunta envolve compara\u00e7\u00f5es entre categorias (ex: vendas por regi\u00e3o)\n-
+      H\u00e1 dados temporais ou tend\u00eancias (ex: evolu\u00e7\u00e3o ao longo
+      dos meses)\n- H\u00e1 distribui\u00e7\u00f5es ou rankings (ex: top 10 produtos)\n-
+      H\u00e1 agrega\u00e7\u00f5es num\u00e9ricas que se beneficiam de visualiza\u00e7\u00e3o\n-
+      O resultado tem mais de 1 linha com pelo menos uma coluna num\u00e9rica\n\nUm
+      gr\u00e1fico N\u00c3O \u00e9 \u00fatil quando:\n- O resultado \u00e9 um \u00fanico
+      valor escalar (ex: total geral)\n- A pergunta pede um dado espec\u00edfico pontual
+      (ex: nome de um cliente)\n- O resultado tem apenas 1 linha\n- N\u00e3o h\u00e1
+      colunas num\u00e9ricas para plotar\n\nResponda APENAS com uma palavra: SIM ou
+      NAO\n"}], "role": "user"}], "safetySettings": [], "generationConfig": {"temperature":
+      0.7, "candidateCount": 1}}'
+    headers:
+      Accept:
+      - '*'
+      Accept-Encoding:
+      - g
+      Connection:
+      - k
+      Content-Length:
+      - '1'
+      Content-Type:
+      - a
+      Host:
+      - g
+      User-Agent:
+      - g
+      x-goog-api-client:
+      - g
+    method: POST
+    uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAC/7VUXW/aMBR951dc5XEKAbVl3XhaNaBFWjVK6bRpnZBxLsGrY6f+QEMV/33XTtpC
+        hzRt2iSk2Ob6nHvuOclDCyBBY7RJ+vBAG9pynSPtTo7epvVBidayIpwlX7QH/MERc8xho70B7o1B
+        5eDea8dSqCQyi8BXyO/qgkoyBUzlsBBSClVAjo4JaTMYaQOlNghCLbUpmRNaAf3cSliITaWwQpaD
+        031YOVfZfqfDRFZoXUjMclx3CiyFEm1WiU6uue0Y5rAtRSkc4c80wSvhiGavVR/UHIYOmM8YGdyq
+        V3AVlD2rXoau0RnB+1CgQioXaySRhSfYpjlqyGZcl52mAudcK0fk86VBnDuBZm7w3qN1NoVI1ode
+        Sv3mKANulHWU9dpLyezqVk3quRoi3tC84Libvemdnrw+7XZPbZY0TlnHnLfBqOnw+uPN9P1wPvx8
+        cXZzPRsOHmua8VPR13gAje/xz3duU0Wjw/MXLfXcTcWzC5RVAxjvkbF3u5D7sA2v5UZUweRA8AGZ
+        UbX9bKG9g/OoGc4m4zpLdgc/Angjw8U/DkKyA7N9Wn9rVtv076cQkzGiaXqDu9NYCy1jmn8zkqjz
+        MmYpsP2TNL2cWuQY5wH/vLk9bUonaC6F8g5pMTH6O3IXjkIE2yMCnhHuQbiBKFHZRt++ppAFzdmj
+        y4XUCyZfgIRPSiCpNe8nPdmr3B5i/8Skj+70/p+z0/CejemztGtrfPkGZM4mIBx3n5JVcwfebWvb
+        +gn8vVJfVAUAAA==
+    headers:
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=UTF-8
+      Date:
+      - Sat, 06 Jun 2026 00:43:29 GMT
+      Server:
+      - scaffolding on HTTPServer2
+      Server-Timing:
+      - gfet4t7; dur=230
+      Transfer-Encoding:
+      - chunked
+      Vary:
+      - Origin
+      - X-Origin
+      - Referer
+      X-Content-Type-Options:
+      - nosniff
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Gemini-Service-Tier:
+      - standard
+      X-XSS-Protection:
+      - '0'
+    status:
+      code: 429
+      message: Too Many Requests
+- request:
+    body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 um assistente que decide
+      se os resultados de uma consulta SQL\ndevem ser acompanhados de um gr\u00e1fico
+      (visualiza\u00e7\u00e3o).\n\nAnalise a pergunta do usu\u00e1rio e as caracter\u00edsticas
+      dos dados retornados.\n\n=== PERGUNTA DO USU\u00c1RIO ===\nQuais sao as 5 categorias
+      de produtos mais vendidos por quantidade?\n\n=== COLUNAS DO RESULTADO ===\nproduct_category_name\n\n===
+      TOTAL DE LINHAS ===\n5\n\n=== AMOSTRA DOS DADOS ===\n[{''product_category_name'':
+      ''cama_mesa_banho''}, {''product_category_name'': ''beleza_saude''}, {''product_category_name'':
+      ''esporte_lazer''}, {''product_category_name'': ''moveis_decoracao''}, {''product_category_name'':
+      ''informatica_acessorios''}]\n\nUm gr\u00e1fico \u00e9 \u00fatil quando:\n-
+      A pergunta envolve compara\u00e7\u00f5es entre categorias (ex: vendas por regi\u00e3o)\n-
+      H\u00e1 dados temporais ou tend\u00eancias (ex: evolu\u00e7\u00e3o ao longo
+      dos meses)\n- H\u00e1 distribui\u00e7\u00f5es ou rankings (ex: top 10 produtos)\n-
+      H\u00e1 agrega\u00e7\u00f5es num\u00e9ricas que se beneficiam de visualiza\u00e7\u00e3o\n-
+      O resultado tem mais de 1 linha com pelo menos uma coluna num\u00e9rica\n\nUm
+      gr\u00e1fico N\u00c3O \u00e9 \u00fatil quando:\n- O resultado \u00e9 um \u00fanico
+      valor escalar (ex: total geral)\n- A pergunta pede um dado espec\u00edfico pontual
+      (ex: nome de um cliente)\n- O resultado tem apenas 1 linha\n- N\u00e3o h\u00e1
+      colunas num\u00e9ricas para plotar\n\nResponda APENAS com uma palavra: SIM ou
+      NAO\n"}], "role": "user"}], "safetySettings": [], "generationConfig": {"temperature":
+      0.7, "candidateCount": 1}}'
+    headers:
+      Accept:
+      - '*'
+      Accept-Encoding:
+      - g
+      Connection:
+      - k
+      Content-Length:
+      - '1'
+      Content-Type:
+      - a
+      Host:
+      - g
+      User-Agent:
+      - g
+      x-goog-api-client:
+      - g
+    method: POST
+    uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAC/7VUXW/aMBR951dc8TiFREJlAp5WDWiRVo1ROm1aJ2ScS/Dq2Kk/0FDFf++1k7bQ
+        IU2bNgkptrk+5557TvLQAmijMdq0h/BAG9pynSPtzrqDpD4o0VpWhLP2V+0Bf3LEHHPYaW+Ae2NQ
+        Obj32rEEKonMIvAN8ru6oJJMAVM5rISUQhWQo2NC2hQm2kCpDYJQa21K5oRWQD+3ERZiUwlskOXg
+        9BA2zlV2mGVMpIXWhcQ0x21WYCmU6LBKZLnmNjPMYUeKUjjCX2iCV8IRzVGrPqg5DR0wXzBSuFVv
+        4FNQ9qJ6HbpGZwQfQoEKqVxskUQWnmCb5qghm3JdZk0FLrlWjsiXa4O4dALN0uC9R+tsApFsCL2E
+        +s1RBtwoq5v2OmvJ7OZWzeq5GiLe0byg20+7Z/1efzB427Npu3HKOua8DUbNx9cfb+bvx8vxl8vz
+        m+vFePRU04yfir7FA2h8j3++c7sqGh2ev2ip524qnl6irBrAeI+MvTuEPIZteC03ogomB4IPyIyq
+        7Wcr7R1cRM1wPpvWWbIH+BHAGxku/nEQ2gcw++f192a1T/5+CjEZE5qmN3g4ja3QMqb5NyOJOq9i
+        lgLbP0nT66lFjmke8C+a2/OmdIbmSijvkBYzo38gd+EoRLAzIeAF4Z6EG4kSlW30HWsKWdCcPblc
+        SL1i8hVI+KQEklrzcdLbR5X7U+yfmfTRnd7/c3Ye3rMpfZYObY0v34jM2QWEbv85WTV34N239q1H
+        AdnByVQFAAA=
+    headers:
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=UTF-8
+      Date:
+      - Sat, 06 Jun 2026 00:43:31 GMT
+      Server:
+      - scaffolding on HTTPServer2
+      Server-Timing:
+      - gfet4t7; dur=247
+      Transfer-Encoding:
+      - chunked
+      Vary:
+      - Origin
+      - X-Origin
+      - Referer
+      X-Content-Type-Options:
+      - nosniff
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Gemini-Service-Tier:
+      - standard
+      X-XSS-Protection:
+      - '0'
+    status:
+      code: 429
+      message: Too Many Requests
+- request:
+    body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 um assistente que decide
+      se os resultados de uma consulta SQL\ndevem ser acompanhados de um gr\u00e1fico
+      (visualiza\u00e7\u00e3o).\n\nAnalise a pergunta do usu\u00e1rio e as caracter\u00edsticas
+      dos dados retornados.\n\n=== PERGUNTA DO USU\u00c1RIO ===\nQuais sao as 5 categorias
+      de produtos mais vendidos por quantidade?\n\n=== COLUNAS DO RESULTADO ===\nproduct_category_name\n\n===
+      TOTAL DE LINHAS ===\n5\n\n=== AMOSTRA DOS DADOS ===\n[{''product_category_name'':
+      ''cama_mesa_banho''}, {''product_category_name'': ''beleza_saude''}, {''product_category_name'':
+      ''esporte_lazer''}, {''product_category_name'': ''moveis_decoracao''}, {''product_category_name'':
+      ''informatica_acessorios''}]\n\nUm gr\u00e1fico \u00e9 \u00fatil quando:\n-
+      A pergunta envolve compara\u00e7\u00f5es entre categorias (ex: vendas por regi\u00e3o)\n-
+      H\u00e1 dados temporais ou tend\u00eancias (ex: evolu\u00e7\u00e3o ao longo
+      dos meses)\n- H\u00e1 distribui\u00e7\u00f5es ou rankings (ex: top 10 produtos)\n-
+      H\u00e1 agrega\u00e7\u00f5es num\u00e9ricas que se beneficiam de visualiza\u00e7\u00e3o\n-
+      O resultado tem mais de 1 linha com pelo menos uma coluna num\u00e9rica\n\nUm
+      gr\u00e1fico N\u00c3O \u00e9 \u00fatil quando:\n- O resultado \u00e9 um \u00fanico
+      valor escalar (ex: total geral)\n- A pergunta pede um dado espec\u00edfico pontual
+      (ex: nome de um cliente)\n- O resultado tem apenas 1 linha\n- N\u00e3o h\u00e1
+      colunas num\u00e9ricas para plotar\n\nResponda APENAS com uma palavra: SIM ou
+      NAO\n"}], "role": "user"}], "safetySettings": [], "generationConfig": {"temperature":
+      0.7, "candidateCount": 1}}'
+    headers:
+      Accept:
+      - '*'
+      Accept-Encoding:
+      - g
+      Connection:
+      - k
+      Content-Length:
+      - '1'
+      Content-Type:
+      - a
+      Host:
+      - g
+      User-Agent:
+      - g
+      x-goog-api-client:
+      - g
+    method: POST
+    uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAC/7VUXW/aMBR951dc8TiFpKMgdTytGtAirRqjdNq0Tsg4l+DVsVN/oKGK/75rJ22h
+        Q5o2bRJSbHN9zj33nOShBdBGY7RpD+CBNrTlOkfa9bpvkvqgRGtZEc7aX7QH/MERc8xhq70B7o1B
+        5eDea8cSqCQyi8DXyO/qgkoyBUzlsBRSClVAjo4JaVMYawOlNghCrbQpmRNaAf3cWliITSWwRpaD
+        0wNYO1fZQZYxkRZaFxLTHDdZgaVQosMqkeWa28wwhx0pSuEIf64JXglHNAet+qDmOHTAfMZI4Va9
+        go9B2bPqVeganRF8AAUqpHKxQRJZeIJtmqOGbMp1mTUVuOBaOSJfrAziwgk0C4P3Hq2zCUSyAfQT
+        6jdHGXCjrG7a76wks+tbNa3naoh4S/OC7ml61uudnPTPXtu03RhlHXPeBp9mo+sPN7N3o8Xo8+X5
+        zfV8NHysaaZPRV/jATS2xz/fum0VfQ7PX6TUYzcVTy9RVg1gvEe+3u1DHsI2vJYbUQWPA8F7ZEbV
+        7rOl9g4uomQ4n07qKNk9/AjgjQwX/zgH7T2Y3dP6W7PaJX8/hRiMMU3TG9yfxkZoGcP8m5FEnVcx
+        SoHtn4Tp5dQixyQP+BfN7VlTOkVzJZR3SIup0d+Ru3AUEtgZE/CccI/CDUWJyjb6DjWFLGjOHl0u
+        pF4y+QIkfFECSa35MOjtg8rdMfZPTProTv//OTsLr9mEvkr7tsZ3b0jmbANC9/QpWTV34N21dq2f
+        FOddMlMFAAA=
+    headers:
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=UTF-8
+      Date:
+      - Sat, 06 Jun 2026 00:43:36 GMT
+      Server:
+      - scaffolding on HTTPServer2
+      Server-Timing:
+      - gfet4t7; dur=233
+      Transfer-Encoding:
+      - chunked
+      Vary:
+      - Origin
+      - X-Origin
+      - Referer
+      X-Content-Type-Options:
+      - nosniff
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Gemini-Service-Tier:
+      - standard
+      X-XSS-Protection:
+      - '0'
+    status:
+      code: 429
+      message: Too Many Requests
+- request:
+    body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 um assistente que decide
+      se os resultados de uma consulta SQL\ndevem ser acompanhados de um gr\u00e1fico
+      (visualiza\u00e7\u00e3o).\n\nAnalise a pergunta do usu\u00e1rio e as caracter\u00edsticas
+      dos dados retornados.\n\n=== PERGUNTA DO USU\u00c1RIO ===\nQuais sao as 5 categorias
+      de produtos mais vendidos por quantidade?\n\n=== COLUNAS DO RESULTADO ===\nproduct_category_name\n\n===
+      TOTAL DE LINHAS ===\n5\n\n=== AMOSTRA DOS DADOS ===\n[{''product_category_name'':
+      ''cama_mesa_banho''}, {''product_category_name'': ''beleza_saude''}, {''product_category_name'':
+      ''esporte_lazer''}, {''product_category_name'': ''moveis_decoracao''}, {''product_category_name'':
+      ''informatica_acessorios''}]\n\nUm gr\u00e1fico \u00e9 \u00fatil quando:\n-
+      A pergunta envolve compara\u00e7\u00f5es entre categorias (ex: vendas por regi\u00e3o)\n-
+      H\u00e1 dados temporais ou tend\u00eancias (ex: evolu\u00e7\u00e3o ao longo
+      dos meses)\n- H\u00e1 distribui\u00e7\u00f5es ou rankings (ex: top 10 produtos)\n-
+      H\u00e1 agrega\u00e7\u00f5es num\u00e9ricas que se beneficiam de visualiza\u00e7\u00e3o\n-
+      O resultado tem mais de 1 linha com pelo menos uma coluna num\u00e9rica\n\nUm
+      gr\u00e1fico N\u00c3O \u00e9 \u00fatil quando:\n- O resultado \u00e9 um \u00fanico
+      valor escalar (ex: total geral)\n- A pergunta pede um dado espec\u00edfico pontual
+      (ex: nome de um cliente)\n- O resultado tem apenas 1 linha\n- N\u00e3o h\u00e1
+      colunas num\u00e9ricas para plotar\n\nResponda APENAS com uma palavra: SIM ou
+      NAO\n"}], "role": "user"}], "safetySettings": [], "generationConfig": {"temperature":
+      0.7, "candidateCount": 1}}'
+    headers:
+      Accept:
+      - '*'
+      Accept-Encoding:
+      - g
+      Connection:
+      - k
+      Content-Length:
+      - '1'
+      Content-Type:
+      - a
+      Host:
+      - g
+      User-Agent:
+      - g
+      x-goog-api-client:
+      - g
+    method: POST
+    uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAC/7VUXW/aMBR951dc5XEKicoWsfK0akCLtGqM0mnTOiHjXIJXx079gYoq/vtsx22h
+        Q5o2bRJSbHN9zj33nOShA5CgUlIlA3hwG7elskS3e9M7TduDGrUmlT9LvkoLeE8RSyxhK60CapVC
+        YeDOSkNSaDgSjUDXSG/bgoYTAUSUsGScM1FBiYYwrjMYSwW1VAhMrKSqiWFSgPuZNdMQmkphjaQE
+        IwewNqbRgzwnLKukrDhmJW7yCmsmWJc0LC8l1bkiBruc1cw4/Ll08IIZR3PQqvVqjkN7zGeMDG7E
+        K/jklT2rXvmu0ShGB1ChQFfONuhEVtbBxuZcQzqjss5jBS6oFMaRL1YKcWEYqoXCO4va6BQC2QCK
+        1PVbIve4QVYvK7orTvT6RkzbuSpHvHXzgpMiO+n1+/3T4u1rnSXRKW2IsdobNRtdfbyevR8tRl8u
+        zq6v5qPhY00cvyv6Fg4g+h7+fGe2TTDaP3/R0s5dNTS7QN5EwHDPGXu7D3kIG3k1VazxJnuCD0iU
+        aO0nS2kNnAfNcDadtFnSe/gBwCruL/5xEJI9mN3T+ntc7dK/n0JIxthN0yrcn8aGSR7S/JuRBJ2X
+        IUue7Z+k6eXUAsek9Pjn8fYslk5RXTJhDbrFVMkfSI0/8hHsjh3w3OEehRuyGoWO+g41+SxISh5d
+        rrhcEv4CxH9SPEmr+TDpyUHl7hj7Z8JtcKf4f87O/Hs2cZ+lfVvDyzd05mw9wknxlKyW2/PuOrvO
+        T88u7TJUBQAA
+    headers:
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=UTF-8
+      Date:
+      - Sat, 06 Jun 2026 00:43:44 GMT
+      Server:
+      - scaffolding on HTTPServer2
+      Server-Timing:
+      - gfet4t7; dur=237
+      Transfer-Encoding:
+      - chunked
+      Vary:
+      - Origin
+      - X-Origin
+      - Referer
+      X-Content-Type-Options:
+      - nosniff
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Gemini-Service-Tier:
+      - standard
+      X-XSS-Protection:
+      - '0'
+    status:
+      code: 429
+      message: Too Many Requests
+- request:
+    body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 um assistente que decide
+      se os resultados de uma consulta SQL\ndevem ser acompanhados de um gr\u00e1fico
+      (visualiza\u00e7\u00e3o).\n\nAnalise a pergunta do usu\u00e1rio e as caracter\u00edsticas
+      dos dados retornados.\n\n=== PERGUNTA DO USU\u00c1RIO ===\nQuais sao as 5 categorias
+      de produtos mais vendidos por quantidade?\n\n=== COLUNAS DO RESULTADO ===\nproduct_category_name\n\n===
+      TOTAL DE LINHAS ===\n5\n\n=== AMOSTRA DOS DADOS ===\n[{''product_category_name'':
+      ''cama_mesa_banho''}, {''product_category_name'': ''beleza_saude''}, {''product_category_name'':
+      ''esporte_lazer''}, {''product_category_name'': ''moveis_decoracao''}, {''product_category_name'':
+      ''informatica_acessorios''}]\n\nUm gr\u00e1fico \u00e9 \u00fatil quando:\n-
+      A pergunta envolve compara\u00e7\u00f5es entre categorias (ex: vendas por regi\u00e3o)\n-
+      H\u00e1 dados temporais ou tend\u00eancias (ex: evolu\u00e7\u00e3o ao longo
+      dos meses)\n- H\u00e1 distribui\u00e7\u00f5es ou rankings (ex: top 10 produtos)\n-
+      H\u00e1 agrega\u00e7\u00f5es num\u00e9ricas que se beneficiam de visualiza\u00e7\u00e3o\n-
+      O resultado tem mais de 1 linha com pelo menos uma coluna num\u00e9rica\n\nUm
+      gr\u00e1fico N\u00c3O \u00e9 \u00fatil quando:\n- O resultado \u00e9 um \u00fanico
+      valor escalar (ex: total geral)\n- A pergunta pede um dado espec\u00edfico pontual
+      (ex: nome de um cliente)\n- O resultado tem apenas 1 linha\n- N\u00e3o h\u00e1
+      colunas num\u00e9ricas para plotar\n\nResponda APENAS com uma palavra: SIM ou
+      NAO\n"}], "role": "user"}], "safetySettings": [], "generationConfig": {"temperature":
+      0.7, "candidateCount": 1}}'
+    headers:
+      Accept:
+      - '*'
+      Accept-Encoding:
+      - g
+      Connection:
+      - k
+      Content-Length:
+      - '1'
+      Content-Type:
+      - a
+      Host:
+      - g
+      User-Agent:
+      - g
+      x-goog-api-client:
+      - g
+    method: POST
+    uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAC/12QUU+DMBSF3/kVpM/OMNQs8W3ZzOLDHFE0JsaHZlygUlrWXnSG8N9twbJufWia
+        e07vvefrgjAkeyoyllEETe7DD1MJw264rSYFgkAjuJIpNlThyTueznsbC8LRfiJPyx3xlH56f16d
+        +inJwZprmQF39t4ZSM4E0+UzUC2Ftb2ku4RMKhMZHE05CtyAoTVpNS1gC0hNMjrtTxol6wZTWYFY
+        yXZIdnMbjd08EmeG+F9GiZSff53Pneg11mszlnEfkUfPpKSc4a+Nkj68p8QjgRd7ORaBh4xgKdui
+        xIsdFwuXQoP6ZntIGSg7Q6NJRVVmwQ5QR85voDQbgRZQG8Sz+PpulnOqy2EjokA3Umh4zKzndRN9
+        UbX+2R5WcY1V0uab5LCsSNAHfx+fgI5FAgAA
+    headers:
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=UTF-8
+      Date:
+      - Sat, 06 Jun 2026 00:44:15 GMT
+      Server:
+      - scaffolding on HTTPServer2
+      Server-Timing:
+      - gfet4t7; dur=15380
       Transfer-Encoding:
       - chunked
       Vary:

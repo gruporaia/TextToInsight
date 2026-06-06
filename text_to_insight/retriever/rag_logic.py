@@ -25,10 +25,10 @@ class RAGRetriever:
 
     def _add_documents(self, document_schema: dict):      
         if self.collection.count() > 0:
-            print(f"[RAG] Schema hash '{self.collection_name}' already indexed. Skipping.")
+            print(f"[RAG] SCHEMA hash'{self.collection_name}' já existe, pulando...")
             return
             
-        print(f"[RAG] New schema version detected. Indexing into '{self.collection_name}'...")
+        print(f"[RAG] Nova SCHEMA detectado, indexando '{self.collection_name}'...")
         
         schema_string = document_schema.get("contexto_schema", "")
         regex_pattern = r"(Tabela: [\s\S]*?)(?=\nTabela: |$)"  
@@ -43,7 +43,7 @@ class RAGRetriever:
         if ids:
             self.collection.upsert(ids=ids, documents=table_chunks)
             
-        print(f"[RAG] Indexing completed with {len(ids)} tables.")
+        print(f"[RAG] Indexing completo para {len(ids)} tables.")
 
     def _retrieve(self, query: str, top_k: int = 5):
         #aqui não coloquei modelo de embbeding específico, então isso pode estar afetando um teco o retrieve, ver depois

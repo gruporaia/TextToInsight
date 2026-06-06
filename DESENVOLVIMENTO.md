@@ -79,6 +79,9 @@ text-to-insight --hitl off "Quais categorias vendem mais?"
 # com modelo OpenAI
 set -a && source .env && set +a
 python main.py --hitl off --model gpt-4o-mini --api-key-env OPENAI_API_KEY "Quantos pedidos existem?"
+
+# testes locais com bancos do Spider 2 (SQLite sem FK explícita e PRAGMA nativo)
+python main.py --hitl off --infer-fks on --use-schemacrawler off "Qual a soma dos resultados?"
 ```
 
 O resultado é exibido no terminal em formato tabular sob o bloco `RESULTADO:`, junto com SQL gerada, feedback do crítico e resposta natural.
@@ -109,6 +112,7 @@ tests/
     test_nodes.py
     test_integracao.py
     test_main_engine_integracao.py
+    test_biblioteca_integracao.py
     test_real_api_smoke.py
 ```
 
@@ -134,9 +138,12 @@ pytest tests/test_integracao.py -v -s --record-mode=new_episodes
 
 # integracao main + InsightEngine
 pytest tests/test_main_engine_integracao.py -v -s
+
+# integracao do pacote como biblioteca (sem chamadas de API, testa HITL e run/resume)
+pytest tests/test_biblioteca_integracao.py -v -s
 ```
 
-### Gravacao de cassetes VCR (fluxo recomendado)
+### Gravação de cassetes VCR (fluxo recomendado)
 
 Use este fluxo quando mudar prompts, comportamento de nos ou quando adicionar testes com `@pytest.mark.vcr`:
 
@@ -148,7 +155,7 @@ pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=new_epis
 pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=none
 ```
 
-Observacoes:
+Observacões:
 
 - cassetes ficam em `tests/cassettes/`;
 - `new_episodes` grava apenas chamadas que ainda nao existem no YAML;
@@ -285,3 +292,8 @@ pip install -e .
 `429 RESOURCE_EXHAUSTED`:
 - aguardar reset de quota;
 - preferir testes com VCR no dia a dia.
+
+## Configuração do .env (variáveis de ambiente)
+- `GOOGLE_API_KEY`: chave de API para Google Gemini (se usar modelo Gemini).
+- `OPENAI_API_KEY`: chave de API para OpenAI (se usar modelo OpenAI).
+- `SCHEMACRAWLER_BIN`: caminho para o binário do SchemaCrawler (se usar este recurso).

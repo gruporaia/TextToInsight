@@ -45,31 +45,29 @@ Responda APENAS com uma palavra: SIM ou NAO
 """
 
 
-def roteador_sandbox(estado: EstadoTextToInsight, enable_graphs: bool = True) -> Literal["salvar_csv", "resposta", "planejador"]:
+def roteador_sandbox(estado: EstadoTextToInsight) -> Literal["critico", "planejador"]:
     """
     Roteador após execução do Executor (sandbox).
 
-    - exec_ok → salvar_csv/resposta
+    - exec_ok → critico (avaliar resultado)
     - exec_erro + tentativas < 3 → planejador (reconsiderar)
-    - tentativas >= 3 → salvar_csv/resposta (desistir/reiniciar -> encerrar loop)
+    - tentativas >= 3 → crítico (desistir/reiniciar -> encerrar loop)
     """
     status = estado.get("status", "")
     tentativas = estado.get("tentativas_loop", 0)
 
     print(f"[ROTEADOR_SANDBOX] Status: {status}, Tentativas: {tentativas}")
 
-    next_step = "salvar_csv" if enable_graphs else "resposta"
-
     if status == "exec_ok":
-        print(f"[ROTEADOR_SANDBOX] Execução OK → {next_step}")
-        return next_step
+        print("[ROTEADOR_SANDBOX] Execução OK → critico")
+        return "critico"
 
     if status == "exec_erro" and tentativas < 3:
         print("[ROTEADOR_SANDBOX] Erro detectado → planejador para retry")
         return "planejador"
 
-    print(f"[ROTEADOR_SANDBOX] Muitas tentativas ou erro → {next_step} (para forçar o fim do loop)")
-    return next_step
+    print("[ROTEADOR_SANDBOX] Muitas tentativas ou erro → critico (para forçar o fim do loop)")
+    return "critico"
 
 
 def roteador_planejador(estado: EstadoTextToInsight) -> Literal["esquema", "agente_codigo", "planejador", "fim", "espera_humana"]:
@@ -83,6 +81,9 @@ def roteador_planejador(estado: EstadoTextToInsight) -> Literal["esquema", "agen
     contexto = estado.get("contexto_schema", "")
     status = estado.get("status", "")
     esperar = estado.get("espera_humana", False)
+    tentativas_revisao = estado.get("tentativas_revisao_retriever", 0)
+
+    MAX_TENTATIVAS_REVISAO = 2
 
     print(f"[ROTEADOR_PLANEJADOR] Status: {status}, Schema preenchido: {bool(contexto)}")
 
@@ -94,18 +95,37 @@ def roteador_planejador(estado: EstadoTextToInsight) -> Literal["esquema", "agen
         print("[ROTEADOR_PLANEJADOR] Schema vazio → esquema")
         return "esquema"
 
-    if status in ("pronto_codificacao", "revisando_estrategia"):
+    if status == "pronto_codificacao":
         print("[ROTEADOR_PLANEJADOR] → agente_codigo")
         return "agente_codigo"
+
+    if status == "revisando_estrategia":
+        if len(contexto) < 1500:
+            print(
+                f"[ROTEADOR_PLANEJADOR] Schema pequeno ({len(contexto)} chars), "
+                f"RAG não ajudaria → agente_codigo (direto)"
+            )
+            return "agente_codigo"
+        if tentativas_revisao >= MAX_TENTATIVAS_REVISAO:
+            print(
+                f"[ROTEADOR_PLANEJADOR] Limite de {MAX_TENTATIVAS_REVISAO} expansões "
+                f"RAG atingido → agente_codigo (forçado)"
+            )
+            return "agente_codigo"
+        print("[ROTEADOR_PLANEJADOR] Revisando estratégia → retriever (expandir contexto RAG)")
+        return "retriever"
 
     if status == "aprovado":
         print("[ROTEADOR_PLANEJADOR] Aprovado → fim")
         return "fim"
 
-    # Default: gera código
-    print("[ROTEADOR_PLANEJADOR] Default → planejador")
-    return "planejador"
+    # Default: status não reconhecido — forçar geração de código para evitar auto-loop
+    print(f"[ROTEADOR_PLANEJADOR] Status não reconhecido '{status}' → agente_codigo (safety net)")
+    return "agente_codigo"
 
+def roteador_schema(estado: EstadoTextToInsight) -> Literal["retriever", "enriquecimento_rag"]:
+    tem_descricao = estado.get("tem_descricao", False)
+    return "retriever" if tem_descricao else "enriquecimento_rag"
 
 def roteador_grafico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -> Literal["gerador_grafico", "resposta"]:
     """
@@ -113,7 +133,7 @@ def roteador_grafico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -
 
     Usa o LLM para avaliar se a pergunta e os dados justificam uma visualização.
     """
-    pergunta = estado.get("pergunta_usuario", "")
+    pergunta = estado.get("pergunta_atual", "")
     preview = estado.get("linhas_resultado_preview", [])
     total = estado.get("total_linhas_resultado", 0)
     csv_path = estado.get("caminho_csv_resultado", "")

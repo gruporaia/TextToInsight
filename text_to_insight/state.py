@@ -59,6 +59,7 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     colunas_para_explorar: dict[str, list[str]]
     raciocinio_agente: str  # CoT <thought> extraído do agente de código
     contexto_prompt_agente: str  # schema + data exploration enviados ao agente
+    tem_descricao : bool
     sql_gerada: str
     linhas_resultado_preview: list[dict[str, Any]]
     total_linhas_resultado: int
@@ -69,9 +70,14 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     pergunta_ao_usuario: str
     historico_conversa: list[tuple[str, str]]
     tentativas_loop: int
+    tentativas_revisao_retriever: int
     resposta_natural: str
     historico_tentativas: Annotated[list[dict[str, str]], operator.add]
     linhas_resultado_completo: list[dict[str, Any]]
+    schemacrawler_bin : str | None
+    db_config: dict[str, Any] | None
+    inferir_fks_virtuais: bool
+    usar_schemacrawler: bool
 
     # Campos para geração de gráficos
     caminho_csv_resultado: str

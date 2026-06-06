@@ -30,6 +30,24 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Ativa/desativa o modo Human-in-the-Loop. Padrão: on.",
     )
     parser.add_argument(
+        "--enrich-rag",
+        choices=["on", "off"],
+        default="off",
+        help="Ativa/desativa o enriquecimento RAG. Padrão: off.",
+    )
+    parser.add_argument(
+        "--infer-fks",
+        choices=["on", "off"],
+        default="off",
+        help="Ativa/desativa a inferência virtual de chaves estrangeiras. Padrão: off.",
+    )
+    parser.add_argument(
+        "--use-schemacrawler",
+        choices=["on", "off"],
+        default="on",
+        help="Ativa/desativa o uso do SchemaCrawler. Se off, usa PRAGMA SQLite. Padrão: on.",
+    )
+    parser.add_argument(
         "--thread-id",
         default="sessao_usuario_1",
         help="Identificador da thread para execução e retomada.",
@@ -94,6 +112,9 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
     data_exploration_ativado = args.data_exploration == "on"
     exploration_selector_ativado = args.exploration_selector == "on"
     print(f"[CONFIG] HITL: {'ATIVADO' if hitl_ativado else 'DESATIVADO'}")
+    enrich_rag_ativado = args.enrich_rag == "on"
+    inferir_fks_ativado = args.infer_fks == "on"
+    use_schemacrawler_ativado = args.use_schemacrawler == "on"
 
     api_key = os.getenv(args.api_key_env)
     if not api_key:
@@ -107,6 +128,9 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         model=args.model,
         db_path=args.db_path,
         hitl=hitl_ativado,
+        enrich_rag=enrich_rag_ativado,
+        inferir_fks_virtuais=inferir_fks_ativado,
+        usar_schemacrawler=use_schemacrawler_ativado,
         show_output=False,
         use_cot=cot_ativado,
         use_data_exploration=data_exploration_ativado,

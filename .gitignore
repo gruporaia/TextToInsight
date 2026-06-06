@@ -145,6 +145,8 @@ results/
 data/
 chroma_db/
 .schema_hash
+spider2-lite
+Spider2/
 
 # testes
 /meus_testes/*
