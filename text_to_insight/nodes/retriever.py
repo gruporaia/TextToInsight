@@ -3,10 +3,7 @@ Nó Retriever (GraphRAG) do grafo de agentes Text-to-Insight.
 
 Lê o `contexto_schema` produzido pelo nó de schema, recupera o subconjunto de
 tabelas relevantes para a pergunta via SchemaGraphRAG (vetor + grafo de FKs),
-formata o resultado como texto e sobrescreve `contexto_schema` no estado.
-
-Política: sobrescreve `contexto_schema` para manter o CodeAgent e o template
-de prompt inalterados (decisão registrada no plano).
+formata o resultado como texto e adiciona ao campo contexto_rag_schema.
 """
 
 from ..state import EstadoTextToInsight

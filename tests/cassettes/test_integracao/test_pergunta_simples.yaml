@@ -3,16 +3,42 @@ interactions:
     body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 o planejador de um
       sistema que transforma perguntas em consultas SQL.\n\nSeu papel: analisar a
       situa\u00e7\u00e3o atual e decidir a pr\u00f3xima a\u00e7\u00e3o.\n\nContexto
-      atual:\n- Pergunta do usu\u00e1rio: \"Quantos pedidos existem no banco?\"\n-
-      Schema dispon\u00edvel: Sim\n- Feedback do cr\u00edtico: Nenhum\n- Tentativas
-      realizadas: 0\n- Status atual: schema_obtido\n- Erro anterior: Nenhum\n\nAVALIA\u00c7\u00c3O
+      atual:\n- Pergunta do usu\u00e1rio: \"Quantos pedidos existem no banco?\"\n\n-
+      conversa_previa: Nenhuma\n\n- Schema: === SCHEMA SQLITE (INTROSPECCAO REAL)
+      ===\n\nTabela: customers\n- customer_id: TEXT (PK)\n- customer_unique_id: TEXT\n-
+      customer_zip_code_prefix: INTEGER\n- customer_city: TEXT\n- customer_state:
+      TEXT\n\nTabela: geolocation\n- geolocation_zip_code_prefix: INTEGER\n- geolocation_lat:
+      REAL\n- geolocation_lng: REAL\n- geolocation_city: TEXT\n- geolocation_state:
+      TEXT\n\nTabela: order_items\n- order_id: TEXT (PK)\n- order_item_id: INTEGER
+      (PK)\n- product_id: TEXT\n- seller_id: TEXT\n- shipping_limit_date: TEXT\n-
+      price: REAL\n- freight_value: REAL\n  Foreign keys:\n  - seller_id -> sellers.seller_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\n  - product_id -> products.product_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\n  - order_id -> orders.order_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela: order_payments\n- order_id:
+      TEXT (PK)\n- payment_sequential: INTEGER (PK)\n- payment_type: TEXT\n- payment_installments:
+      INTEGER\n- payment_value: REAL\n  Foreign keys:\n  - order_id -> orders.order_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela: order_reviews\n- review_id:
+      TEXT (PK)\n- order_id: TEXT\n- review_score: INTEGER\n- review_comment_title:
+      TEXT\n- review_comment_message: TEXT\n- review_creation_date: TEXT\n- review_answer_timestamp:
+      TEXT\n  Foreign keys:\n  - order_id -> orders.order_id (on_update=NO ACTION,
+      on_delete=NO ACTION)\n\nTabela: orders\n- order_id: TEXT (PK)\n- customer_id:
+      TEXT\n- order_status: TEXT\n- order_purchase_timestamp: TEXT\n- order_approved_at:
+      TEXT\n- order_delivered_carrier_date: TEXT\n- order_delivered_customer_date:
+      TEXT\n- order_estimated_delivery_date: TEXT\n  Foreign keys:\n  - customer_id
+      -> customers.customer_id (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela:
+      products\n- product_id: TEXT (PK)\n- product_category_name: TEXT\n- product_name_length:
+      REAL\n- product_description_length: REAL\n- product_photos_qty: REAL\n- product_weight_g:
+      REAL\n- product_length_cm: REAL\n- product_height_cm: REAL\n- product_width_cm:
+      REAL\n\nTabela: sellers\n- seller_id: TEXT (PK)\n- seller_zip_code_prefix: INTEGER\n-
+      seller_city: TEXT\n- seller_state: TEXT\n\n\n- Feedback do cr\u00edtico: Nenhum\n-
+      Tentativas realizadas: 0\n- Status atual: schema_obtido\n- Erro anterior: Nenhum\n\nAVALIA\u00c7\u00c3O
       CR\u00cdTICA:\nVerifique se a \"Pergunta do usu\u00e1rio\" pode ser respondida
       com as tabelas e colunas do Schema.\nSe houver ambiguidade, conceitos n\u00e3o
       mapeados no banco de dados, ou se a inten\u00e7\u00e3o do usu\u00e1rio n\u00e3o
       estiver clara, voc\u00ea DEVE pedir mais informa\u00e7\u00f5es.\n\nResponda
-      EXATAMENTE no formato JSON abaixo, sem formata\u00e7\u00e3o markdown (```json):\n{\n    \"decisao\":
+      EXATAMENTE no formato JSON abaixo, sem formata\u00e7\u00e3o markdown (```json):\n{{\n    \"decisao\":
       \"escolha_uma_opcao\",\n    \"pergunta_ao_usuario\": \"escreva a pergunta aqui
-      se precisar de ajuda, ou deixe vazio se n\u00e3o precisar\"\n}\n\nOp\u00e7\u00f5es
+      se precisar de ajuda, ou deixe vazio se n\u00e3o precisar\"\n}}\n\nOp\u00e7\u00f5es
       v\u00e1lidas para ''decis\u00e3o'':\n- \"pronto_codificacao\" \u2192 se temos
       schema, a pergunta faz sentido e devemos gerar/regenerar SQL\n- \"revisando_estrategia\"
       \u2192 se o cr\u00edtico reprovou e devemos tentar uma abordagem diferente\n-
@@ -22,32 +48,33 @@ interactions:
       1}}'
     headers:
       Accept:
-      - '*/*'
+      - '*'
       Accept-Encoding:
-      - gzip, deflate, zstd
+      - g
       Connection:
-      - keep-alive
+      - k
       Content-Length:
-      - '1551'
+      - '3'
       Content-Type:
-      - application/json
+      - a
       Host:
-      - generativelanguage.googleapis.com
+      - g
       User-Agent:
-      - google-genai-sdk/1.68.0 gl-python/3.10.12
+      - g
       x-goog-api-client:
-      - google-genai-sdk/1.68.0 gl-python/3.10.12
+      - g
     method: POST
     uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
   response:
     body:
       string: !!binary |
-        H4sIAAAAAAAC/12RUU/CMBSF3/crlj6DAUQIvgoxPBhQp9E4s9ysl61xtEt7Z9Bl/912Y1DckqU9
-        5/Te3m91EIYsBckFB0LDbsMPq4Rh3X6dpyShJGv0khVL0HTOdk/trW2E8OAOsTqWbh8zjqkwoGIr
-        xqzUtqxKUsXFTqSQOn3QJ0vUWSUJElBJZSrQ4njKvrJhXp/mtP4cnG+nVYGu9V5xLPp40wfYTkhh
-        8icEo6SLPUebLTu5QnI8WHkU9A3a0qwykOEDElhOcKLhBtmXFKkvlHeqajldj2ddNY/rRWCyOPqk
-        CIoLaz7rPa+wWdq2ovCBe//CTgmFoB83SrR6i5hHgv7dq2cReMgY5arKcrq843QyDY7QOo6vqI3o
-        gGW4twiHk6ub4a4Ak7cdmUZTKmlwzV1m+R5tAJLxavH98jtfbxfDezN6VCxogj/pnKO9cwIAAA==
+        H4sIAAAAAAAC/2WRX0+DMBTF3/kUpM+bkamZ+GY2TfZgXBSNiZjlht5BM9ZiezFTwne3hbF1CgmB
+        c07vnx9NEIYsA8kFB0LDbsJ3q4Rh0z2dpyShJGsMkhUr0HTM9lfjvdsI4c4dYk0q3XfKOGbCgEqt
+        mLJK27JqlSku1iKDzOmjIVmhzmtJsAK1qk0NWuxP2Vu2zOvTHt4/RsfptCrRtd4qjuUQb4cAWwsp
+        TPGEYJR0sefkcckOrpAcd1Y+D4YGXWlWG8jxAQksJzjQcItsK0rUBuVM1R2nOJ721TyuJ4FJvPdJ
+        EZQnVhRF56N/lc3c9hWlT9z7GXZNKAV9u12Su7eEeSjoz2ADjMBjxqhQdV7Q6ZDXl3vXoP4SGSYC
+        tetgyC4FmjuuHdMe8ytqI3qeOW4t4fHk7Gq8LsEU3TxMo6mUNLjgLhNXmyWo2cW90fJnulhG8DkX
+        ty8saINfO4HuK5ICAAA=
     headers:
       Alt-Svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
@@ -56,11 +83,11 @@ interactions:
       Content-Type:
       - application/json; charset=UTF-8
       Date:
-      - Thu, 02 Apr 2026 14:58:23 GMT
+      - Thu, 21 May 2026 23:49:11 GMT
       Server:
       - scaffolding on HTTPServer2
       Server-Timing:
-      - gfet4t7; dur=2624
+      - gfet4t7; dur=1330
       Transfer-Encoding:
       - chunked
       Vary:
@@ -114,37 +141,39 @@ interactions:
       REAL\n- product_height_cm: REAL\n- product_width_cm: REAL\n\nTabela: sellers\n-
       seller_id: TEXT (PK)\n- seller_zip_code_prefix: INTEGER\n- seller_city: TEXT\n-
       seller_state: TEXT\n\n\n=== PERGUNTA DO USU\u00c1RIO ===\nQuantos pedidos existem
-      no banco?\n\n\n\nResponda APENAS com a consulta SQL, sem markdown, sem explica\u00e7\u00e3o."}],
-      "role": "user"}], "safetySettings": [], "generationConfig": {"temperature":
-      0.7, "candidateCount": 1}}'
+      no banco?\n\n=== CONVERSA PR\u00c9VIA (CONTEXTO ADICIONAL) ===\nNenhuma\n\n===
+      HIST\u00d3RICO DE TENTATIVAS ANTERIORES ===\nNenhuma tentativa anterior.\n\nResponda
+      APENAS com a consulta SQL, sem markdown, sem explica\u00e7\u00e3o."}], "role":
+      "user"}], "safetySettings": [], "generationConfig": {"temperature": 0.7, "candidateCount":
+      1}}'
     headers:
       Accept:
-      - '*/*'
+      - '*'
       Accept-Encoding:
-      - gzip, deflate, zstd
+      - g
       Connection:
-      - keep-alive
+      - k
       Content-Length:
-      - '3054'
+      - '3'
       Content-Type:
-      - application/json
+      - a
       Host:
-      - generativelanguage.googleapis.com
+      - g
       User-Agent:
-      - google-genai-sdk/1.68.0 gl-python/3.10.12
+      - g
       x-goog-api-client:
-      - google-genai-sdk/1.68.0 gl-python/3.10.12
+      - g
     method: POST
     uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
   response:
     body:
       string: !!binary |
-        H4sIAAAAAAAC/2WQUUvDMBSF3/srQp4UVpHhsPNNaoWCs3NmoohINHdtNEtKcyvTsf9u2q5bpn0o
-        yb3n3pPzrQNC6DvXQgqOYOkFeXYVQtbtv+kZjaDRNfqSK5a8wr22+9be2UkQVs0QvU9ukpiROJvf
-        siNTCahepTgm17NsQtqrpd7gZnd+GeztKqOg2bU0AlQv3/QCupBa2mIG3BrdWrJsSnddqQWsXPk0
-        6A3a1bS2PIcJIHfB+S4eLSuzLJGZT9Cxqdvg0eis2+aBOhCMt200yNXhaBQN/u21V85VKh+gx9aF
-        5Erid5OEJY+MeiDwz7N6FIFHjGJh6rzAwycOR8EWWUfxwYGXHa4clg5gODwZhQvFbdEa0gpsabSF
-        VDSaJGUZfwrVZfj28XOeTr/G07i+i2iwCX4BO0FHyUICAAA=
+        H4sIAAAAAAAC/12RX0vDMBTF3/spQp4UnIiwaX2TOmGyf8xMBBEJy10b1yUluZPp2Hc3Sc2W2YeS
+        3HNyb84vu4wQuuBKSMERLL0jb65CyC78vaYVgkInxJIrNtzg0dt+u2TtLAhbf4g+94f9gpFiMh+z
+        M20EmA8pzsnjbDIiYWtpcnB/WL9fHMcZXYPvtdYC6mjfRwNdSiVtNQNutQoj2WRKD6pUAraufJXF
+        AaE13VhewgiQu+D8EI82Rq8bZHoFqtCbEPw277bdElAnhvxPRo28PlV6UUv62gc3VdYpwIStC8lr
+        id8+Ceu/MpqAwH/XiiiyhBjFSm/KCk+v2IsRLJgvuQAmwfgJFl0kboSnGoi2kF/cu8iWZglrx7dz
+        fdntLGtuq3AfasA2WlkYCO/Ju6sp18VsnA/Nz81g2jx9ivLevew++wUPh1vwYQIAAA==
     headers:
       Alt-Svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
@@ -153,11 +182,11 @@ interactions:
       Content-Type:
       - application/json; charset=UTF-8
       Date:
-      - Thu, 02 Apr 2026 14:58:24 GMT
+      - Thu, 21 May 2026 23:49:12 GMT
       Server:
       - scaffolding on HTTPServer2
       Server-Timing:
-      - gfet4t7; dur=839
+      - gfet4t7; dur=1178
       Transfer-Encoding:
       - chunked
       Vary:
@@ -179,45 +208,126 @@ interactions:
     body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 um revisor de qualidade
       para consultas SQL geradas por IA.\n\nSua tarefa: avaliar se a consulta SQL
       e seus resultados respondem adequadamente\n\u00e0 pergunta original do usu\u00e1rio.\n\n===
-      PERGUNTA DO USU\u00c1RIO ===\nQuantos pedidos existem no banco?\n\n=== SQL GERADA
-      ===\nSELECT COUNT(order_id) FROM orders\n\n=== RESULTADO DA EXECU\u00c7\u00c3O
+      PERGUNTA DO USU\u00c1RIO ===\nQuantos pedidos existem no banco?\n\n=== SCHEMA
+      DO BANCO ===\n=== SCHEMA SQLITE (INTROSPECCAO REAL) ===\n\nTabela: customers\n-
+      customer_id: TEXT (PK)\n- customer_unique_id: TEXT\n- customer_zip_code_prefix:
+      INTEGER\n- customer_city: TEXT\n- customer_state: TEXT\n\nTabela: geolocation\n-
+      geolocation_zip_code_prefix: INTEGER\n- geolocation_lat: REAL\n- geolocation_lng:
+      REAL\n- geolocation_city: TEXT\n- geolocation_state: TEXT\n\nTabela: order_items\n-
+      order_id: TEXT (PK)\n- order_item_id: INTEGER (PK)\n- product_id: TEXT\n- seller_id:
+      TEXT\n- shipping_limit_date: TEXT\n- price: REAL\n- freight_value: REAL\n  Foreign
+      keys:\n  - seller_id -> sellers.seller_id (on_update=NO ACTION, on_delete=NO
+      ACTION)\n  - product_id -> products.product_id (on_update=NO ACTION, on_delete=NO
+      ACTION)\n  - order_id -> orders.order_id (on_update=NO ACTION, on_delete=NO
+      ACTION)\n\nTabela: order_payments\n- order_id: TEXT (PK)\n- payment_sequential:
+      INTEGER (PK)\n- payment_type: TEXT\n- payment_installments: INTEGER\n- payment_value:
+      REAL\n  Foreign keys:\n  - order_id -> orders.order_id (on_update=NO ACTION,
+      on_delete=NO ACTION)\n\nTabela: order_reviews\n- review_id: TEXT (PK)\n- order_id:
+      TEXT\n- review_score: INTEGER\n- review_comment_title: TEXT\n- review_comment_message:
+      TEXT\n- review_creation_date: TEXT\n- review_answer_timestamp: TEXT\n  Foreign
+      keys:\n  - order_id -> orders.order_id (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela:
+      orders\n- order_id: TEXT (PK)\n- customer_id: TEXT\n- order_status: TEXT\n-
+      order_purchase_timestamp: TEXT\n- order_approved_at: TEXT\n- order_delivered_carrier_date:
+      TEXT\n- order_delivered_customer_date: TEXT\n- order_estimated_delivery_date:
+      TEXT\n  Foreign keys:\n  - customer_id -> customers.customer_id (on_update=NO
+      ACTION, on_delete=NO ACTION)\n\nTabela: products\n- product_id: TEXT (PK)\n-
+      product_category_name: TEXT\n- product_name_length: REAL\n- product_description_length:
+      REAL\n- product_photos_qty: REAL\n- product_weight_g: REAL\n- product_length_cm:
+      REAL\n- product_height_cm: REAL\n- product_width_cm: REAL\n\nTabela: sellers\n-
+      seller_id: TEXT (PK)\n- seller_zip_code_prefix: INTEGER\n- seller_city: TEXT\n-
+      seller_state: TEXT\n\n\n=== CONVERSA COM O AGENTE (se houver) ===\nNenhuma\n\n===
+      SQL GERADA ===\nSELECT COUNT(order_id) FROM orders\n\n=== RESULTADO DA EXECU\u00c7\u00c3O
       ===\nStatus: exec_ok\nTotal de linhas: 1\nAmostra dos resultados (primeiras
-      linhas):\n[{''COUNT(order_id)'': 99441}]\n\n=== ERROS (se houver) ===\nNenhum\n\nAvalie:\n1.
-      A SQL responde \u00e0 pergunta do usu\u00e1rio?\n2. Os resultados fazem sentido?\n3.
-      H\u00e1 algum erro l\u00f3gico ou de interpreta\u00e7\u00e3o?\n\nResponda no
-      formato:\nVEREDITO: APROVADO ou REPROVADO\nFEEDBACK: <sua avalia\u00e7\u00e3o
+      linhas):\n[{''COUNT(order_id)'': 99441}]\n\n=== ERROS (se houver) ===\nNenhum\n\n===
+      TENTATIVAS ANTERIORES ===\nNenhuma tentativa anterior (esta \u00e9 a primeira).\n\n===
+      EXEMPLOS DE AVALIA\u00c7\u00c3O ===\n\n-- EXEMPLO 1: REPROVADO (escopo incompleto)
+      --\nPergunta: \"Which airport has the least number of flights?\"\nSQL: SELECT
+      SourceAirport FROM flights GROUP BY SourceAirport ORDER BY COUNT(*) ASC LIMIT
+      1\nResultado: [(''AID'',)]\nVEREDITO: REPROVADO\nRaz\u00e3o: A query conta apenas
+      voos com partida (SourceAirport) e ignora voos com chegada (DestAirport).\nO
+      escopo da pergunta \u00e9 \"flights\" em geral \u2014 a query responde a uma
+      pergunta diferente.\n\n-- EXEMPLO 2: REPROVADO (erro sem\u00e2ntico: MIN vs
+      MAX) --\nPergunta: \"Which Asian countries have a population larger than any
+      country in Africa?\"\nSQL: SELECT Name FROM country WHERE Continent=''Asia''
+      AND Population > (SELECT MAX(Population) FROM country WHERE Continent=''Africa'')\nResultado:
+      [] (vazio)\nVEREDITO: REPROVADO\nRaz\u00e3o: \"Larger than any country in Africa\"
+      significa maior que pelo menos um pa\u00eds africano (MIN),\nn\u00e3o maior
+      que todos os pa\u00edses africanos (MAX). A l\u00f3gica est\u00e1 semanticamente
+      errada.\n\n-- EXEMPLO 3: REPROVADO (resultado vazio suspeito) --\nPergunta:
+      \"Find the last name of students who live in North Carolina and are not enrolled
+      in any degree.\"\nSQL: SELECT last_name FROM Students WHERE state_province_county
+      = ''North Carolina'' AND ...\nResultado: [] (vazio)\nVEREDITO: REPROVADO\nRaz\u00e3o:
+      Resultado vazio quando a pergunta espera dados reais \u00e9 suspeito. Verifique
+      se o filtro\nde string corresponde exatamente ao valor no banco (ex: ''NorthCarolina''
+      vs ''North Carolina'').\n\n-- EXEMPLO 4: REPROVADO (JOIN incorreto muda o que
+      est\u00e1 sendo contado) --\nPergunta: \"Find the name of makers that produced
+      some cars in 1970.\"\nSQL: SELECT DISTINCT Maker FROM car_makers JOIN car_names
+      ON car_makers.Id = car_names.MakeId JOIN cars_data ON car_names.MakeId = cars_data.Id
+      WHERE cars_data.Year = 1970\nResultado: [(''chevrolet'',), (''buick'',)]\nVEREDITO:
+      REPROVADO\nRaz\u00e3o: O JOIN usa car_names.MakeId para conectar a cars_data,
+      mas cars_data.Id refere-se\nao ID do carro, n\u00e3o do fabricante. O caminho
+      correto seria via model_list. Os resultados\nparecem plaus\u00edveis mas derivam
+      de uma jun\u00e7\u00e3o incorreta.\n\n-- EXEMPLO 5: APROVADO (formato diferente,
+      resposta correta) --\nPergunta: \"On average, when were the transcripts printed?\"\nSQL:
+      SELECT AVG(transcript_date) AS average_transcript_date FROM Transcripts\nResultado:
+      [(''1989.9333333333334'',)]\nVEREDITO: APROVADO\nRaz\u00e3o: O resultado \u00e9
+      um n\u00famero que representa a m\u00e9dia das datas (formato num\u00e9rico
+      do SQLite).\nEmbora n\u00e3o seja uma data formatada, responde corretamente
+      \u00e0 pergunta. Diferen\u00e7a de\nrepresenta\u00e7\u00e3o n\u00e3o \u00e9
+      motivo de reprova\u00e7\u00e3o.\n\n-- EXEMPLO 6: APROVADO (query mais simples
+      que o gold, resultado equivalente) --\nPergunta: \"Which model of car has the
+      minimum horsepower?\"\nSQL: SELECT Model FROM car_names JOIN cars_data ON car_names.MakeId
+      = cars_data.Id WHERE Horsepower = (SELECT MIN(Horsepower) FROM cars_data) LIMIT
+      1\nResultado: [(''triumph'',)]\nVEREDITO: APROVADO\nRaz\u00e3o: A query retorna
+      corretamente o modelo com menor pot\u00eancia. O LIMIT 1 garante unicidade\ne
+      o resultado \u00e9 semanticamente correto. Aprovar.\n\n=== CRIT\u00c9RIOS DE
+      AVALIA\u00c7\u00c3O ===\n\nREPROVE quando houver:\n- Escopo incompleto: query
+      cobre apenas parte do que a pergunta pede\n- Erro sem\u00e2ntico: l\u00f3gica
+      correta na forma mas errada no significado (MIN vs MAX, ANY vs ALL)\n- JOIN
+      incorreto que altera os dados sendo agregados ou filtrados\n- Resultado vazio
+      quando a pergunta claramente espera dados\n- Filtro com valor literal diferente
+      do que est\u00e1 no banco\n- M\u00e9trica errada (SUM vs AVG, COUNT vs COUNT
+      DISTINCT, etc.)\n- Erro de execu\u00e7\u00e3o SQL\n\nAPROVE quando:\n- O resultado
+      responde \u00e0 pergunta, mesmo com formato ou representa\u00e7\u00e3o diferente\n-
+      H\u00e1 colunas extras que n\u00e3o prejudicam a resposta\n- A precis\u00e3o
+      num\u00e9rica difere mas o valor est\u00e1 correto\n- A query \u00e9 mais simples
+      que o esperado mas semanticamente equivalente\n\nAvalie com rigor sem\u00e2ntico.
+      Resultados que parecem plaus\u00edveis mas derivam de l\u00f3gica\nincorreta
+      devem ser reprovados. N\u00e3o presuma que uma query bem-formada est\u00e1 correta.\n\nResponda
+      no formato:\nVEREDITO: APROVADO ou REPROVADO\nFEEDBACK: <sua avalia\u00e7\u00e3o
       em 1-3 frases>"}], "role": "user"}], "safetySettings": [], "generationConfig":
       {"temperature": 0.7, "candidateCount": 1}}'
     headers:
       Accept:
-      - '*/*'
+      - '*'
       Accept-Encoding:
-      - gzip, deflate, zstd
+      - g
       Connection:
-      - keep-alive
+      - k
       Content-Length:
-      - '933'
+      - '7'
       Content-Type:
-      - application/json
+      - a
       Host:
-      - generativelanguage.googleapis.com
+      - g
       User-Agent:
-      - google-genai-sdk/1.68.0 gl-python/3.10.12
+      - g
       x-goog-api-client:
-      - google-genai-sdk/1.68.0 gl-python/3.10.12
+      - g
     method: POST
     uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
   response:
     body:
       string: !!binary |
-        H4sIAAAAAAAC/2VSwU7bQBC9+ytGe04iQLQp3AJ2pUArh2BFlSgSUzyxLewda3ctAVH+pVX/otf8
-        WGftOjHUB2s08/bNvDezCQDUI+q0SNGRVedwJxmATfv3NdaOtJNCn5JkjcYdsN23GcQCcfTsH6lV
-        tIzCeRKfw2yxjFezMP6uP0dReDG7vJYcCL9tSodwe/MFMjKYIhiyNeuUIC0MOaykP8HuJ9RkskYL
-        NmVobLP7ZQoeeQYnAlgCc4Az6N2figyD8NQk+tiCRnD4g0qEBzYpGfswgdj6fn4Ej7C730JUopGY
-        YI2vVIEVQnk+gjUbTY/kezE4dliCTOpn5okayN/u4/vRwTTDJXlHKk6p7OHbHqDWhS5sviS0rD3s
-        NokXal8txI5nSR8FfYOWWjUWM/oqqmV9uF+Sqg1XtUv4ifQlN+36To4+dWyDdb8BnJ79q7fK3pSm
-        x9PRf8Q2lLZFObyDwYmISiwL9+KlJNG3RA2ccO/m6r0IBpYpl3OT5e7djB+9Aa1pnY8rWWLRGZZR
-        JRaOTyYfxusSbd52VN0tWZqnHhPJJSK+nMbjMH+dzhdnV01d3TypYBv8BcYwIfgKAwAA
+        H4sIAAAAAAAC/2VSzW7bMAy++ykInTYgCdYUQbfessQBgrZTmnjBsB8sWsQkQm3JkOQhXZB32bDD
+        3mFXv9gou07dzgeDIj9+JD/yEAGwtdBSSeHRsUv4RB6AQ/UPMaM9ak+BxkXOXFj/iK2/Q8smiMd9
+        SGLLeB6Ppwm/hOFszpfDMf+sJ3E8fjscXZEPiN8VqRewuL2G1SK+jkcJjPj7d8kLYyXar0q+hMmc
+        30D1dCtA58tflGctUhqCVMHIqEkEiy43WiKUPyFHuy20F51Qw9OIBgzo8m+G1oA3XqRAwBxpdONA
+        C/DiG6YCVg+FesADX2iOUiWV2uO6KP+Uvw1sjNW4xhYh7oU3LcIea+lxPNlfOo8qWpNikCgzEtMG
+        fmwAbKO0crs5Cmd0gC0SPmOnqKIp9+R+FTUFKmpWOLHFGxKE9ilOW2O5NVnuE3OHemSKap9nbwav
+        a7rWATxBnOKVWk9C/f7Zeec/ajemwiptn0bramhOkSp/H4ZJ4g8Ja2nhn3fWyBG1VGN+Z4rtzrtn
+        c1w8hB3a72qNiUIbariwdGFlkLaStVZ6SctVtaRbzEjkbr836G5S4XZVR6w+IodTGTDdj3czYQo7
+        GVzFPy6ms3Nuubt1LDpG/wDT+1NSPQMAAA==
     headers:
       Alt-Svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
@@ -226,11 +336,11 @@ interactions:
       Content-Type:
       - application/json; charset=UTF-8
       Date:
-      - Thu, 02 Apr 2026 14:58:27 GMT
+      - Thu, 21 May 2026 23:49:15 GMT
       Server:
       - scaffolding on HTTPServer2
       Server-Timing:
-      - gfet4t7; dur=2951
+      - gfet4t7; dur=1978
       Transfer-Encoding:
       - chunked
       Vary:

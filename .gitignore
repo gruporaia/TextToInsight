@@ -49,6 +49,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 results/
+graphs/
 
 # Translations
 *.mo
@@ -152,3 +153,6 @@ Spider2/
 
 # reports testes spider
 /reports/
+
+# commit.txt (arquivo temporário usado para textos de commit personalizados)
+commit.txt

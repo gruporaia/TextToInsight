@@ -1,5 +1,5 @@
 """
-Testes de integração do Text-to-Insight (usa API real do Gemini + banco real).
+Testes de integração do Text-to-Insight (usa API real + banco real).
 
 Estes testes validam o pipeline completo: pergunta → planner → schema →
 code agent → executor → critic → resposta.
@@ -8,6 +8,7 @@ code agent → executor → critic → resposta.
 import os
 import sys
 import time
+from pathlib import Path
 
 import pytest
 from dotenv import load_dotenv
@@ -19,15 +20,11 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "olist_relationa
 load_dotenv()
 
 @pytest.fixture
-def grafo():
-    """Retorna o grafo compilado."""
-    api_key = os.getenv("GOOGLE_API_KEY") #como estamos usando vcr, não haverá mais requisição direta, apenas repetição
-                                          #do primeiro resultado da requisição, é possível verificar isso em test/cassettes
-    if not api_key:
-        pytest.skip("Variável GOOGLE_API_KEY não encontrada. Pulando testes de integração.")
-
+def grafo(llm_profile):
+    """Retorna o grafo compilado com o provider de teste configurado no ambiente."""
     from text_to_insight.graph import Graph
-    return Graph(api_key, "gemini-2.5-flash", hitl=True)
+
+    return Graph(llm_profile.api_key, llm_profile.model_name, hitl=True)
 
 
 @pytest.fixture(autouse=True)
@@ -83,8 +80,8 @@ def test_pergunta_com_ranking(grafo):
     """Pergunta com ranking retorna múltiplas linhas."""
     config = {"configurable": {"thread_id": "teste_simples"}}
     resultado = grafo.grafo_text_to_insight.invoke(
-        _estado_inicial("Quais sao as 5 categorias de produtos mais vendidos por quantidade?"), config
-    )
+        _estado_inicial("Quais são as 5 categorias com a maior quantidade total de itens vendidos?"), config
+    ) # antes a pergunta era "Quais são as 5 categorias de produtos mais vendidos por quantidade?" e ela era uma pergunta que necessitava de mais input de contexto para o gpt4o
 
     assert resultado["status"] == "aprovado"
     assert resultado["sql_gerada"] != ""
@@ -97,8 +94,9 @@ def test_estado_final_completo(grafo):
     """Estado final tem todos os campos-chave preenchidos."""
     config = {"configurable": {"thread_id": "teste_estado"}}
     resultado = grafo.grafo_text_to_insight.invoke(
-        _estado_inicial("Qual o valor medio dos pedidos?"), config
-    )
+        _estado_inicial("Considerando o valor total cobrado por pedido, qual é a média de valor dos pedidos?"), config
+    ) 
+    # antes era "Qual o valor médio dos pedidos?", mas o gpt4o não conseguia entender o contexto de "valor dos pedidos" sem mencionar o campo específico "valor total cobrado por pedido"
 
     # Campos que devem estar preenchidos ao final
     assert resultado.get("contexto_schema", "") != ""
@@ -133,3 +131,111 @@ def test_hitl_nova_pergunta_substitui(grafo):
     assert resultado_final.get("pergunta_original") == "Quem e o Brad Pitt?"
     assert resultado_final.get("pergunta_atual") == "Quero saber quantos clientes existem"
     assert "Brad Pitt" not in str(resultado_final.get("resposta_natural", ""))
+
+
+# ============================================================
+# INTEGRAÇÃO — fluxo de gráficos (sem LLM real)
+# ============================================================
+
+"""Testes de integração focados no fluxo de geração de gráficos, usando mocks para o LLM e nós do grafo."""
+
+def _montar_grafo_fake(monkeypatch, tmp_path, enable_graphs: bool):
+    import text_to_insight.graph as graph_module
+    import text_to_insight.model_selection as model_selection
+    from text_to_insight.nodes import csv_saver as csv_module
+
+    def _fake_get_model(model, api_key):
+        return object()
+
+    monkeypatch.setattr(model_selection, "get_model", _fake_get_model)
+    monkeypatch.setattr(graph_module, "get_model", _fake_get_model)
+
+    monkeypatch.setattr(csv_module, "RESULTS_DIR", tmp_path / "results")
+
+    def _fake_planejador(estado, llm=None, hitl=True):
+        return {"status": "pronto_codificacao"}
+
+    def _fake_agente_codigo(estado, llm=None):
+        return {"sql_gerada": "SELECT 1", "status": "sql_gerada", "tentativas_loop": 1}
+
+    def _fake_sandbox(estado):
+        return {
+            "status": "exec_ok",
+            "linhas_resultado_preview": [{"valor": 1}, {"valor": 2}],
+            "linhas_resultado_completo": [{"valor": 1}, {"valor": 2}],
+            "total_linhas_resultado": 2,
+            "saida_terminal": "ok",
+        }
+
+    def _fake_critico(estado, llm=None):
+        return {"status": "aprovado", "feedback_critico": "Aprovado"}
+
+    def _fake_resposta(estado, llm=None):
+        return {"resposta_natural": "ok"}
+
+    def _fake_gerador_grafico(estado, llm=None):
+        graphs_dir = tmp_path / "graphs"
+        graphs_dir.mkdir(exist_ok=True)
+        output_path = graphs_dir / "grafico_teste.png"
+        output_path.write_bytes(b"fakepng")
+        return {"grafico_gerado": True, "caminho_grafico": str(output_path)}
+
+    def _fake_roteador_planejador(estado):
+        return "agente_codigo"
+
+    def _fake_roteador_sandbox(estado):
+        return "critico"
+
+    def _fake_roteador_grafico(estado, llm=None):
+        return "gerador_grafico"
+
+    monkeypatch.setattr(graph_module, "nos_nodo_planejador", _fake_planejador)
+    monkeypatch.setattr(graph_module, "nos_nodo_agente_codigo", _fake_agente_codigo)
+    monkeypatch.setattr(graph_module, "nos_nodo_sandbox", _fake_sandbox)
+    monkeypatch.setattr(graph_module, "nos_nodo_critico", _fake_critico)
+    monkeypatch.setattr(graph_module, "nos_nodo_resposta", _fake_resposta)
+    monkeypatch.setattr(graph_module, "nos_nodo_gerador_grafico", _fake_gerador_grafico)
+    monkeypatch.setattr(graph_module, "nos_nodo_salvar_csv", csv_module.nos_nodo_salvar_csv)
+    monkeypatch.setattr(graph_module, "roteador_planejador", _fake_roteador_planejador)
+    monkeypatch.setattr(graph_module, "roteador_sandbox", _fake_roteador_sandbox)
+    monkeypatch.setattr(graph_module, "roteador_grafico", _fake_roteador_grafico)
+
+    return graph_module.Graph(api_key="fake", model="fake", hitl=False, enable_graphs=enable_graphs)
+
+
+def test_grafo_com_graficos_gera_csv_e_png(monkeypatch, tmp_path):
+    grafo = _montar_grafo_fake(monkeypatch, tmp_path, enable_graphs=True)
+    config = {"configurable": {"thread_id": "grafo_graficos_true"}}
+
+    estado = {
+        "pergunta_original": "Teste",
+        "pergunta_atual": "Teste",
+        "db_path": "fake.db",
+    }
+    resultado = grafo.grafo_text_to_insight.invoke(estado, config)
+
+    csv_path = resultado.get("caminho_csv_resultado", "")
+    assert csv_path
+    assert Path(csv_path).exists()
+
+    assert resultado.get("grafico_gerado") is True
+    grafico_path = resultado.get("caminho_grafico", "")
+    assert grafico_path
+    assert Path(grafico_path).exists()
+    assert Path(grafico_path).stat().st_size > 0
+
+
+def test_grafo_sem_graficos_bypassa(monkeypatch, tmp_path):
+    grafo = _montar_grafo_fake(monkeypatch, tmp_path, enable_graphs=False)
+    config = {"configurable": {"thread_id": "grafo_graficos_false"}}
+
+    estado = {
+        "pergunta_original": "Teste",
+        "pergunta_atual": "Teste",
+        "db_path": "fake.db",
+    }
+    resultado = grafo.grafo_text_to_insight.invoke(estado, config)
+
+    assert resultado.get("caminho_csv_resultado", "") == ""
+    assert resultado.get("grafico_gerado", False) is False
+    assert resultado.get("caminho_grafico", "") == ""
