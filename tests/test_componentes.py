@@ -8,6 +8,7 @@ executor node e routers.
 import os
 import sys
 import pytest
+import sqlite3
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -354,3 +355,106 @@ def test_extracao_schema_com_schemacrawler():
     assert "products" in schema.lower()
     assert "customer_id" in schema.lower()
     assert "order_id" in schema.lower()  
+
+# ============================================================
+# TESTES NOVOS (FKs Virtuais, Roteador e Injeção Matemática)
+# ============================================================
+
+def test_inferir_fks_virtuais_sufixos():
+    from text_to_insight.nodes.schema import _inferir_fks_virtuais
+    schema = (
+        "Tabela: orders\n"
+        "- order_id: INTEGER (PK)\n"
+        "- customer_id: INTEGER\n"
+        "\n"
+        "Tabela: customers\n"
+        "- id: INTEGER (PK)\n"
+        "- name: TEXT\n"
+        "\n"
+    )
+    novo_schema = _inferir_fks_virtuais(schema)
+    assert "customer_id -> customers.id (virtual)" in novo_schema
+
+def test_inferir_fks_virtuais_prefixo_tabela():
+    from text_to_insight.nodes.schema import _inferir_fks_virtuais
+    schema = (
+        "Tabela: olist_orders\n"
+        "- order_id: INTEGER (PK)\n"
+        "- status: TEXT\n"
+        "\n"
+        "Tabela: order_items\n"
+        "- item_id: INTEGER\n"
+        "- order_id: INTEGER\n"
+        "\n"
+    )
+    novo_schema = _inferir_fks_virtuais(schema)
+    assert "order_id -> olist_orders.order_id (virtual)" in novo_schema
+
+def test_inferir_fks_virtuais_colunas_homonimas():
+    from text_to_insight.nodes.schema import _inferir_fks_virtuais
+    schema = (
+        "Tabela: olist_products\n"
+        "- product_id: INTEGER (PK)\n"
+        "- product_category_name: TEXT\n"
+        "\n"
+        "Tabela: product_category_name_translation\n"
+        "- product_category_name: TEXT (PK)\n"
+        "- product_category_name_english: TEXT\n"
+        "\n"
+    )
+    novo_schema = _inferir_fks_virtuais(schema)
+    assert "product_category_name -> product_category_name_translation.product_category_name (virtual)" in novo_schema
+
+def test_roteador_planejador_quebra_loop_schema_pequeno():
+    from text_to_insight.routers.edges import roteador_planejador
+    estado = {
+        "contexto_schema": "Tabela: a\n- id: INT\n", # < 1500 chars
+        "status": "revisando_estrategia",
+        "tentativas_revisao_retriever": 0
+    }
+    assert roteador_planejador(estado) == "agente_codigo"
+
+def test_roteador_planejador_quebra_loop_max_tentativas():
+    from text_to_insight.routers.edges import roteador_planejador
+    schema_grande = "A" * 2000
+    estado = {
+        "contexto_schema": schema_grande,
+        "status": "revisando_estrategia",
+        "tentativas_revisao_retriever": 2 # MAX_TENTATIVAS_REVISAO = 2
+    }
+    assert roteador_planejador(estado) == "agente_codigo"
+
+def test_roteador_planejador_fallback_agente_codigo():
+    from text_to_insight.routers.edges import roteador_planejador
+    estado = {
+        "contexto_schema": "Tabela: a\n- id: INT\n",
+        "status": "status_inexistente"
+    }
+    assert roteador_planejador(estado) == "agente_codigo"
+
+def test_sqlite_math_functions(tmp_path):
+    from src.spider.query_executor import SpiderQueryExecutor
+    db_id = "test_math_db"
+    db_dir = tmp_path / db_id
+    db_dir.mkdir(parents=True)
+    db_path = db_dir / f"{db_id}.sqlite"
+    
+    conn = sqlite3.connect(db_path)
+    conn.execute("CREATE TABLE numbers (val REAL)")
+    conn.execute("INSERT INTO numbers VALUES (0), (90), (1)")
+    conn.commit()
+    conn.close()
+
+    executor = SpiderQueryExecutor(database_dir=str(tmp_path))
+    
+    res_sin = executor.execute_query(db_id, "SELECT SIN(0) as result FROM numbers LIMIT 1")
+    assert res_sin["success"] is True
+    assert res_sin["results"][0]["result"] == 0.0
+
+    res_sqrt = executor.execute_query(db_id, "SELECT SQRT(1) as result FROM numbers LIMIT 1")
+    assert res_sqrt["success"] is True
+    assert res_sqrt["results"][0]["result"] == 1.0
+    
+    res_power = executor.execute_query(db_id, "SELECT POWER(2, 3) as result FROM numbers LIMIT 1")
+    assert res_power["success"] is True
+    assert res_power["results"][0]["result"] == 8.0

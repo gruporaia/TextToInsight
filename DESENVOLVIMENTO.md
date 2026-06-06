@@ -112,6 +112,7 @@ tests/
     test_nodes.py
     test_integracao.py
     test_main_engine_integracao.py
+    test_biblioteca_integracao.py
     test_real_api_smoke.py
 ```
 
@@ -137,6 +138,9 @@ pytest tests/test_integracao.py -v -s --record-mode=new_episodes
 
 # integracao main + InsightEngine
 pytest tests/test_main_engine_integracao.py -v -s
+
+# integracao do pacote como biblioteca (sem chamadas de API, testa HITL e run/resume)
+pytest tests/test_biblioteca_integracao.py -v -s
 ```
 
 ### Gravação de cassetes VCR (fluxo recomendado)
