@@ -101,7 +101,7 @@ class _FakeCompiledGraph:
 
 
 class _FakeGraph:
-    def __init__(self, api_key, model, hitl=True):
+    def __init__(self, api_key, model, hitl=True, **kwargs):
         self.grafo_text_to_insight = _FakeCompiledGraph()
 
 

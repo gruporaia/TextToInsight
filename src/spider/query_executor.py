@@ -9,6 +9,7 @@ Fornece funcionalidades para:
 
 import sqlite3
 import time
+import math
 from pathlib import Path
 from typing import Any
 
@@ -74,6 +75,35 @@ class SpiderQueryExecutor:
             connection_string = f"file:{db_path}?mode=ro&uri=true"
             conn = sqlite3.connect(connection_string, timeout=timeout, uri=True)
             conn.row_factory = sqlite3.Row  # Retornar dicts
+
+            # ========================================================================
+            # INJEÇÃO DE FUNÇÕES MATEMÁTICAS NO SQLITE
+            # Como o SQLite não possui nativamente as funções trigonométricas clássicas
+            # (que existem no Postgres, MySQL, etc), o LLM frequentemente gera SQLs 
+            # válidos que quebram no SQLite com o erro "No such function". 
+            # Aqui nós ensinamos o SQLite local a resolver essas operações
+            # em tempo de execução usando a biblioteca math nativa do Python. 
+            # Isso é vital para as queries geográficas e analíticas do Spider 2.
+            # ========================================================================
+            conn.create_function("SIN", 1, math.sin)
+            conn.create_function("COS", 1, math.cos)
+            conn.create_function("SQRT", 1, math.sqrt)
+            conn.create_function("RADIANS", 1, math.radians)
+            conn.create_function("ACOS", 1, math.acos)
+            conn.create_function("ASIN", 1, math.asin)
+            conn.create_function("TAN", 1, math.tan)
+            conn.create_function("ATAN", 1, math.atan)
+            conn.create_function("DEGREES", 1, math.degrees)
+            conn.create_function("POWER", 2, math.pow)
+            conn.create_function("PI", 0, lambda: math.pi)
+            conn.create_function("EXP", 1, math.exp)
+            conn.create_function("LN", 1, math.log)
+            conn.create_function("LOG", 1, math.log10)
+            conn.create_function("LOG10", 1, math.log10)
+            conn.create_function("CEIL", 1, math.ceil)
+            conn.create_function("CEILING", 1, math.ceil)
+            conn.create_function("FLOOR", 1, math.floor)
+            conn.create_function("SIGN", 1, lambda x: -1 if x < 0 else (1 if x > 0 else 0))
 
             cursor = conn.cursor()
 

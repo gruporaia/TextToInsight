@@ -4,11 +4,12 @@ interactions:
       sistema que transforma perguntas em consultas SQL.\n\nSeu papel: analisar a
       situa\u00e7\u00e3o atual e decidir a pr\u00f3xima a\u00e7\u00e3o.\n\nContexto
       atual:\n- Pergunta do usu\u00e1rio: \"Qual o valor medio dos pedidos?\"\n\n-
-      conversa_previa: Nenhuma\n\n- Schema: === SCHEMA SQLITE (INTROSPECCAO REAL)
-      ===\n\nTabela: customers\n- customer_id: TEXT (PK)\n- customer_unique_id: TEXT\n-
-      customer_zip_code_prefix: INTEGER\n- customer_city: TEXT\n- customer_state:
-      TEXT\n\nTabela: geolocation\n- geolocation_zip_code_prefix: INTEGER\n- geolocation_lat:
-      REAL\n- geolocation_lng: REAL\n- geolocation_city: TEXT\n- geolocation_state:
+      conversa_previa: Nenhuma\n\n- Schema: === SCHEMA RELEVANTE (via RAG) ===\n\nTabela:
+      order_reviews\n- review_id: TEXT (PK)\n- order_id: TEXT\n- review_score: INTEGER\n-
+      review_comment_title: TEXT\n- review_comment_message: TEXT\n- review_creation_date:
+      TEXT\n- review_answer_timestamp: TEXT\n  Foreign keys:\n  - order_id -> orders.order_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela: sellers\n- seller_id:
+      TEXT (PK)\n- seller_zip_code_prefix: INTEGER\n- seller_city: TEXT\n- seller_state:
       TEXT\n\nTabela: order_items\n- order_id: TEXT (PK)\n- order_item_id: INTEGER
       (PK)\n- product_id: TEXT\n- seller_id: TEXT\n- shipping_limit_date: TEXT\n-
       price: REAL\n- freight_value: REAL\n  Foreign keys:\n  - seller_id -> sellers.seller_id
@@ -17,28 +18,23 @@ interactions:
       (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela: order_payments\n- order_id:
       TEXT (PK)\n- payment_sequential: INTEGER (PK)\n- payment_type: TEXT\n- payment_installments:
       INTEGER\n- payment_value: REAL\n  Foreign keys:\n  - order_id -> orders.order_id
-      (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela: order_reviews\n- review_id:
-      TEXT (PK)\n- order_id: TEXT\n- review_score: INTEGER\n- review_comment_title:
-      TEXT\n- review_comment_message: TEXT\n- review_creation_date: TEXT\n- review_answer_timestamp:
-      TEXT\n  Foreign keys:\n  - order_id -> orders.order_id (on_update=NO ACTION,
-      on_delete=NO ACTION)\n\nTabela: orders\n- order_id: TEXT (PK)\n- customer_id:
-      TEXT\n- order_status: TEXT\n- order_purchase_timestamp: TEXT\n- order_approved_at:
-      TEXT\n- order_delivered_carrier_date: TEXT\n- order_delivered_customer_date:
+      (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela: orders\n- order_id: TEXT
+      (PK)\n- customer_id: TEXT\n- order_status: TEXT\n- order_purchase_timestamp:
+      TEXT\n- order_approved_at: TEXT\n- order_delivered_carrier_date: TEXT\n- order_delivered_customer_date:
       TEXT\n- order_estimated_delivery_date: TEXT\n  Foreign keys:\n  - customer_id
-      -> customers.customer_id (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela:
-      products\n- product_id: TEXT (PK)\n- product_category_name: TEXT\n- product_name_length:
-      REAL\n- product_description_length: REAL\n- product_photos_qty: REAL\n- product_weight_g:
-      REAL\n- product_length_cm: REAL\n- product_height_cm: REAL\n- product_width_cm:
-      REAL\n\nTabela: sellers\n- seller_id: TEXT (PK)\n- seller_zip_code_prefix: INTEGER\n-
-      seller_city: TEXT\n- seller_state: TEXT\n\n\n- Feedback do cr\u00edtico: Nenhum\n-
-      Tentativas realizadas: 0\n- Status atual: schema_obtido\n- Erro anterior: Nenhum\n\nAVALIA\u00c7\u00c3O
-      CR\u00cdTICA:\nVerifique se a \"Pergunta do usu\u00e1rio\" pode ser respondida
-      com as tabelas e colunas do Schema.\nSe houver ambiguidade, conceitos n\u00e3o
-      mapeados no banco de dados, ou se a inten\u00e7\u00e3o do usu\u00e1rio n\u00e3o
-      estiver clara, voc\u00ea DEVE pedir mais informa\u00e7\u00f5es.\n\nResponda
-      EXATAMENTE no formato JSON abaixo, sem formata\u00e7\u00e3o markdown (```json):\n{{\n    \"decisao\":
+      -> customers.customer_id (on_update=NO ACTION, on_delete=NO ACTION)\n\n=== RELA\u00c7\u00d5ES
+      NECESS\u00c1RIAS (caminhos de JOIN) ===\norder_items JOIN orders ON order_items.order_id
+      = orders.order_id\norder_payments JOIN orders ON order_payments.order_id = orders.order_id\norder_reviews
+      JOIN orders ON order_reviews.order_id = orders.order_id\norder_items JOIN sellers
+      ON order_items.seller_id = sellers.seller_id\n\n\n- Feedback do cr\u00edtico:
+      Nenhum\n- Tentativas realizadas: 0\n- Status atual: schema_obtido\n- Erro anterior:
+      Nenhum\n\nAVALIA\u00c7\u00c3O CR\u00cdTICA:\nVerifique se a \"Pergunta do usu\u00e1rio\"
+      pode ser respondida com as tabelas e colunas do Schema.\nSe houver ambiguidade,
+      conceitos n\u00e3o mapeados no banco de dados, ou se a inten\u00e7\u00e3o do
+      usu\u00e1rio n\u00e3o estiver clara, voc\u00ea DEVE pedir mais informa\u00e7\u00f5es.\n\nResponda
+      EXATAMENTE no formato JSON abaixo, sem formata\u00e7\u00e3o markdown (```json):\n{\n    \"decisao\":
       \"escolha_uma_opcao\",\n    \"pergunta_ao_usuario\": \"escreva a pergunta aqui
-      se precisar de ajuda, ou deixe vazio se n\u00e3o precisar\"\n}}\n\nOp\u00e7\u00f5es
+      se precisar de ajuda, ou deixe vazio se n\u00e3o precisar\"\n}\n\nOp\u00e7\u00f5es
       v\u00e1lidas para ''decis\u00e3o'':\n- \"pronto_codificacao\" \u2192 se temos
       schema, a pergunta faz sentido e devemos gerar/regenerar SQL\n- \"revisando_estrategia\"
       \u2192 se o cr\u00edtico reprovou e devemos tentar uma abordagem diferente\n-
@@ -68,17 +64,13 @@ interactions:
   response:
     body:
       string: !!binary |
-        H4sIAAAAAAAC/7VUXW/TMBR936+4yiNKEyhU2/rERNutEhOl6xCIocp1blMzx878UVFN/e9cO9nW
-        jkoIBFKl2O71Offcc5L7I4AEjdEm6cM9bWjLdYG0e9M9TZuDCq1lZThLvmgP+IMjFljARnsD3BuD
-        ysGd146lUEtkFoGvkN82BbVkCpgqYCGkFKqEAh0T0mYw0gYqbRCEWmpTMSe0Avq5lbAQm0phhawA
-        p/uwcq62/TxnIiu1LiVmBa7zEiuhRIfVIi80t7lhDjtSVMIR/kwTvBKOaPZa9UHNYeiA+YSRwY16
-        AR+DsifVy9A1OiN4H0pUSOVijSSy9ATbNkcN2YzrKm8rcM61ckQ+XxrEuRNo5gbvPFpnU4hkfeil
-        1G+BMuBGWd2s11lKZlc3atLM1RDxhuYF3exV9+XxyfHJ61ObJa1R1jHnbfBpOrz6cD19N5wPP1+c
-        XV/NhoOHmnb6VPQ1HkBre/zzrdvU0efw/EVKM3ZT8+wCZd0Cxnvk6+0u5D5sy2u5EXXwOBC8R2ZU
-        4z5baO/gPEqGs8m4iZLdwY8A3shw8Y9zkOzAbB/X39rVNv37KcRgjGia3uDuNNZCyxjm34wk6ryM
-        UQps/yRMz6cWOcZFwD9vb0/b0gmaS6G8Q1pMjP6O3IWjkMDOiIBnhHsQbiAqVLbVt68pZEFz9uBy
-        KfWCyWcg4YsSSBrN+0FP9iq3h9g/MemjO73/5+w0vGZj+irt2hrfvQGZswkI3cdgNdSBdnu0PfoJ
-        dL39d1IFAAA=
+        H4sIAAAAAAAC/12RXU+DMBSG7/kVpNebcTNkmXdGvdiFukz8ipjlSM+gG2tJe1imhP9uC2PrhIS0
+        73nP10MdhCFLQXLBgdCw6/DTKmFYt18XU5JQkg30khVL0HTydk/tna2FcO+SWJ1Id08Yx1QYUIkV
+        E1ZqW1YtU8XFSqSQOn3QO0vUWSUJlqCWlalAi0OWfWXDvD7N8fw1OE2nVYGu9VZxLHp70xvYSkhh
+        8gWCUdLZnuOnOTtGheS4t/Jl0DdoS7PKQIYPSGA5wZGGW2RbUqw2KG9V1XKajqKumsf1zDCeHuKk
+        CIqz0OiU7FU2d7avKHzi3s+wa0Ih6MftEt+/x8xDQf8G62EEHjNGuaqynM6HnE5Gh7BBvRMpxgK1
+        a2HIbgWaO7At1I7zK2ojOqAZbi3i4fgiGq4KMHk7ENNoSiUNzrjzfL9droEmH4/R7uV3Mpuvo6vF
+        5kaxoAn+AFyQdU2TAgAA
     headers:
       Alt-Svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
@@ -87,447 +79,11 @@ interactions:
       Content-Type:
       - application/json; charset=UTF-8
       Date:
-      - Thu, 21 May 2026 23:49:57 GMT
+      - Sat, 06 Jun 2026 00:44:34 GMT
       Server:
       - scaffolding on HTTPServer2
       Server-Timing:
-      - gfet4t7; dur=282
-      Transfer-Encoding:
-      - chunked
-      Vary:
-      - Origin
-      - X-Origin
-      - Referer
-      X-Content-Type-Options:
-      - nosniff
-      X-Frame-Options:
-      - SAMEORIGIN
-      X-Gemini-Service-Tier:
-      - standard
-      X-XSS-Protection:
-      - '0'
-    status:
-      code: 429
-      message: Too Many Requests
-- request:
-    body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 o planejador de um
-      sistema que transforma perguntas em consultas SQL.\n\nSeu papel: analisar a
-      situa\u00e7\u00e3o atual e decidir a pr\u00f3xima a\u00e7\u00e3o.\n\nContexto
-      atual:\n- Pergunta do usu\u00e1rio: \"Qual o valor medio dos pedidos?\"\n\n-
-      conversa_previa: Nenhuma\n\n- Schema: === SCHEMA SQLITE (INTROSPECCAO REAL)
-      ===\n\nTabela: customers\n- customer_id: TEXT (PK)\n- customer_unique_id: TEXT\n-
-      customer_zip_code_prefix: INTEGER\n- customer_city: TEXT\n- customer_state:
-      TEXT\n\nTabela: geolocation\n- geolocation_zip_code_prefix: INTEGER\n- geolocation_lat:
-      REAL\n- geolocation_lng: REAL\n- geolocation_city: TEXT\n- geolocation_state:
-      TEXT\n\nTabela: order_items\n- order_id: TEXT (PK)\n- order_item_id: INTEGER
-      (PK)\n- product_id: TEXT\n- seller_id: TEXT\n- shipping_limit_date: TEXT\n-
-      price: REAL\n- freight_value: REAL\n  Foreign keys:\n  - seller_id -> sellers.seller_id
-      (on_update=NO ACTION, on_delete=NO ACTION)\n  - product_id -> products.product_id
-      (on_update=NO ACTION, on_delete=NO ACTION)\n  - order_id -> orders.order_id
-      (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela: order_payments\n- order_id:
-      TEXT (PK)\n- payment_sequential: INTEGER (PK)\n- payment_type: TEXT\n- payment_installments:
-      INTEGER\n- payment_value: REAL\n  Foreign keys:\n  - order_id -> orders.order_id
-      (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela: order_reviews\n- review_id:
-      TEXT (PK)\n- order_id: TEXT\n- review_score: INTEGER\n- review_comment_title:
-      TEXT\n- review_comment_message: TEXT\n- review_creation_date: TEXT\n- review_answer_timestamp:
-      TEXT\n  Foreign keys:\n  - order_id -> orders.order_id (on_update=NO ACTION,
-      on_delete=NO ACTION)\n\nTabela: orders\n- order_id: TEXT (PK)\n- customer_id:
-      TEXT\n- order_status: TEXT\n- order_purchase_timestamp: TEXT\n- order_approved_at:
-      TEXT\n- order_delivered_carrier_date: TEXT\n- order_delivered_customer_date:
-      TEXT\n- order_estimated_delivery_date: TEXT\n  Foreign keys:\n  - customer_id
-      -> customers.customer_id (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela:
-      products\n- product_id: TEXT (PK)\n- product_category_name: TEXT\n- product_name_length:
-      REAL\n- product_description_length: REAL\n- product_photos_qty: REAL\n- product_weight_g:
-      REAL\n- product_length_cm: REAL\n- product_height_cm: REAL\n- product_width_cm:
-      REAL\n\nTabela: sellers\n- seller_id: TEXT (PK)\n- seller_zip_code_prefix: INTEGER\n-
-      seller_city: TEXT\n- seller_state: TEXT\n\n\n- Feedback do cr\u00edtico: Nenhum\n-
-      Tentativas realizadas: 0\n- Status atual: schema_obtido\n- Erro anterior: Nenhum\n\nAVALIA\u00c7\u00c3O
-      CR\u00cdTICA:\nVerifique se a \"Pergunta do usu\u00e1rio\" pode ser respondida
-      com as tabelas e colunas do Schema.\nSe houver ambiguidade, conceitos n\u00e3o
-      mapeados no banco de dados, ou se a inten\u00e7\u00e3o do usu\u00e1rio n\u00e3o
-      estiver clara, voc\u00ea DEVE pedir mais informa\u00e7\u00f5es.\n\nResponda
-      EXATAMENTE no formato JSON abaixo, sem formata\u00e7\u00e3o markdown (```json):\n{{\n    \"decisao\":
-      \"escolha_uma_opcao\",\n    \"pergunta_ao_usuario\": \"escreva a pergunta aqui
-      se precisar de ajuda, ou deixe vazio se n\u00e3o precisar\"\n}}\n\nOp\u00e7\u00f5es
-      v\u00e1lidas para ''decis\u00e3o'':\n- \"pronto_codificacao\" \u2192 se temos
-      schema, a pergunta faz sentido e devemos gerar/regenerar SQL\n- \"revisando_estrategia\"
-      \u2192 se o cr\u00edtico reprovou e devemos tentar uma abordagem diferente\n-
-      \"necessita_ajuda\" \u2192 a pergunta n\u00e3o \u00e9 clara, n\u00e3o faz sentido,
-      falta contexto ou n\u00e3o h\u00e1 dados no schema para responder.\n"}], "role":
-      "user"}], "safetySettings": [], "generationConfig": {"temperature": 0.7, "candidateCount":
-      1}}'
-    headers:
-      Accept:
-      - '*'
-      Accept-Encoding:
-      - g
-      Connection:
-      - k
-      Content-Length:
-      - '3'
-      Content-Type:
-      - a
-      Host:
-      - g
-      User-Agent:
-      - g
-      x-goog-api-client:
-      - g
-    method: POST
-    uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
-  response:
-    body:
-      string: !!binary |
-        H4sIAAAAAAAC/7VUXW/aMBR951dc8TiFBHVlGzytGtAirRqjdNq0Tsg4l+DVsVN/oKGK/75rJ22h
-        Q5o2bRJSbHN9zj33nOS+BdBGY7RpD+CeNrTlOkfanZ70k/qgRGtZEc7aX7QH/MERc8xhq70B7o1B
-        5eDOa8cSqCQyi8DXyG/rgkoyBUzlsBRSClVAjo4JaVMYawOlNghCrbQpmRNaAf3cWliITSWwRpaD
-        0wNYO1fZQZYxkRZaFxLTHDdZgaVQosMqkeWa28wwhx0pSuEIf64JXglHNAet+qDmOHTAfMJI4Ua9
-        gI9B2ZPqVeganRF8AAUqpHKxQRJZeIJtmqOGbMp1mTUVuOBaOSJfrAziwgk0C4N3Hq2zCUSyAfQS
-        6jdHGXCjrJO011lJZtc3alrP1RDxluYFvX76+lW3333TPX1p03bjlHXMeRuMmo2uPlzP3o0Wo88X
-        Z9dX89HwoaYZPxV9jQfQ+B7/fOu2VTQ6PH/RUs/dVDy9QFk1gPEeGXu7D3kI2/BabkQVTA4E75EZ
-        VdvPlto7OI+a4Ww6qbNk9/AjgDcyXPzjILT3YHaP62/Napf8/RRiMsY0TW9wfxoboWVM829GEnVe
-        xiwFtn+SpudTixyTPOCfN7dnTekUzaVQ3iEtpkZ/R+7CUYhgZ0zAc8I9CjcUJSrb6DvUFLKgOXtw
-        uZB6yeQzkPBJCSS15sOktw8qd8fYPzHpozu9/+fsLLxnE/os7dsaX74hmbON7P3HZNXcgXfX2rV+
-        AnH8mmBUBQAA
-    headers:
-      Alt-Svc:
-      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
-      Content-Encoding:
-      - gzip
-      Content-Type:
-      - application/json; charset=UTF-8
-      Date:
-      - Thu, 21 May 2026 23:50:00 GMT
-      Server:
-      - scaffolding on HTTPServer2
-      Server-Timing:
-      - gfet4t7; dur=939
-      Transfer-Encoding:
-      - chunked
-      Vary:
-      - Origin
-      - X-Origin
-      - Referer
-      X-Content-Type-Options:
-      - nosniff
-      X-Frame-Options:
-      - SAMEORIGIN
-      X-Gemini-Service-Tier:
-      - standard
-      X-XSS-Protection:
-      - '0'
-    status:
-      code: 429
-      message: Too Many Requests
-- request:
-    body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 o planejador de um
-      sistema que transforma perguntas em consultas SQL.\n\nSeu papel: analisar a
-      situa\u00e7\u00e3o atual e decidir a pr\u00f3xima a\u00e7\u00e3o.\n\nContexto
-      atual:\n- Pergunta do usu\u00e1rio: \"Qual o valor medio dos pedidos?\"\n\n-
-      conversa_previa: Nenhuma\n\n- Schema: === SCHEMA SQLITE (INTROSPECCAO REAL)
-      ===\n\nTabela: customers\n- customer_id: TEXT (PK)\n- customer_unique_id: TEXT\n-
-      customer_zip_code_prefix: INTEGER\n- customer_city: TEXT\n- customer_state:
-      TEXT\n\nTabela: geolocation\n- geolocation_zip_code_prefix: INTEGER\n- geolocation_lat:
-      REAL\n- geolocation_lng: REAL\n- geolocation_city: TEXT\n- geolocation_state:
-      TEXT\n\nTabela: order_items\n- order_id: TEXT (PK)\n- order_item_id: INTEGER
-      (PK)\n- product_id: TEXT\n- seller_id: TEXT\n- shipping_limit_date: TEXT\n-
-      price: REAL\n- freight_value: REAL\n  Foreign keys:\n  - seller_id -> sellers.seller_id
-      (on_update=NO ACTION, on_delete=NO ACTION)\n  - product_id -> products.product_id
-      (on_update=NO ACTION, on_delete=NO ACTION)\n  - order_id -> orders.order_id
-      (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela: order_payments\n- order_id:
-      TEXT (PK)\n- payment_sequential: INTEGER (PK)\n- payment_type: TEXT\n- payment_installments:
-      INTEGER\n- payment_value: REAL\n  Foreign keys:\n  - order_id -> orders.order_id
-      (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela: order_reviews\n- review_id:
-      TEXT (PK)\n- order_id: TEXT\n- review_score: INTEGER\n- review_comment_title:
-      TEXT\n- review_comment_message: TEXT\n- review_creation_date: TEXT\n- review_answer_timestamp:
-      TEXT\n  Foreign keys:\n  - order_id -> orders.order_id (on_update=NO ACTION,
-      on_delete=NO ACTION)\n\nTabela: orders\n- order_id: TEXT (PK)\n- customer_id:
-      TEXT\n- order_status: TEXT\n- order_purchase_timestamp: TEXT\n- order_approved_at:
-      TEXT\n- order_delivered_carrier_date: TEXT\n- order_delivered_customer_date:
-      TEXT\n- order_estimated_delivery_date: TEXT\n  Foreign keys:\n  - customer_id
-      -> customers.customer_id (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela:
-      products\n- product_id: TEXT (PK)\n- product_category_name: TEXT\n- product_name_length:
-      REAL\n- product_description_length: REAL\n- product_photos_qty: REAL\n- product_weight_g:
-      REAL\n- product_length_cm: REAL\n- product_height_cm: REAL\n- product_width_cm:
-      REAL\n\nTabela: sellers\n- seller_id: TEXT (PK)\n- seller_zip_code_prefix: INTEGER\n-
-      seller_city: TEXT\n- seller_state: TEXT\n\n\n- Feedback do cr\u00edtico: Nenhum\n-
-      Tentativas realizadas: 0\n- Status atual: schema_obtido\n- Erro anterior: Nenhum\n\nAVALIA\u00c7\u00c3O
-      CR\u00cdTICA:\nVerifique se a \"Pergunta do usu\u00e1rio\" pode ser respondida
-      com as tabelas e colunas do Schema.\nSe houver ambiguidade, conceitos n\u00e3o
-      mapeados no banco de dados, ou se a inten\u00e7\u00e3o do usu\u00e1rio n\u00e3o
-      estiver clara, voc\u00ea DEVE pedir mais informa\u00e7\u00f5es.\n\nResponda
-      EXATAMENTE no formato JSON abaixo, sem formata\u00e7\u00e3o markdown (```json):\n{{\n    \"decisao\":
-      \"escolha_uma_opcao\",\n    \"pergunta_ao_usuario\": \"escreva a pergunta aqui
-      se precisar de ajuda, ou deixe vazio se n\u00e3o precisar\"\n}}\n\nOp\u00e7\u00f5es
-      v\u00e1lidas para ''decis\u00e3o'':\n- \"pronto_codificacao\" \u2192 se temos
-      schema, a pergunta faz sentido e devemos gerar/regenerar SQL\n- \"revisando_estrategia\"
-      \u2192 se o cr\u00edtico reprovou e devemos tentar uma abordagem diferente\n-
-      \"necessita_ajuda\" \u2192 a pergunta n\u00e3o \u00e9 clara, n\u00e3o faz sentido,
-      falta contexto ou n\u00e3o h\u00e1 dados no schema para responder.\n"}], "role":
-      "user"}], "safetySettings": [], "generationConfig": {"temperature": 0.7, "candidateCount":
-      1}}'
-    headers:
-      Accept:
-      - '*'
-      Accept-Encoding:
-      - g
-      Connection:
-      - k
-      Content-Length:
-      - '3'
-      Content-Type:
-      - a
-      Host:
-      - g
-      User-Agent:
-      - g
-      x-goog-api-client:
-      - g
-    method: POST
-    uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
-  response:
-    body:
-      string: !!binary |
-        H4sIAAAAAAAC/7VUXW/aMBR951dc8TiFpEKjFTytGtAirRqjdNq0Tsg4l+DVsVN/oKKK/75rJ22h
-        Q5o2bRJSbHN9zj33nOSxBdBGY7RpD+CRNrTlOkfave32k/qgRGtZEc7aX7UHfOCIOeaw1d4A98ag
-        cnDvtWMJVBKZReBr5Hd1QSWZAqZyWAophSogR8eEtCmMtYFSGwShVtqUzAmtgH5uLSzEphJYI8vB
-        6QGsnavsIMuYSAutC4lpjpuswFIo0WGVyHLNbWaYw44UpXCEP9cEr4QjmoNWfVBzHDpgvmCkcKve
-        wKeg7EX1KnSNzgg+gAIVUrnYIIksPME2zVFDNuW6zJoKXHCtHJEvVgZx4QSahcF7j9bZBCLZAHoJ
-        9ZujDLhRVjftdVaS2fWtmtZzNUS8pXlB7zTtn/S7Z/3uyZlN241T1jHnbTBqNrr+eDN7P1qMvlye
-        31zPR8Onmmb8VPQtHkDje/zzndtW0ejw/EVLPXdT8fQSZdUAxntk7N0+5CFsw2u5EVUwORB8QGZU
-        bT9bau/gImqG8+mkzpLdw48A3shw8Y+D0N6D2T2vvzerXfL3U4jJGNM0vcH9aWyEljHNvxlJ1HkV
-        sxTY/kmaXk8tckzygH/R3J41pVM0V0J5h7SYGv0DuQtHIYKdMQHPCfco3FCUqGyj71BTyILm7Mnl
-        Quolk69AwiclkNSaD5PePqjcHWP/zKSP7vT+n7Oz8J5N6LO0b2t8+YZkzjaynz4nq+YOvLvWrvUT
-        4diF7lQFAAA=
-    headers:
-      Alt-Svc:
-      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
-      Content-Encoding:
-      - gzip
-      Content-Type:
-      - application/json; charset=UTF-8
-      Date:
-      - Thu, 21 May 2026 23:50:03 GMT
-      Server:
-      - scaffolding on HTTPServer2
-      Server-Timing:
-      - gfet4t7; dur=315
-      Transfer-Encoding:
-      - chunked
-      Vary:
-      - Origin
-      - X-Origin
-      - Referer
-      X-Content-Type-Options:
-      - nosniff
-      X-Frame-Options:
-      - SAMEORIGIN
-      X-Gemini-Service-Tier:
-      - standard
-      X-XSS-Protection:
-      - '0'
-    status:
-      code: 429
-      message: Too Many Requests
-- request:
-    body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 o planejador de um
-      sistema que transforma perguntas em consultas SQL.\n\nSeu papel: analisar a
-      situa\u00e7\u00e3o atual e decidir a pr\u00f3xima a\u00e7\u00e3o.\n\nContexto
-      atual:\n- Pergunta do usu\u00e1rio: \"Qual o valor medio dos pedidos?\"\n\n-
-      conversa_previa: Nenhuma\n\n- Schema: === SCHEMA SQLITE (INTROSPECCAO REAL)
-      ===\n\nTabela: customers\n- customer_id: TEXT (PK)\n- customer_unique_id: TEXT\n-
-      customer_zip_code_prefix: INTEGER\n- customer_city: TEXT\n- customer_state:
-      TEXT\n\nTabela: geolocation\n- geolocation_zip_code_prefix: INTEGER\n- geolocation_lat:
-      REAL\n- geolocation_lng: REAL\n- geolocation_city: TEXT\n- geolocation_state:
-      TEXT\n\nTabela: order_items\n- order_id: TEXT (PK)\n- order_item_id: INTEGER
-      (PK)\n- product_id: TEXT\n- seller_id: TEXT\n- shipping_limit_date: TEXT\n-
-      price: REAL\n- freight_value: REAL\n  Foreign keys:\n  - seller_id -> sellers.seller_id
-      (on_update=NO ACTION, on_delete=NO ACTION)\n  - product_id -> products.product_id
-      (on_update=NO ACTION, on_delete=NO ACTION)\n  - order_id -> orders.order_id
-      (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela: order_payments\n- order_id:
-      TEXT (PK)\n- payment_sequential: INTEGER (PK)\n- payment_type: TEXT\n- payment_installments:
-      INTEGER\n- payment_value: REAL\n  Foreign keys:\n  - order_id -> orders.order_id
-      (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela: order_reviews\n- review_id:
-      TEXT (PK)\n- order_id: TEXT\n- review_score: INTEGER\n- review_comment_title:
-      TEXT\n- review_comment_message: TEXT\n- review_creation_date: TEXT\n- review_answer_timestamp:
-      TEXT\n  Foreign keys:\n  - order_id -> orders.order_id (on_update=NO ACTION,
-      on_delete=NO ACTION)\n\nTabela: orders\n- order_id: TEXT (PK)\n- customer_id:
-      TEXT\n- order_status: TEXT\n- order_purchase_timestamp: TEXT\n- order_approved_at:
-      TEXT\n- order_delivered_carrier_date: TEXT\n- order_delivered_customer_date:
-      TEXT\n- order_estimated_delivery_date: TEXT\n  Foreign keys:\n  - customer_id
-      -> customers.customer_id (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela:
-      products\n- product_id: TEXT (PK)\n- product_category_name: TEXT\n- product_name_length:
-      REAL\n- product_description_length: REAL\n- product_photos_qty: REAL\n- product_weight_g:
-      REAL\n- product_length_cm: REAL\n- product_height_cm: REAL\n- product_width_cm:
-      REAL\n\nTabela: sellers\n- seller_id: TEXT (PK)\n- seller_zip_code_prefix: INTEGER\n-
-      seller_city: TEXT\n- seller_state: TEXT\n\n\n- Feedback do cr\u00edtico: Nenhum\n-
-      Tentativas realizadas: 0\n- Status atual: schema_obtido\n- Erro anterior: Nenhum\n\nAVALIA\u00c7\u00c3O
-      CR\u00cdTICA:\nVerifique se a \"Pergunta do usu\u00e1rio\" pode ser respondida
-      com as tabelas e colunas do Schema.\nSe houver ambiguidade, conceitos n\u00e3o
-      mapeados no banco de dados, ou se a inten\u00e7\u00e3o do usu\u00e1rio n\u00e3o
-      estiver clara, voc\u00ea DEVE pedir mais informa\u00e7\u00f5es.\n\nResponda
-      EXATAMENTE no formato JSON abaixo, sem formata\u00e7\u00e3o markdown (```json):\n{{\n    \"decisao\":
-      \"escolha_uma_opcao\",\n    \"pergunta_ao_usuario\": \"escreva a pergunta aqui
-      se precisar de ajuda, ou deixe vazio se n\u00e3o precisar\"\n}}\n\nOp\u00e7\u00f5es
-      v\u00e1lidas para ''decis\u00e3o'':\n- \"pronto_codificacao\" \u2192 se temos
-      schema, a pergunta faz sentido e devemos gerar/regenerar SQL\n- \"revisando_estrategia\"
-      \u2192 se o cr\u00edtico reprovou e devemos tentar uma abordagem diferente\n-
-      \"necessita_ajuda\" \u2192 a pergunta n\u00e3o \u00e9 clara, n\u00e3o faz sentido,
-      falta contexto ou n\u00e3o h\u00e1 dados no schema para responder.\n"}], "role":
-      "user"}], "safetySettings": [], "generationConfig": {"temperature": 0.7, "candidateCount":
-      1}}'
-    headers:
-      Accept:
-      - '*'
-      Accept-Encoding:
-      - g
-      Connection:
-      - k
-      Content-Length:
-      - '3'
-      Content-Type:
-      - a
-      Host:
-      - g
-      User-Agent:
-      - g
-      x-goog-api-client:
-      - g
-    method: POST
-    uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
-  response:
-    body:
-      string: !!binary |
-        H4sIAAAAAAAC/7VUXWvbMBR9z6+45HE4dtvNjOZpZUnawMqyNB0b6wiKfONolSVXH6Gh5L/vSnbb
-        pAuMjQ0ClpSrc+6559gPHYAuGqNNtw8PtKEt1wXS7s3JadIcVGgtK8NZ96v2gPccscACNtob4N4Y
-        VA7uvHYsgVoiswh8hfy2KaglU8BUAQshpVAlFOiYkDaFkTZQaYMg1FKbijmhFdDPrYSF2FQCK2QF
-        ON2HlXO17WcZE2mpdSkxLXCdlVgJJXqsFlmhuc0Mc9iTohKO8Gea4JVwRLPXqg9qDkMHzGeMFG7U
-        K/gUlD2rXoau0RnB+1CiQioXaySRpSfYtjlqyKZcV1lbgXOulSPy+dIgzp1AMzd459E6m0Ak60Oe
-        UL8FyoAbZZ2keW8pmV3dqEkzV0PEG5oX5Mdp/jo/zY/eHuU27bZOWcect8Go6fDq4/X0/XA+/HJx
-        dn01Gw4ea9rxU9G3eACt7/HPd25TR6PD8xctzdxNzdMLlHULGO+Rsbe7kPuwLa/lRtTB5EDwAZlR
-        jf1sob2D86gZzibjJkt2Bz8CeCPDxT8OQncHZvu0/t6utsnfTyEmY0TT9AZ3p7EWWsY0/2YkUedl
-        zFJg+ydpejm1yDEuAv55e3valk7QXArlHdJiYvQP5C4chQj2RgQ8I9yDcANRobKtvn1N4XMRABo9
-        +yl+gRViozl7DEQp9YLJ7l7J9hD7ZyZ9dCf/f85Ow3s2ps/Srq3x5RuQOZvIfvyUrIY78G47285P
-        y2LTAFQFAAA=
-    headers:
-      Alt-Svc:
-      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
-      Content-Encoding:
-      - gzip
-      Content-Type:
-      - application/json; charset=UTF-8
-      Date:
-      - Thu, 21 May 2026 23:50:08 GMT
-      Server:
-      - scaffolding on HTTPServer2
-      Server-Timing:
-      - gfet4t7; dur=271
-      Transfer-Encoding:
-      - chunked
-      Vary:
-      - Origin
-      - X-Origin
-      - Referer
-      X-Content-Type-Options:
-      - nosniff
-      X-Frame-Options:
-      - SAMEORIGIN
-      X-Gemini-Service-Tier:
-      - standard
-      X-XSS-Protection:
-      - '0'
-    status:
-      code: 429
-      message: Too Many Requests
-- request:
-    body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 o planejador de um
-      sistema que transforma perguntas em consultas SQL.\n\nSeu papel: analisar a
-      situa\u00e7\u00e3o atual e decidir a pr\u00f3xima a\u00e7\u00e3o.\n\nContexto
-      atual:\n- Pergunta do usu\u00e1rio: \"Qual o valor medio dos pedidos?\"\n\n-
-      conversa_previa: Nenhuma\n\n- Schema: === SCHEMA SQLITE (INTROSPECCAO REAL)
-      ===\n\nTabela: customers\n- customer_id: TEXT (PK)\n- customer_unique_id: TEXT\n-
-      customer_zip_code_prefix: INTEGER\n- customer_city: TEXT\n- customer_state:
-      TEXT\n\nTabela: geolocation\n- geolocation_zip_code_prefix: INTEGER\n- geolocation_lat:
-      REAL\n- geolocation_lng: REAL\n- geolocation_city: TEXT\n- geolocation_state:
-      TEXT\n\nTabela: order_items\n- order_id: TEXT (PK)\n- order_item_id: INTEGER
-      (PK)\n- product_id: TEXT\n- seller_id: TEXT\n- shipping_limit_date: TEXT\n-
-      price: REAL\n- freight_value: REAL\n  Foreign keys:\n  - seller_id -> sellers.seller_id
-      (on_update=NO ACTION, on_delete=NO ACTION)\n  - product_id -> products.product_id
-      (on_update=NO ACTION, on_delete=NO ACTION)\n  - order_id -> orders.order_id
-      (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela: order_payments\n- order_id:
-      TEXT (PK)\n- payment_sequential: INTEGER (PK)\n- payment_type: TEXT\n- payment_installments:
-      INTEGER\n- payment_value: REAL\n  Foreign keys:\n  - order_id -> orders.order_id
-      (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela: order_reviews\n- review_id:
-      TEXT (PK)\n- order_id: TEXT\n- review_score: INTEGER\n- review_comment_title:
-      TEXT\n- review_comment_message: TEXT\n- review_creation_date: TEXT\n- review_answer_timestamp:
-      TEXT\n  Foreign keys:\n  - order_id -> orders.order_id (on_update=NO ACTION,
-      on_delete=NO ACTION)\n\nTabela: orders\n- order_id: TEXT (PK)\n- customer_id:
-      TEXT\n- order_status: TEXT\n- order_purchase_timestamp: TEXT\n- order_approved_at:
-      TEXT\n- order_delivered_carrier_date: TEXT\n- order_delivered_customer_date:
-      TEXT\n- order_estimated_delivery_date: TEXT\n  Foreign keys:\n  - customer_id
-      -> customers.customer_id (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela:
-      products\n- product_id: TEXT (PK)\n- product_category_name: TEXT\n- product_name_length:
-      REAL\n- product_description_length: REAL\n- product_photos_qty: REAL\n- product_weight_g:
-      REAL\n- product_length_cm: REAL\n- product_height_cm: REAL\n- product_width_cm:
-      REAL\n\nTabela: sellers\n- seller_id: TEXT (PK)\n- seller_zip_code_prefix: INTEGER\n-
-      seller_city: TEXT\n- seller_state: TEXT\n\n\n- Feedback do cr\u00edtico: Nenhum\n-
-      Tentativas realizadas: 0\n- Status atual: schema_obtido\n- Erro anterior: Nenhum\n\nAVALIA\u00c7\u00c3O
-      CR\u00cdTICA:\nVerifique se a \"Pergunta do usu\u00e1rio\" pode ser respondida
-      com as tabelas e colunas do Schema.\nSe houver ambiguidade, conceitos n\u00e3o
-      mapeados no banco de dados, ou se a inten\u00e7\u00e3o do usu\u00e1rio n\u00e3o
-      estiver clara, voc\u00ea DEVE pedir mais informa\u00e7\u00f5es.\n\nResponda
-      EXATAMENTE no formato JSON abaixo, sem formata\u00e7\u00e3o markdown (```json):\n{{\n    \"decisao\":
-      \"escolha_uma_opcao\",\n    \"pergunta_ao_usuario\": \"escreva a pergunta aqui
-      se precisar de ajuda, ou deixe vazio se n\u00e3o precisar\"\n}}\n\nOp\u00e7\u00f5es
-      v\u00e1lidas para ''decis\u00e3o'':\n- \"pronto_codificacao\" \u2192 se temos
-      schema, a pergunta faz sentido e devemos gerar/regenerar SQL\n- \"revisando_estrategia\"
-      \u2192 se o cr\u00edtico reprovou e devemos tentar uma abordagem diferente\n-
-      \"necessita_ajuda\" \u2192 a pergunta n\u00e3o \u00e9 clara, n\u00e3o faz sentido,
-      falta contexto ou n\u00e3o h\u00e1 dados no schema para responder.\n"}], "role":
-      "user"}], "safetySettings": [], "generationConfig": {"temperature": 0.7, "candidateCount":
-      1}}'
-    headers:
-      Accept:
-      - '*'
-      Accept-Encoding:
-      - g
-      Connection:
-      - k
-      Content-Length:
-      - '3'
-      Content-Type:
-      - a
-      Host:
-      - g
-      User-Agent:
-      - g
-      x-goog-api-client:
-      - g
-    method: POST
-    uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
-  response:
-    body:
-      string: !!binary |
-        H4sIAAAAAAAC/2WRXW+CMBSG7/kVpNe6qJlx7nJfiReLbpJl2VjMGT1CM2yxpxg3wn9fC6J1g4TA
-        +749Hw9VEIYsAckFB4PErsN3q4Rh1Tydp6RBaazRSVYsQJtTtr0q791GDO7dIVbF0n3HjGMiCFRs
-        xZgV2pZVq0RxsRYJJE7vdckCdVpKAytQq5JK0OJwyt6yZl6f+vj+0TtNp1WOrvVGccy7eN0F2FpI
-        QdkzAinpYstovmBHV0iOeysPgq5BU5qVBCk+ogHLCY403CKbwkTqC+WtKhtO0+mkreZxPQuMpgff
-        KAP5mTUcD4a9f5XpzvYVuU/c+xl2TciF+Xa7RPevEfNQmD+DdTACjxkzmSrTzJwPeTkZH2xCvRMJ
-        RgK1a0HGbgWaO7AN1JbzC2oSLdAUNxZxf3Qx7q9zoKwZiGmkQknCGXeZ+ZtaAC0/b7b48DOZLXY0
-        v9o+EQvq4BdB7uIkkwIAAA==
-    headers:
-      Alt-Svc:
-      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
-      Content-Encoding:
-      - gzip
-      Content-Type:
-      - application/json; charset=UTF-8
-      Date:
-      - Thu, 21 May 2026 23:50:19 GMT
-      Server:
-      - scaffolding on HTTPServer2
-      Server-Timing:
-      - gfet4t7; dur=2862
+      - gfet4t7; dur=5080
       Transfer-Encoding:
       - chunked
       Vary:
@@ -554,11 +110,12 @@ interactions:
       comando de escrita.\n- N\u00c3O inclua explica\u00e7\u00f5es, apenas a SQL pura.\n-
       Use nomes de tabelas e colunas EXATAMENTE como aparecem no schema.\n- Se a pergunta
       for amb\u00edgua, fa\u00e7a a interpreta\u00e7\u00e3o mais razo\u00e1vel.\n\n===
-      SCHEMA DO BANCO ===\n=== SCHEMA SQLITE (INTROSPECCAO REAL) ===\n\nTabela: customers\n-
-      customer_id: TEXT (PK)\n- customer_unique_id: TEXT\n- customer_zip_code_prefix:
-      INTEGER\n- customer_city: TEXT\n- customer_state: TEXT\n\nTabela: geolocation\n-
-      geolocation_zip_code_prefix: INTEGER\n- geolocation_lat: REAL\n- geolocation_lng:
-      REAL\n- geolocation_city: TEXT\n- geolocation_state: TEXT\n\nTabela: order_items\n-
+      SCHEMA DO BANCO ===\n=== SCHEMA RELEVANTE (via RAG) ===\n\nTabela: order_reviews\n-
+      review_id: TEXT (PK)\n- order_id: TEXT\n- review_score: INTEGER\n- review_comment_title:
+      TEXT\n- review_comment_message: TEXT\n- review_creation_date: TEXT\n- review_answer_timestamp:
+      TEXT\n  Foreign keys:\n  - order_id -> orders.order_id (on_update=NO ACTION,
+      on_delete=NO ACTION)\n\nTabela: sellers\n- seller_id: TEXT (PK)\n- seller_zip_code_prefix:
+      INTEGER\n- seller_city: TEXT\n- seller_state: TEXT\n\nTabela: order_items\n-
       order_id: TEXT (PK)\n- order_item_id: INTEGER (PK)\n- product_id: TEXT\n- seller_id:
       TEXT\n- shipping_limit_date: TEXT\n- price: REAL\n- freight_value: REAL\n  Foreign
       keys:\n  - seller_id -> sellers.seller_id (on_update=NO ACTION, on_delete=NO
@@ -567,25 +124,20 @@ interactions:
       ACTION)\n\nTabela: order_payments\n- order_id: TEXT (PK)\n- payment_sequential:
       INTEGER (PK)\n- payment_type: TEXT\n- payment_installments: INTEGER\n- payment_value:
       REAL\n  Foreign keys:\n  - order_id -> orders.order_id (on_update=NO ACTION,
-      on_delete=NO ACTION)\n\nTabela: order_reviews\n- review_id: TEXT (PK)\n- order_id:
-      TEXT\n- review_score: INTEGER\n- review_comment_title: TEXT\n- review_comment_message:
-      TEXT\n- review_creation_date: TEXT\n- review_answer_timestamp: TEXT\n  Foreign
-      keys:\n  - order_id -> orders.order_id (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela:
-      orders\n- order_id: TEXT (PK)\n- customer_id: TEXT\n- order_status: TEXT\n-
-      order_purchase_timestamp: TEXT\n- order_approved_at: TEXT\n- order_delivered_carrier_date:
-      TEXT\n- order_delivered_customer_date: TEXT\n- order_estimated_delivery_date:
-      TEXT\n  Foreign keys:\n  - customer_id -> customers.customer_id (on_update=NO
-      ACTION, on_delete=NO ACTION)\n\nTabela: products\n- product_id: TEXT (PK)\n-
-      product_category_name: TEXT\n- product_name_length: REAL\n- product_description_length:
-      REAL\n- product_photos_qty: REAL\n- product_weight_g: REAL\n- product_length_cm:
-      REAL\n- product_height_cm: REAL\n- product_width_cm: REAL\n\nTabela: sellers\n-
-      seller_id: TEXT (PK)\n- seller_zip_code_prefix: INTEGER\n- seller_city: TEXT\n-
-      seller_state: TEXT\n\n\n=== PERGUNTA DO USU\u00c1RIO ===\nQual o valor medio
-      dos pedidos?\n\n=== CONVERSA PR\u00c9VIA (CONTEXTO ADICIONAL) ===\nNenhuma\n\n===
-      HIST\u00d3RICO DE TENTATIVAS ANTERIORES ===\nNenhuma tentativa anterior.\n\nResponda
-      APENAS com a consulta SQL, sem markdown, sem explica\u00e7\u00e3o."}], "role":
-      "user"}], "safetySettings": [], "generationConfig": {"temperature": 0.7, "candidateCount":
-      1}}'
+      on_delete=NO ACTION)\n\nTabela: orders\n- order_id: TEXT (PK)\n- customer_id:
+      TEXT\n- order_status: TEXT\n- order_purchase_timestamp: TEXT\n- order_approved_at:
+      TEXT\n- order_delivered_carrier_date: TEXT\n- order_delivered_customer_date:
+      TEXT\n- order_estimated_delivery_date: TEXT\n  Foreign keys:\n  - customer_id
+      -> customers.customer_id (on_update=NO ACTION, on_delete=NO ACTION)\n\n=== RELA\u00c7\u00d5ES
+      NECESS\u00c1RIAS (caminhos de JOIN) ===\norder_items JOIN orders ON order_items.order_id
+      = orders.order_id\norder_payments JOIN orders ON order_payments.order_id = orders.order_id\norder_reviews
+      JOIN orders ON order_reviews.order_id = orders.order_id\norder_items JOIN sellers
+      ON order_items.seller_id = sellers.seller_id\n\n\n=== PERGUNTA DO USU\u00c1RIO
+      ===\nQual o valor medio dos pedidos?\n\n=== CONVERSA PR\u00c9VIA (CONTEXTO ADICIONAL)
+      ===\nNenhuma\n\n=== HIST\u00d3RICO DE TENTATIVAS ANTERIORES ===\nNenhuma tentativa
+      anterior.\n\nResponda APENAS com a consulta SQL, sem markdown, sem explica\u00e7\u00e3o."}],
+      "role": "user"}], "safetySettings": [], "generationConfig": {"temperature":
+      0.7, "candidateCount": 1}}'
     headers:
       Accept:
       - '*'
@@ -594,7 +146,7 @@ interactions:
       Connection:
       - k
       Content-Length:
-      - '3'
+      - '2'
       Content-Type:
       - a
       Host:
@@ -608,13 +160,13 @@ interactions:
   response:
     body:
       string: !!binary |
-        H4sIAAAAAAAC/2WRX0/CMBTF3/cpmj5BIgYURH1DnIARmTCIxhjS0MvWuLVL2xGQ8N3t/kHRPSzN
-        Oef23vvr3kEIrwinjBINCt+jT6MgtM//mSe4Bq6NUUlGTIjUp2zx7a2ziWjYZkV45r64fR/1FoOa
-        FppESyEpyOWGRCnU0dN0Mka1MjObj2sJ2cWmXeX3ZuhfVVFUCGVcocF0MvfQw0epM1rH1jyH4/nr
-        4rSFFBFkI8aCQlTFD1UArxlnKpwCUYLnm/gTDx9dxilsjdx0qgb51ThVJIAxaGJ4kiM1nEgRJ9oX
-        38D7Is153t51itss/meB63bp5wjOrFazWxVbN6tH05dF9stYj2bWJBHTu2wX3333sYVC/xmsguFY
-        zLAORRqE+nzIVvumtBXIDVuBz0BmLZQ2WxFJM7A51ILzAqRiBdAAYoO4cXXZaawjosJ8ICxBJYIr
-        GNEs4z0Lj6ihdNdD8dMdeZ3XTRy8jbFzcH4BOzSJsrsCAAA=
+        H4sIAAAAAAAC/2WRW2vCMBiG7/srQq4UdHgabLtz6mQwUbTKDgwJzafN1iY1+SqK+N9NT1q1FyW8
+        75vv8OTgEEI9JrngDMHQF/JjFUIO6T/xlESQaI1CsmLENF6y2XconW0EYZdcorPBx6Dnku5iWEGF
+        LFgqzUEvtyyIoUrepuMRqeSZ2XxUidg+tO0Kvzsjd7eyS5mQxw0ZTsfzCXn9ynXBq7Q0z/F8/q1d
+        ttAqgGTEUHEIivixCNCVkML4U2BGyXQTdzyhZ1dIDjsrN5yiQVqaxoatYQTILE92pkYjrcIIXfUP
+        sqfilOdTs51VK/G/CrQ7uZ8iuLKeO83aXWHTt21FUH6Y0pvZLVkgcJ+s4g4+XVoigTdzFSycEjKK
+        vorXPpqbQXLXgN4KD1wBOulg0O7ENE+wpkgzygvQRmQ41xBawPXWw2N9FTDjp/NQDSZS0sA7TzJe
+        q/HHdH/R38R6g2ay1Po77nrUOTon4Y2fNbkCAAA=
     headers:
       Alt-Svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
@@ -623,11 +175,11 @@ interactions:
       Content-Type:
       - application/json; charset=UTF-8
       Date:
-      - Thu, 21 May 2026 23:50:21 GMT
+      - Sat, 06 Jun 2026 00:44:36 GMT
       Server:
       - scaffolding on HTTPServer2
       Server-Timing:
-      - gfet4t7; dur=1766
+      - gfet4t7; dur=1064
       Transfer-Encoding:
       - chunked
       Vary:
@@ -761,15 +313,15 @@ interactions:
   response:
     body:
       string: !!binary |
-        H4sIAAAAAAAC/11S0W7aUAx95yus+7RJFHVdt9K+sUIntFUwGqFJ21QM18DVkji9vqnaIv5lr/uO
-        /tichEBYFCVX9rk+x8fetADMAlPrLAYScwU/NAKwKb9FjtNAadBEHdJghj4csNWzaZwVEuipuGSm
-        g8mgP4xGV9AbT0bTXn/0M70ZDPqfetdfNAZaX/I4INx9+woLjBd5jBr0ngImSkzA8IgxewgcMAZL
-        irIIGalkhjfCiapnmGX4XODvFZzTDDK9MWNvyd87O3sL1AZKQGiVa6ftPRNC8vrXOtS6IiQVlf4L
-        MicdGIowaCDjVJn1XbJPlN3TwgnC6x8V4ld5qg0Iz/1BbVmWwbLspErHNBza7s+/2gdfPcdUmJaw
-        pbiGb2uAWbrUyXpCKJwWsLtoNDb7rFOFTxo+bdUEZWmTC67oVu3UCeN+jibznGQh4t+UXnNeTvjd
-        5eVFVa6xEkeIj+e7fDmMo9TZ5XmdbJSWvhK7uLksjT3SPjF24bloJhp8j0zDi/C/stqOVsM1E9ac
-        r9bhWGW3+36XFvKPbkGRI19wSNC20NvC2tLWyukpeXGVpStK1OSTs86Hk2WMsi4VmWoBhIa2wIwz
-        HmM2Dze3n+nlYjg+nT+kD72uaW1b/wDfu+eoTwMAAA==
+        H4sIAAAAAAAC/2VSwW7aQBC98xWjPRPkpmoiciOBViipIMRCldoqTNgJbGt7nJ01Sor4l177Hfmx
+        ju0YTOuDbb15O+/Nm912AMwSM+ssBhJzAV8VAdhW77LGWaAsaKGBFMzRhwO3fratf6UEei4Pmflo
+        NhqO48kFDKazyXwwnHzLPo5Gw8vB1bVioP2lSALC3e0NLDFZFgkq6D0FTFWYgGGDCXsIHDABS8qy
+        CDmpZQbhVM0zsMAix5fyxL3SC1qAkgI+kLZbsLfk79/qsugCAaUgtCp07O5eFiF9/WMdqogISa2r
+        31LZSQ/GIgwK5JypDbT0VKiV2uXrb7XkV0Wmowg/+IPvqieDVYu1aemZVla7/f/37iFhzwmV8aVs
+        KWnou4ZgHl3mZD0jFM5K2l08mZp91am9Z4WjTiNQtTaF4Io+a7C6a9xv1OSe0zzE/JOyKy6qXb/r
+        98/rdq3LccQ4e/9Wr9ZyVDrtn0Xd/1rLUIVd0r42rRulc2Liwks5TDz6EptWFuFfZ00cnVZqJqy5
+        WK3Dsct+1DgR8hu3pNiRLzUk6FjobRltFWud9Jy8uDrSFaUa8slp78PJY4KyrhyZevtCY1ty7Kfo
+        B/LN5XX/SX6dj6fRZhKKwa3p7Dp/AXwV3txZAwAA
     headers:
       Alt-Svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
@@ -778,11 +330,11 @@ interactions:
       Content-Type:
       - application/json; charset=UTF-8
       Date:
-      - Thu, 21 May 2026 23:50:27 GMT
+      - Sat, 06 Jun 2026 00:44:41 GMT
       Server:
       - scaffolding on HTTPServer2
       Server-Timing:
-      - gfet4t7; dur=4936
+      - gfet4t7; dur=5395
       Transfer-Encoding:
       - chunked
       Vary:

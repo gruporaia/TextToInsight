@@ -144,7 +144,8 @@ def nos_nodo_critico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -
         or estado.get("pergunta_usuario", "")
     )
     sql = estado.get("sql_gerada", "")
-    schema = estado.get("contexto_schema", "")
+    schema = estado.get("contexto_rag_schema", "")
+    schema_rag = estado.get("contexto_schema", "")
     preview = estado.get("linhas_resultado_preview", [])
     total = estado.get("total_linhas_resultado", 0)
     saida = estado.get("saida_terminal", "")
@@ -172,7 +173,7 @@ def nos_nodo_critico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -
 
     prompt = PROMPT_CRITIC.format(
         pergunta=pergunta,
-        schema=schema,
+        schema=schema_rag if schema_rag else schema,
         sql=sql,
         status_exec=status_exec,
         conversa_previa=conversa_previa if conversa_previa else "Nenhuma",

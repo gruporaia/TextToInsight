@@ -29,8 +29,9 @@ from .nodes import (
     nos_nodo_resposta,
     nos_nodo_salvar_csv,
     nos_nodo_gerador_grafico,
+    nos_nodo_enrich,
 )
-from .routers import roteador_sandbox, roteador_planejador, roteador_grafico
+from .routers import roteador_sandbox, roteador_planejador, roteador_grafico, roteador_schema
 from .model_selection import get_model
 
 def nos_nodo_espera_humana(estado: EstadoTextToInsight):
@@ -38,13 +39,13 @@ def nos_nodo_espera_humana(estado: EstadoTextToInsight):
     return estado
 
 class Graph:
-    def __init__(self, api_key: str, model: str, hitl: bool = True, enable_graphs: bool = True):
+    def __init__(self, api_key: str, model: str, hitl: bool = True, enable_graphs: bool = True, enrich_rag: bool = False):
         self.llm = get_model(model, api_key)
         self.memory = MemorySaver()
         self.enable_graphs = enable_graphs
-        self.grafo_text_to_insight = self._compilar_grafo(hitl)
+        self.grafo_text_to_insight = self._compilar_grafo(hitl, enrich_rag)
 
-    def _construir_grafo_text_to_insight(self, hitl: bool) -> StateGraph:
+    def _construir_grafo_text_to_insight(self, hitl: bool, enrich_rag: bool) -> StateGraph:
         """
         Constrói e compila o grafo de agentes Text-to-Insight.
         """
@@ -65,7 +66,12 @@ class Graph:
         # 2. ARESTAS FIXAS
         construtor_grafo.add_edge(START, "planejador")
         construtor_grafo.add_edge("espera_humana", "planejador")
-        construtor_grafo.add_edge("esquema", "retriever")
+        path = 'retriever'
+        if enrich_rag:
+            construtor_grafo.add_node("enriquecimento_rag", partial(nos_nodo_enrich, llm=self.llm))
+            construtor_grafo.add_edge("enriquecimento_rag", "retriever")
+            path = 'enriquecimento_rag'
+
         construtor_grafo.add_edge("retriever", "planejador")
         construtor_grafo.add_edge("agente_codigo", "sandbox")
 
@@ -90,10 +96,20 @@ class Graph:
                 "esquema": "esquema",
                 "agente_codigo": "agente_codigo",
                 "critico": "critico",
-                "planejador": "planejador",
+                "retriever": path,
                 "fim": END,
             }
         )
+
+        construtor_grafo.add_conditional_edges(
+            "esquema",
+            roteador_schema,
+            {
+                "retriever": "retriever",
+                "enriquecimento_rag": path,
+            }
+        )
+
 
         MAX_TENTATIVAS_CRITICO = 3
 
@@ -137,8 +153,8 @@ class Graph:
 
         return construtor_grafo
 
-    def _compilar_grafo(self, hitl: bool) -> "CompiledStateGraph":
-        construtor = self._construir_grafo_text_to_insight(hitl)
+    def _compilar_grafo(self, hitl: bool, enrich_rag: bool) -> "CompiledStateGraph":
+        construtor = self._construir_grafo_text_to_insight(hitl, enrich_rag)
         grafo_compilado = construtor.compile(checkpointer=self.memory,
                                              interrupt_before=["espera_humana"])
         grafo_compilado.hitl_classifier_llm = self.llm

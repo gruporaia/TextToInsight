@@ -385,6 +385,8 @@ def main():
     parser.add_argument("--model", type=str, default="gpt-5-mini", help="Modelo LLM a utilizar")
     parser.add_argument("--with-graphs", action="store_true", help="Ativar a geração de gráficos e salvamento de CSV")
     parser.add_argument("--report-dir", type=str, default="", help="Pasta dentro de 'reports' para salvar os relatórios .md")
+    parser.add_argument("--infer-fks", action="store_true", help="Ativar inferência de FKs virtuais (Spider 2 Lite local)")
+    parser.add_argument("--no-schemacrawler", action="store_true", help="Desativar o uso do SchemaCrawler")
     # TODO: Reativar quando feature/data_exploration for mergeada em dev
     # parser.add_argument(
     #     "--cot",
@@ -467,6 +469,7 @@ def main():
         instance_id = ex.get("instance_id")
         db_id = ex.get("db", "")
         pergunta = ex.get("question", "")
+        
 
         # Carregar contexto externo (external_knowledge) se disponível
         external_knowledge_file = ex.get("external_knowledge")
@@ -522,6 +525,8 @@ def main():
                     hitl=False,
                     show_output=False,
                     enable_graphs=args.with_graphs,
+                    inferir_fks_virtuais=args.infer_fks,
+                    usar_schemacrawler=not args.no_schemacrawler,
                     # TODO: Reativar quando feature/data_exploration for mergeada em dev
                     # use_cot=(args.cot == "on"),
                     # use_data_exploration=(args.data_exploration == "on"),

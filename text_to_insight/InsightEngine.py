@@ -16,20 +16,26 @@ class InsightEngine:
     - `resume(...)` continua uma consulta que ficou pausada em HITL.
     """
 
-    def __init__(self, api_key: str, model: str, db_path: str, hitl: bool = False, show_output: bool = False, enable_graphs: bool = True):
+    def __init__(self, api_key: str, model: str, db_path: str, hitl: bool = False, show_output: bool = False, enable_graphs: bool = True, enrich_rag: bool = False, inferir_fks_virtuais: bool = False, usar_schemacrawler: bool = True):
         self._hitl_ativado = hitl
         # `show_output` controla se a engine imprime o resultado final no terminal.
         # Em cenários com CLI, normalmente deixamos False para evitar saída duplicada.
         self._show_output = show_output
         self._enable_graphs = enable_graphs
+        self._enrich_rag = enrich_rag
+        self._inferir_fks_virtuais = inferir_fks_virtuais
+        self._usar_schemacrawler = usar_schemacrawler
         self._model = model
         self._db_path = db_path
         # O grafo compila os nós/roteadores e guarda memória por thread_id.
-        self._grafo = Graph(api_key=api_key, model=self._model, hitl=self._hitl_ativado, enable_graphs=self._enable_graphs)
+        self._grafo = Graph(api_key=api_key, model=self._model, hitl=self._hitl_ativado, enable_graphs=self._enable_graphs, enrich_rag=self._enrich_rag)
 
         print(f"[CONFIG] HITL: {'ATIVADO' if self._hitl_ativado else 'DESATIVADO'}")
         print(f"[CONFIG] SHOW_OUTPUT: {'ATIVADO' if self._show_output else 'DESATIVADO'}")
         print(f"[CONFIG] GRÁFICOS: {'ATIVADO' if self._enable_graphs else 'DESATIVADO'}")
+        print(f"[CONFIG] ENRICH-RAG: {'ATIVADO' if self._enrich_rag else 'DESATIVADO'}")
+        print(f"[CONFIG] INFERIR-FKS-VIRTUAIS: {'ATIVADO' if self._inferir_fks_virtuais else 'DESATIVADO'}")
+        print(f"[CONFIG] USAR-SCHEMACRAWLER: {'ATIVADO' if self._usar_schemacrawler else 'DESATIVADO'}")
 
     def _config(self, thread_id: str) -> dict[str, Any]:
         # O LangGraph usa esse bloco "configurable" para identificar a conversa.
@@ -106,7 +112,7 @@ class InsightEngine:
             )
         # Caso 2: chamada nova (primeira execução para essa pergunta).
         elif query:
-            estado_execucao = construir_estado_inicial(query, self._db_path)
+            estado_execucao = construir_estado_inicial(query, self._db_path, self._inferir_fks_virtuais, self._usar_schemacrawler)
             pergunta_exibicao = query
         # Caso 3: a thread já está pausada, mas ainda sem resposta do usuário.
         elif snapshot.next:
