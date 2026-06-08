@@ -155,7 +155,7 @@ def _montar_grafo_fake(monkeypatch, tmp_path, enable_graphs: bool):
     def _fake_planejador(estado, llm=None, hitl=True):
         return {"status": "pronto_codificacao"}
 
-    def _fake_agente_codigo(estado, llm=None):
+    def _fake_agente_codigo(estado, llm=None, use_cot=True):
         return {"sql_gerada": "SELECT 1", "status": "sql_gerada", "tentativas_loop": 1}
 
     def _fake_sandbox(estado):
@@ -166,9 +166,6 @@ def _montar_grafo_fake(monkeypatch, tmp_path, enable_graphs: bool):
             "total_linhas_resultado": 2,
             "saida_terminal": "ok",
         }
-
-    def _fake_critico(estado, llm=None):
-        return {"status": "aprovado", "feedback_critico": "Aprovado"}
 
     def _fake_resposta(estado, llm=None):
         return {"resposta_natural": "ok"}
@@ -183,8 +180,8 @@ def _montar_grafo_fake(monkeypatch, tmp_path, enable_graphs: bool):
     def _fake_roteador_planejador(estado):
         return "agente_codigo"
 
-    def _fake_roteador_sandbox(estado):
-        return "critico"
+    def _fake_roteador_sandbox(estado, enable_graphs=True):
+        return "salvar_csv" if enable_graphs else "resposta"
 
     def _fake_roteador_grafico(estado, llm=None):
         return "gerador_grafico"
@@ -192,7 +189,6 @@ def _montar_grafo_fake(monkeypatch, tmp_path, enable_graphs: bool):
     monkeypatch.setattr(graph_module, "nos_nodo_planejador", _fake_planejador)
     monkeypatch.setattr(graph_module, "nos_nodo_agente_codigo", _fake_agente_codigo)
     monkeypatch.setattr(graph_module, "nos_nodo_sandbox", _fake_sandbox)
-    monkeypatch.setattr(graph_module, "nos_nodo_critico", _fake_critico)
     monkeypatch.setattr(graph_module, "nos_nodo_resposta", _fake_resposta)
     monkeypatch.setattr(graph_module, "nos_nodo_gerador_grafico", _fake_gerador_grafico)
     monkeypatch.setattr(graph_module, "nos_nodo_salvar_csv", csv_module.nos_nodo_salvar_csv)

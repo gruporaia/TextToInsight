@@ -196,52 +196,6 @@ def test_executor_com_sql_real():
     print(f"  → Resultado: {resultado['linhas_resultado_preview']}")
 
 
-# ============================================================
-# CRITIC — com API
-# ============================================================
-
-@pytest.mark.vcr
-@pytest.mark.timeout(60)
-def test_critic_avalia_resultado_correto(llm):
-    """Critic recebe pergunta + SQL + resultado OK → avalia com LLM."""
-    from text_to_insight.nodes.critic import nos_nodo_critico
-
-    time.sleep(5)  # rate limit
-    estado = {
-        "pergunta_atual": "Quantos pedidos existem no banco?",
-        "sql_gerada": "SELECT COUNT(*) as total_pedidos FROM orders",
-        "linhas_resultado_preview": [{"total_pedidos": 99441}],
-        "total_linhas_resultado": 1,
-        "saida_terminal": "[EXECUTOR] Execucao OK | linhas_total=1 | preview=1",
-        "erro_execucao": "",
-        "status": "exec_ok",
-    }
-    resultado = nos_nodo_critico(estado, llm)
-
-    assert resultado["status"] in ("aprovado", "reprovado")
-    assert resultado["feedback_critico"] != ""
-    print(f"  → Veredito: {resultado['status']}")
-    print(f"  → Feedback: {resultado['feedback_critico'][:100]}")
-
-
-def test_critic_reprova_erro_execucao(llm):
-    """Critic com erro de execução → reprova sem chamar API (determinístico)."""
-    from text_to_insight.nodes.critic import nos_nodo_critico
-
-    estado = {
-        "pergunta_atual": "Quantos pedidos existem?",
-        "sql_gerada": "SELECT * FROM tabela_inexistente",
-        "linhas_resultado_preview": [],
-        "total_linhas_resultado": 0,
-        "saida_terminal": "[EXECUTOR] Erro",
-        "erro_execucao": "no such table: tabela_inexistente",
-        "status": "exec_erro",
-    }
-    resultado = nos_nodo_critico(estado, llm)
-
-    assert resultado["status"] == "reprovado"
-    assert "tabela_inexistente" in resultado["feedback_critico"]
-    print(f"  → Reprovado corretamente: {resultado['feedback_critico'][:80]}")
 
 
 # ============================================================

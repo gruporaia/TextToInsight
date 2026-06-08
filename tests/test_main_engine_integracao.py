@@ -87,6 +87,7 @@ def _patch_integracao(monkeypatch):
     monkeypatch.setattr(insight_engine_module, "Graph", _FakeGraph)
     monkeypatch.setattr("text_to_insight.runtime.salvar_metricas_csv", lambda *args, **kwargs: None)
     monkeypatch.setenv("GOOGLE_API_KEY", "fake-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "fake-key")
 
 
 def test_integracao_main_engine_sucesso(monkeypatch):
