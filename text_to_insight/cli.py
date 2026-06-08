@@ -81,9 +81,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--exploration-selector",
-        choices=["on", "off"],
+        choices=["off", "llm", "rag"],
         default="off",
-        help="Ativa/desativa a seleção de colunas por LLM para exploração. Padrão: off.",
+        help="Modo de seleção de colunas para exploração. Padrão: off.",
     )
     parser.add_argument(
         "pergunta",
@@ -110,7 +110,7 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
     hitl_ativado = args.hitl == "on"
     cot_ativado = args.cot == "on"
     data_exploration_ativado = args.data_exploration == "on"
-    exploration_selector_ativado = args.exploration_selector == "on"
+    exploration_selector_mode = args.exploration_selector
     print(f"[CONFIG] HITL: {'ATIVADO' if hitl_ativado else 'DESATIVADO'}")
     enrich_rag_ativado = args.enrich_rag == "on"
     inferir_fks_ativado = args.infer_fks == "on"
@@ -134,7 +134,7 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         show_output=False,
         use_cot=cot_ativado,
         use_data_exploration=data_exploration_ativado,
-        use_exploration_selector=exploration_selector_ativado,
+        use_exploration_selector=exploration_selector_mode,
     )
 
     # show_output=False para evitar prints duplicados no console, já que exibir_resultado_console é chamado manualmente.

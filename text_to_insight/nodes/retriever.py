@@ -51,7 +51,7 @@ def nos_nodo_retriever(estado: EstadoTextToInsight, use_rag: bool = True) -> dic
     print(f"[RETRIEVER] schema completo: {len(schema_full)} chars (~{len(schema_full)//4} tokens)")
     
     tentativas = estado.get("tentativas_loop", 0)
-    top_k_dinamico = 5 + (tentativas * 4)
+    top_k_dinamico = 5  # Fixo em 5, sem expansão automática
     
     rag = SchemaGraphRAG(schema={"contexto_schema": schema_full})
     print(f"[RETRIEVER] Recuperando top_k={top_k_dinamico} tabelas (loop atual: {tentativas})...")

@@ -401,15 +401,21 @@ def main():
     )
     parser.add_argument(
         "--exploration-selector",
-        choices=["on", "off"],
+        choices=["off", "llm", "rag"],
         default="off",
-        help="Ativa/desativa a seleção de colunas por LLM para exploração. Padrão: off.",
+        help="Modo de seleção de colunas para exploração. Padrão: off.",
     )
     parser.add_argument(
         "--rag",
         choices=["on", "off"],
         default="on",
         help="Ativa/desativa o RAG para recuperação do schema. Padrão: on.",
+    )
+    parser.add_argument(
+        "--enrich-rag",
+        choices=["on", "off"],
+        default="off",
+        help="Ativa/desativa o enriquecimento RAG. Padrão: off.",
     )
 
     args = parser.parse_args()
@@ -526,12 +532,13 @@ def main():
                     enable_graphs=args.with_graphs,
                     use_cot=(args.cot == "on"),
                     use_data_exploration=(args.data_exploration == "on"),
-                    use_exploration_selector=(args.exploration_selector == "on"),
+                    use_exploration_selector=args.exploration_selector,
                     use_rag=(args.rag == "on"),
                     inferir_fks_virtuais=args.infer_fks,
                     usar_schemacrawler=not args.no_schemacrawler,
+                    enrich_rag=(args.enrich_rag == "on"),
                 )
-                print(f"     ✓ InsightEngine inicializado para db={db_id} (CoT={args.cot}, DataExploration={args.data_exploration}, ExplorationSelector={args.exploration_selector}, RAG={args.rag})")
+                print(f"     ✓ InsightEngine inicializado para db={db_id} (CoT={args.cot}, DataExploration={args.data_exploration}, ExplorationSelector={args.exploration_selector}, RAG={args.rag}, EnrichRAG={args.enrich_rag})")
             except Exception as e:
                 print(f"     ❌ Erro ao inicializar InsightEngine: {e}")
                 continue

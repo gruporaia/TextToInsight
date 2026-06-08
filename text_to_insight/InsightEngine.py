@@ -16,7 +16,7 @@ class InsightEngine:
     - `resume(...)` continua uma consulta que ficou pausada em HITL.
     """
 
-    def __init__(self, api_key: str, model: str, db_path: str, hitl: bool = False, show_output: bool = False, enable_graphs: bool = True, use_cot: bool = True, use_data_exploration: bool = True, use_exploration_selector: bool = False, use_rag: bool = True, enrich_rag: bool = False, inferir_fks_virtuais: bool = False, usar_schemacrawler: bool = True):
+    def __init__(self, api_key: str, model: str, db_path: str, hitl: bool = False, show_output: bool = False, enable_graphs: bool = True, use_cot: bool = True, use_data_exploration: bool = True, use_exploration_selector: str = "off", use_rag: bool = True, enrich_rag: bool = False, inferir_fks_virtuais: bool = False, usar_schemacrawler: bool = True):
         self._hitl_ativado = hitl
         # `show_output` controla se a engine imprime o resultado final no terminal.
         # Em cenários com CLI, normalmente deixamos False para evitar saída duplicada.
@@ -49,7 +49,7 @@ class InsightEngine:
         print(f"[CONFIG] GRÁFICOS: {'ATIVADO' if self._enable_graphs else 'DESATIVADO'}")
         print(f"[CONFIG] COT: {'ATIVADO' if self._use_cot else 'DESATIVADO'}")
         print(f"[CONFIG] DATA_EXPLORATION: {'ATIVADO' if self._use_data_exploration else 'DESATIVADO'}")
-        print(f"[CONFIG] EXPLORATION_SELECTOR: {'ATIVADO' if self._use_exploration_selector else 'DESATIVADO'}")
+        print(f"[CONFIG] EXPLORATION_SELECTOR: {self._use_exploration_selector.upper()}")
         print(f"[CONFIG] RAG: {'ATIVADO' if self._use_rag else 'DESATIVADO'}")
         print(f"[CONFIG] ENRICH-RAG: {'ATIVADO' if self._enrich_rag else 'DESATIVADO'}")
         print(f"[CONFIG] INFERIR-FKS-VIRTUAIS: {'ATIVADO' if self._inferir_fks_virtuais else 'DESATIVADO'}")
