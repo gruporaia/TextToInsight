@@ -9,8 +9,12 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-from .InsightEngine import InsightEngine
-from .runtime import exibir_resultado_console
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from text_to_insight.InsightEngine import InsightEngine
+from text_to_insight.runtime import exibir_resultado_console
 
 load_dotenv()
 
@@ -55,13 +59,31 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--model",
-        default="gemini-2.5-flash",
+        default="gpt-5-mini",
         help="Modelo LLM a utilizar (ex: gemini-2.5-flash, gpt-5-nano).",
     )
     parser.add_argument(
         "--api-key-env",
-        default="GOOGLE_API_KEY",
+        default="OPENAI_API_KEY",
         help="Nome da variável de ambiente com a chave de API.",
+    )
+    parser.add_argument(
+        "--cot",
+        choices=["on", "off"],
+        default="on",
+        help="Ativa/desativa o Chain of Thought (CoT). Padrão: on.",
+    )
+    parser.add_argument(
+        "--data-exploration",
+        choices=["on", "off"],
+        default="on",
+        help="Ativa/desativa a etapa de data exploration. Padrão: on.",
+    )
+    parser.add_argument(
+        "--exploration-selector",
+        choices=["off", "llm", "rag"],
+        default="off",
+        help="Modo de seleção de colunas para exploração. Padrão: off.",
     )
     parser.add_argument(
         "pergunta",
@@ -86,6 +108,10 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         print(f"Nenhuma pergunta fornecida. Usando exemplo: '{pergunta}'\n")
 
     hitl_ativado = args.hitl == "on"
+    cot_ativado = args.cot == "on"
+    data_exploration_ativado = args.data_exploration == "on"
+    exploration_selector_mode = args.exploration_selector
+    print(f"[CONFIG] HITL: {'ATIVADO' if hitl_ativado else 'DESATIVADO'}")
     enrich_rag_ativado = args.enrich_rag == "on"
     inferir_fks_ativado = args.infer_fks == "on"
     use_schemacrawler_ativado = args.use_schemacrawler == "on"
@@ -106,6 +132,9 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         inferir_fks_virtuais=inferir_fks_ativado,
         usar_schemacrawler=use_schemacrawler_ativado,
         show_output=False,
+        use_cot=cot_ativado,
+        use_data_exploration=data_exploration_ativado,
+        use_exploration_selector=exploration_selector_mode,
     )
 
     # show_output=False para evitar prints duplicados no console, já que exibir_resultado_console é chamado manualmente.

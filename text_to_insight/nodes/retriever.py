@@ -27,8 +27,12 @@ def _formatar_contexto_rag(retrieved, relations) -> str:
     )
 
 
-def nos_nodo_retriever(estado: EstadoTextToInsight) -> dict:
-    pergunta = estado.get("pergunta_atual", "")
+def nos_nodo_retriever(estado: EstadoTextToInsight, use_rag: bool = True) -> dict:
+    pergunta = (
+        estado.get("pergunta_atual", "")
+        or estado.get("pergunta_original", "")
+        or estado.get("pergunta_usuario", "") # campo antigo de pergunta mas manter para compatibilidade com testes antigos
+    ) # usa pergunta canônica do estado
     schema_full = estado.get("contexto_schema", "")
     schema_size = len(schema_full)
     tentativas_revisao = estado.get("tentativas_revisao_retriever", 0)
@@ -40,10 +44,14 @@ def nos_nodo_retriever(estado: EstadoTextToInsight) -> dict:
             "tentativas_revisao_retriever": tentativas_revisao + 1,
         }
 
+    if not use_rag:
+        print("[RETRIEVER] RAG desativado. Passando o schema completo.")
+        return {"contexto_rag_schema": f"=== SCHEMA COMPLETO (RAG desativado) ===\n\n{schema_full}"}
+
     print(f"[RETRIEVER] schema completo: {len(schema_full)} chars (~{len(schema_full)//4} tokens)")
     
     tentativas = estado.get("tentativas_loop", 0)
-    top_k_dinamico = 5 + (tentativas * 4)
+    top_k_dinamico = 5  # Fixo em 5, sem expansão automática
     
     rag = SchemaGraphRAG(schema={"contexto_schema": schema_full})
     print(f"[RETRIEVER] Recuperando top_k={top_k_dinamico} tabelas (loop atual: {tentativas})...")

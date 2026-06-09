@@ -58,6 +58,7 @@ def construir_estado_inicial(pergunta: str, db_path: str, inferir_fks_virtuais: 
         "espera_humana": False,
         "linhas_resultado_completo": [],
         "historico_tentativas": [],
+        "ultimo_prompt": "",
         "schemacrawler_bin": os.getenv("SCHEMACRAWLER_BIN", ""),
         "inferir_fks_virtuais": inferir_fks_virtuais,
         "usar_schemacrawler": usar_schemacrawler,

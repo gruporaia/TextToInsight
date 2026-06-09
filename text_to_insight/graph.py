@@ -6,11 +6,10 @@ Fluxo MVP:
 2. Esquema: Obtém contexto do banco (SQLite introspection)
 3. Agente de Código: Gera SQL (LLM)
 4. Executor: Executa SQL no banco real
-5. Crítico: Avalia qualidade (LLM)
-6. Salvar CSV: Exporta resultado para CSV
-7. Roteador Gráfico: Decide se gera visualização (LLM)
-8. Gerador Gráfico: Gera gráfico matplotlib (LLM + subprocess)
-9. Resposta: Gera resposta em linguagem natural (LLM)
+5. Salvar CSV: Exporta resultado para CSV
+6. Roteador Gráfico: Decide se gera visualização (LLM)
+7. Gerador Gráfico: Gera gráfico matplotlib (LLM + subprocess)
+8. Resposta: Gera resposta em linguagem natural (LLM)
 """
 
 from functools import partial
@@ -23,9 +22,10 @@ from .nodes import (
     nos_nodo_planejador,
     nos_nodo_esquema,
     nos_nodo_retriever,
+    nos_nodo_data_exploration,
+    nos_nodo_exploration_selector,
     nos_nodo_agente_codigo,
     nos_nodo_sandbox,
-    nos_nodo_critico,
     nos_nodo_resposta,
     nos_nodo_salvar_csv,
     nos_nodo_gerador_grafico,
@@ -39,10 +39,15 @@ def nos_nodo_espera_humana(estado: EstadoTextToInsight):
     return estado
 
 class Graph:
-    def __init__(self, api_key: str, model: str, hitl: bool = True, enable_graphs: bool = True, enrich_rag: bool = False):
+    def __init__(self, api_key: str, model: str, hitl: bool = True, enable_graphs: bool = True, use_cot: bool = True, use_data_exploration: bool = True, use_exploration_selector: str = "off", use_rag: bool = True, enrich_rag: bool = False):
         self.llm = get_model(model, api_key)
         self.memory = MemorySaver()
         self.enable_graphs = enable_graphs
+        self.use_cot = use_cot
+        self.use_data_exploration = use_data_exploration
+        self.use_exploration_selector = use_exploration_selector
+        self.use_rag = use_rag
+        self.enrich_rag = enrich_rag
         self.grafo_text_to_insight = self._compilar_grafo(hitl, enrich_rag)
 
     def _construir_grafo_text_to_insight(self, hitl: bool, enrich_rag: bool) -> StateGraph:
@@ -55,10 +60,11 @@ class Graph:
         construtor_grafo.add_node("planejador", partial(nos_nodo_planejador, llm=self.llm, hitl=hitl))
         construtor_grafo.add_node("espera_humana", nos_nodo_espera_humana)
         construtor_grafo.add_node("esquema", nos_nodo_esquema)
-        construtor_grafo.add_node("retriever", nos_nodo_retriever)
-        construtor_grafo.add_node("agente_codigo", partial(nos_nodo_agente_codigo, llm=self.llm))
+        construtor_grafo.add_node("retriever", partial(nos_nodo_retriever, use_rag=self.use_rag))
+        construtor_grafo.add_node("exploration_selector", partial(nos_nodo_exploration_selector, llm=self.llm, exploration_selector_mode=self.use_exploration_selector))
+        construtor_grafo.add_node("data_exploration", partial(nos_nodo_data_exploration, use_data_exploration=self.use_data_exploration))
+        construtor_grafo.add_node("agente_codigo", partial(nos_nodo_agente_codigo, llm=self.llm, use_cot=self.use_cot))
         construtor_grafo.add_node("sandbox", nos_nodo_sandbox)
-        construtor_grafo.add_node("critico", partial(nos_nodo_critico, llm=self.llm))
         construtor_grafo.add_node("salvar_csv", nos_nodo_salvar_csv)
         construtor_grafo.add_node("gerador_grafico", partial(nos_nodo_gerador_grafico, llm=self.llm))
         construtor_grafo.add_node("resposta", partial(nos_nodo_resposta, llm=self.llm))
@@ -72,7 +78,9 @@ class Graph:
             construtor_grafo.add_edge("enriquecimento_rag", "retriever")
             path = 'enriquecimento_rag'
 
-        construtor_grafo.add_edge("retriever", "planejador")
+        construtor_grafo.add_edge("retriever", "exploration_selector")
+        construtor_grafo.add_edge("exploration_selector", "data_exploration")
+        construtor_grafo.add_edge("data_exploration", "planejador")
         construtor_grafo.add_edge("agente_codigo", "sandbox")
 
         # Gerador de gráfico sempre vai para resposta (sucesso ou falha)
@@ -81,9 +89,10 @@ class Graph:
         # 3. ARESTAS CONDICIONAIS
         construtor_grafo.add_conditional_edges(
             "sandbox",
-            roteador_sandbox,
+            partial(roteador_sandbox, enable_graphs=self.enable_graphs),
             {
-                "critico": "critico",
+                "salvar_csv": "salvar_csv",
+                "resposta": "resposta",
                 "planejador": "planejador",
             }
         )
@@ -95,7 +104,7 @@ class Graph:
                 "espera_humana": "espera_humana",
                 "esquema": "esquema",
                 "agente_codigo": "agente_codigo",
-                "critico": "critico",
+                "planejador": "planejador",
                 "retriever": path,
                 "fim": END,
             }
@@ -110,33 +119,6 @@ class Graph:
             }
         )
 
-
-        MAX_TENTATIVAS_CRITICO = 3
-
-        def roteador_critico(estado: EstadoTextToInsight) -> str:
-            status = estado.get("status", "")
-            tentativas = estado.get("tentativas_loop", 0)
-            
-            next_step = "salvar_csv" if self.enable_graphs else "resposta"
-            
-            # Se aprovado, enviar para proximo passo
-            if status == "aprovado":
-                return next_step
-            # Se atingiu limite de tentativas, encerrar mesmo reprovado
-            if tentativas >= MAX_TENTATIVAS_CRITICO:
-                print(f"[ROTEADOR_CRITICO] Limite de {MAX_TENTATIVAS_CRITICO} tentativas atingido → {next_step} (forçado)")
-                return next_step
-            return "planejador"
-
-        construtor_grafo.add_conditional_edges(
-           "critico",
-            roteador_critico,
-            {
-                "planejador": "planejador",
-                "salvar_csv": "salvar_csv",
-                "resposta": "resposta",
-            }
-        )
 
         # Após salvar CSV, o roteador de gráfico decide se gera visualização
         construtor_grafo.add_conditional_edges(

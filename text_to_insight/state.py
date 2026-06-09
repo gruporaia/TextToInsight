@@ -49,20 +49,22 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
       - total_linhas_resultado: total de linhas do resultado SQL.
       - erro_execucao: mensagem de erro em caso de falha.
       - saida_terminal: saída textual resumida da execução.
-      - feedback_critico: feedback do nó crítico para iteração.
       - status: estágio atual do fluxo (StatusExecucao).
       - tentativas_loop: contador de tentativas de geração/execução.
     """
     
     contexto_schema: str
     contexto_rag_schema: str
+    contexto_data_exploration: str
+    colunas_para_explorar: dict[str, list[str]]
+    raciocinio_agente: str  # CoT <thought> extraído do agente de código
+    contexto_prompt_agente: str  # schema + data exploration enviados ao agente
     tem_descricao : bool
     sql_gerada: str
     linhas_resultado_preview: list[dict[str, Any]]
     total_linhas_resultado: int
     erro_execucao: str
     saida_terminal: str
-    feedback_critico: str
     status: StatusExecucao
     espera_humana: bool
     pergunta_ao_usuario: str
@@ -81,6 +83,7 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     caminho_csv_resultado: str
     caminho_grafico: str
     grafico_gerado: bool
+    ultimo_prompt: str
 
     # Campos exclusivos para métricas. Possibilita a soma automática dos tokens utilizados
     # por cada chamada do Gemini nos vários diferentes nós.
