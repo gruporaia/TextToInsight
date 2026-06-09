@@ -75,6 +75,7 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     schemacrawler_bin : str | None
     db_config: dict[str, Any] | None
     inferir_fks_virtuais: bool
+    inferir_pks_virtuais: bool
     usar_schemacrawler: bool
 
     # Campos para geração de gráficos

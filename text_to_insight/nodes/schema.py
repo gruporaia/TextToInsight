@@ -12,11 +12,14 @@ Suporta dois modos de introspecção:
 2. PRAGMA SQLite nativo (fallback garantido para SQLite)
 """
 from pathlib import Path
+import hashlib
 import re
+import os
 import sqlite3
 import subprocess
 
 from ..state import EstadoTextToInsight
+from ..runtime import construir_estado_inicial
 
 
 # ---------------------------------------------------------------------------
@@ -379,9 +382,114 @@ def _formatar_schema_sqlite(conn: sqlite3.Connection) -> str:
                 )
 
         partes.append("")
-
     return "\n".join(partes)
 
+def _verificar_unicidade(db_path: str, dialeto: str, sc_bin: str, cfg: dict, tabela: str, coluna: str) -> bool:
+    #implementar queries para verificar se a coluna candidata a PK é de fato única, usando qualquer um dos DBS suportados
+    if dialeto == "sqlite":
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        with conn:
+            cursor = conn.cursor()
+            query = f"""
+                SELECT COUNT(DISTINCT {coluna}) AS unique_count, COUNT(*) AS total_count
+                FROM {tabela}
+            """
+            cursor.execute(query)
+            result = cursor.fetchone()
+            if result and result[0] == result[1]:
+                return True
+    #para outros dialetos, implementar lógica similar usando o Schema Crawler ou conexão direta, deixei sem por agora pq precisariamos de outros imports e
+    #vale testar no SQLite primeiro, mas a ideia seria similar: executar uma query que conte os valores distintos e comparar com o total de linhas da tabela
+
+def _aplicar_pk_ao_schema(schema_canonico: str, tabelas_enriquecidas: list) -> str:
+    # Cria o mapa de PKs: { 'Tabela': {'Coluna': True} }
+    pk_map = {t['nome']: {c['nome']: True for c in t['colunas']} 
+              for t in tabelas_enriquecidas}
+    
+    linhas = schema_canonico.splitlines()
+    nova_saida = []
+    tabela_atual = None
+    
+    # Regex ajustada para capturar o prefixo, o nome, e todo o restante da linha (tipo + flags)
+    # Ex: "- Name: TEXT (NOT NULL)" -> prefixo="- ", nome="Name", resto=": TEXT (NOT NULL)"
+    r_col = re.compile(r"^(\s*\-\s+)([\w\.]+)(:.*)", re.IGNORECASE)
+    
+    for linha in linhas:
+        # Detecta tabela
+        match_t = re.match(r"^Tabela:\s+(\w+)", linha, re.IGNORECASE)
+        if match_t:
+            tabela_atual = match_t.group(1)
+            nova_saida.append(linha)
+            continue
+            
+        # Detecta coluna
+        match_c = r_col.match(linha)
+        if match_c and tabela_atual in pk_map:
+            prefixo, nome_col, resto = match_c.groups()
+            
+            # Se esta coluna é PK
+            if pk_map[tabela_atual].get(nome_col):
+                # Verifica se já não foi marcada (evita duplicar)
+                if "PK" not in linha:
+                    # Injeta o (PK) logo após o tipo/flags (o 'resto')
+                    linha = linha.rstrip() + " (PK virtual)"
+        
+        nova_saida.append(linha)
+    
+    return "\n".join(nova_saida)
+
+def _calcular_score_pk(nome: str, tipo: str) -> int:
+    score = 0
+    nome_l = nome.lower()
+    tipo_l = tipo.lower()
+
+    #prioridade Semântica (Identificadores de negócio)
+    if nome_l.endswith(('id', 'pk')): score += 20
+    
+    #prioridade de Tipo (Numéricos são mais eficientes)
+    if 'int' in tipo_l or 'bigint' in tipo_l or 'numeric' in tipo_l or 'integer' in tipo_l or 'number' in tipo_l or 'serial' in tipo_l:
+        score += 10
+    
+    #Penalização (Campos técnicos inúteis como PK)
+    if 'index' in nome_l or 'modified' in nome_l or 'date' in nome_l:
+        score -= 20
+        
+    return score
+
+def _inferir_pks_virtuais(schema_canonico: str, db_path: str, dialeto: str, sc_bin: str, cfg: dict) -> str:
+    tabelas_enriquecidas = []
+    tabela_atual = None
+
+    r_table = re.compile(r"Tabela:\s+(\w+)", re.IGNORECASE)
+    r_coluna = re.compile(r"^\-\s+(\w+):\s+(\w+)", re.IGNORECASE)
+
+    r_pk_candidato = re.compile(r"(^|_)[a-z]*(id|code|uuid|pk|no|num)($|_)", re.IGNORECASE)
+    r_pk_tipo = re.compile(r"\b(int(eger)?|bigint|uuid|uniqueidentifier|serial|number|text|varchar|character)\b", re.IGNORECASE)
+    linhas = schema_canonico.splitlines()
+    for linha in linhas:
+        match_table = r_table.match(linha)
+        if match_table:
+            tabela_atual = {"nome": match_table.group(1), "colunas": []}
+            tabelas_enriquecidas.append(tabela_atual)
+            continue
+        match_coluna = r_coluna.match(linha)
+        if match_coluna and tabela_atual is not None:
+            nome_coluna = match_coluna.group(1)
+            tipo_coluna = match_coluna.group(2)
+            score = _calcular_score_pk(nome_coluna, tipo_coluna)
+            is_pk = (bool(r_pk_candidato.search(nome_coluna)) and bool(r_pk_tipo.search(tipo_coluna)))
+            if is_pk and _verificar_unicidade(db_path, dialeto, sc_bin, cfg, tabela_atual["nome"], nome_coluna):
+                tabela_atual["colunas"].append({
+                    "nome": nome_coluna,
+                    "tipo": tipo_coluna,
+                    "score": score
+                })
+    for t in tabelas_enriquecidas:
+        if len(t["colunas"]) > 1:
+            #ordena pelo score decrescente
+            t["colunas"] = [max(t["colunas"], key=lambda x: x["score"])]
+    contexto_enriquecido = _aplicar_pk_ao_schema(schema_canonico, tabelas_enriquecidas)
+    return contexto_enriquecido
 
 # ---------------------------------------------------------------------------
 # Heurística para analisar a estrutura do schema e injegar relações implícitas
@@ -554,8 +662,8 @@ def nos_nodo_esquema(estado: EstadoTextToInsight) -> dict:
     sc_bin  = estado.get("schemacrawler_bin", "").strip()
     db_cfg  = estado.get("db_config", {})
     usar_schemacrawler = estado.get("usar_schemacrawler", True)
+    inferir_pks_virtuais = estado.get("inferir_pks_virtuais", False)
     inferir_fks_virtuais = estado.get("inferir_fks_virtuais", False)
-
     # --- Validação ---
     if not db_path:
         msg = "db_path não informado no estado."
@@ -626,7 +734,33 @@ def nos_nodo_esquema(estado: EstadoTextToInsight) -> dict:
         with conn:
             contexto = _formatar_schema_sqlite(conn)
 
+    if dialeto in ("sqlite", "duckdb"):
+        db_name = Path(db_path).stem if db_path else "defaultdb"
+    else:
+        #para PostgreSQL, pega o nome do banco do db_cfg ou usa o db_path como fallback
+        db_name = db_cfg.get("database") or db_path or "defaultdb"
+        #sanitiza a string para criar um nome de pasta válido (substitui caracteres estranhos por '_')
+        db_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', db_name)
+
+    cache_dir = Path("./.schema_cache") / dialeto / db_name
+    contexto_hash = hashlib.md5(contexto.encode("utf-8")).hexdigest()[:8]
+    cache_file = cache_dir / f"{contexto_hash}.txt"
+    ja_inferiu = os.path.exists(f"{cache_file}")    
+    #caso ja tenha inferido as pks, reaproveitamos os resultados para evitar reprocessamento
+    if ja_inferiu:
+        print(f"[SCHEMA] Cache de PKs virtuais encontrado em: {cache_file} — reutilizando contexto enriquecido.")
+        contexto = open(f"{cache_file}", "r", encoding="utf-8").read()
+    if inferir_pks_virtuais and not ja_inferiu:
+        print("[SCHEMA] Inferindo PKs virtuais.")
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        contexto = _inferir_pks_virtuais(contexto, db_path, dialeto, sc_bin, db_cfg)
+        print(f"[SCHEMA] PKs virtuais inferidos. Salvando cache em: {cache_file}")
+        with open(f"{cache_file}", "w", encoding="utf-8") as f:
+            f.write(contexto)
+
     # --- Heurística de FKs virtuais ---
+    #para as fks virtuais, o mesmo processo deve ser verificado, precisamos pensar em uma forma de fazer a validação disso da forma correta, mantive sem veirificação
+    #por enquanto ja q vai mudar
     if inferir_fks_virtuais:
         print("[SCHEMA] Inferindo FKs virtuais.")
         contexto = _inferir_fks_virtuais(contexto)
@@ -637,3 +771,12 @@ def nos_nodo_esquema(estado: EstadoTextToInsight) -> dict:
         "status": "schema_obtido",
         "tem_descricao": False,
     }
+
+#migrar para teste depois
+if __name__ == "__main__":
+    state = construir_estado_inicial(pergunta='',db_path= 'spider2-lite/resource/databases/spider2-localdb/bank_sales_trading.sqlite', 
+                                inferir_fks_virtuais = True,
+                                inferir_pks_virtuais = True,
+                                usar_schemacrawler = False)
+    new_state = nos_nodo_esquema(state)
+    print(new_state.get("contexto_schema", ""))

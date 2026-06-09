@@ -32,6 +32,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Ativa/desativa o enriquecimento RAG. Padrão: off.",
     )
     parser.add_argument(
+        "--infer-pks",
+        choices=["on", "off"],
+        default="off",
+        help="Ativa/desativa a inferência virtual de chaves primárias. Padrão: off.",
+    )
+    parser.add_argument(
         "--infer-fks",
         choices=["on", "off"],
         default="off",
@@ -87,6 +93,7 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
 
     hitl_ativado = args.hitl == "on"
     enrich_rag_ativado = args.enrich_rag == "on"
+    inferir_pks_ativado = args.infer_pks == "on"
     inferir_fks_ativado = args.infer_fks == "on"
     use_schemacrawler_ativado = args.use_schemacrawler == "on"
 
@@ -104,6 +111,7 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         hitl=hitl_ativado,
         enrich_rag=enrich_rag_ativado,
         inferir_fks_virtuais=inferir_fks_ativado,
+        inferir_pks_virtuais=inferir_pks_ativado,
         usar_schemacrawler=use_schemacrawler_ativado,
         show_output=False,
     )

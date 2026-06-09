@@ -147,6 +147,8 @@ chroma_db/
 .schema_hash
 spider2-lite
 Spider2/
+schema_sample.txt
+.schema_cache/
 
 # testes
 /meus_testes/*
