@@ -105,8 +105,7 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     caminho_grafico: str
     grafico_gerado: bool
 
-    # Campos exclusivos para métricas. Possibilita a soma automática dos tokens utilizados
-    # por cada chamada do Gemini nos vários diferentes nós.
+    # Campos exclusivos para métricas. Tokens DEVEM acumular de múltiplas chamadas LLM
     tokens_input: Annotated[int, operator.add]
     tokens_output: Annotated[int, operator.add]
     tokens_total: Annotated[int, operator.add]

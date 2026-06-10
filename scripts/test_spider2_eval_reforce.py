@@ -170,7 +170,7 @@ def main():
     parser.add_argument("--data-dir", type=str, default="data/spider2-lite")
     parser.add_argument("--sqlite-dir", type=str, default="data/spider2-lite/resource/databases/sqlite")
     parser.add_argument("--question-filter", type=str)
-    parser.add_argument("--model", type=str, default="gpt-4o-mini")
+    parser.add_argument("--model", type=str, default="gpt-5-mini")
     parser.add_argument("--with-graphs", action="store_true")
 
     args = parser.parse_args()
@@ -296,7 +296,12 @@ def main():
         veredito = resultado.get("status", "")
         tokens_total = resultado.get("tokens_total", 0) or 0
         erro_execucao = resultado.get("erro_execucao", "")
-        schema_length = len(resultado.get("contexto_schema", "") or resultado.get("contexto_rag_schema", ""))
+        
+        # ✅ Validação do Schema
+        schema_length = resultado.get("schema_length", 0) or len(resultado.get("contexto_schema", "") or resultado.get("contexto_rag_schema", ""))
+        schema_valido = resultado.get("schema_valido", 0)
+        if schema_length > 0 and schema_valido == 0:
+            schema_valido = 1  # Backup: se tem schema_length, marcar como válido
 
         # ✅ NOVO: Extração ReFoRCE
         artefatos_reforce = extrair_artefatos_reforce(resultado)
@@ -347,6 +352,7 @@ def main():
             "valid_sql": valid_sql,
             "erro_execucao": erro_execucao[:100] if erro_execucao else "",
             "schema_length": schema_length,
+            "schema_valido": schema_valido,  # ✅ NOVO: Flag se schema foi injetado
             
             "tokens_total": tokens_total,
             "tempo_ms": round(tempo_total_ms, 2),
@@ -376,14 +382,26 @@ def main():
         df = pd.DataFrame(all_rows)
         df.to_csv(csv_path, index=False, encoding="utf-8")
         print(f"\n✅ Resultados salvos em {csv_path} ({len(all_rows)} linhas)")
-        print(f"\nResumo:")
+        print(f"\n{'='*80}")
+        print(f"📊 RESUMO DA AVALIAÇÃO")
+        print(f"{'='*80}")
         print(f"  Match Exato: {sum(1 for r in all_rows if r['match_exato'] == 'SIM')}/{len(all_rows)}")
         print(f"  Execution Accuracy: {df['execution_accuracy'].mean():.1%}")
         print(f"  Valid SQL: {df['valid_sql'].mean():.1%}")
+        print(f"\n🔍 SCHEMA VALIDATION:")
+        print(f"  Schema válido: {df['schema_valido'].sum()}/{len(all_rows)} ({df['schema_valido'].mean():.1%})")
         print(f"  Schema length médio: {df['schema_length'].mean():.0f} chars")
-        print(f"  Consenso ReFoRCE: {sum(1 for r in all_rows if r['reforce_status'] == 'consenso_encontrado')}/{len(all_rows)}")
+        print(f"  Schema length min/max: {df['schema_length'].min()}..{df['schema_length'].max()} chars")
+        print(f"\n⚡ TOKEN USAGE:")
+        print(f"  Tokens totais: {df['tokens_total'].sum():.0f} (média: {df['tokens_total'].mean():.0f} por pergunta)")
+        print(f"  Tokens min/max por pergunta: {df['tokens_total'].min():.0f} / {df['tokens_total'].max():.0f}")
+        print(f"\n🤖 ReFoRCE METRICS:")
+        print(f"  Consenso encontrado: {sum(1 for r in all_rows if r['reforce_status'] == 'consenso_encontrado')}/{len(all_rows)}")
         print(f"  Candidatos médios por pergunta: {df['reforce_num_candidatos'].mean():.1f}")
+        print(f"  Válidos por rodada: {df['reforce_num_validos'].mean():.1f} / {df['reforce_num_candidatos'].mean():.1f}")
         print(f"  Rodadas de exploração: {df['reforce_rodadas_exploracao'].sum():.0f} total")
+        print(f"⏱️  Tempo médio: {df['tempo_ms'].mean():.0f} ms ({df['tempo_ms'].mean()/1000:.1f}s)")
+        print(f"{'='*80}\n")
     else:
         print("\n❌ Nenhum resultado foi processado.")
         sys.exit(1)

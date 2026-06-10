@@ -142,11 +142,15 @@ def nos_nodo_esquema(estado: EstadoTextToInsight) -> dict:
         finally:
             conn.close()
 
-        print("[SCHEMA] Contexto obtido com sucesso.")
+        schema_chars = len(contexto)
+        print(f"[SCHEMA] ✅ Contexto obtido: {schema_chars} caracteres")
+        print(f"[SCHEMA] Primeiras 200 chars:\n{contexto[:200]}\n...")
+        
         return {
             "contexto_schema": contexto,
             "contexto_rag_schema": contexto,  # ✅ Cópia para compatibilidade
-            "schema_length": len(contexto),   # ✅ NOVO: Guardar tamanho do schema
+            "schema_length": schema_chars,
+            "schema_valido": 1,  # ✅ Flag: schema foi injetado com sucesso
             "erro_execucao": "",
             "status": "schema_obtido",
         }

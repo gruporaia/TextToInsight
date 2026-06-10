@@ -159,10 +159,11 @@ def roteador_grafico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -
 # ARQUITETURA ReFoRCE: Roteadores para Map-Reduce
 # ============================================================================
 
-def roteador_fan_out(estado: EstadoTextToInsight) -> list[Send]:
+def roteador_fan_out(estado: EstadoTextToInsight, model_name: str = "") -> list[Send]:
     """
-    Roteador Fan-out: cria 5 objetos Send para execução paralela de candidatos,
-    injetando diversidade térmica (temperaturas diferentes).
+    Roteador Fan-out: cria 5 objetos Send para execução paralela de candidatos.
+    
+    Todos os 5 candidatos usam a mesma temperatura (1.0).
     
     GARANTIA: Sempre retorna exatamente 5 Send objects.
     """
@@ -179,13 +180,12 @@ def roteador_fan_out(estado: EstadoTextToInsight) -> list[Send]:
     historico = estado.get("historico_tentativas", [])
     rodadas_exploracao = estado.get("rodadas_exploracao", 0)
     
-    # Diversidade Térmica: Do mais determinístico (0.0) ao mais criativo (0.9)
-    temperaturas = [0.0, 0.2, 0.5, 0.7, 0.9]
+    # Temperatura constante para todos (compatível com gpt-5-mini e outros)
+    temperaturas = [1.0, 1.0, 1.0, 1.0, 1.0]
     
     print(f"\n[ROTEADOR_FAN_OUT] Criando 5 candidatos em paralelo (Rodada {rodadas_exploracao + 1})...")
     print(f"  Pergunta: {pergunta[:60]}...")
     print(f"  Schema length: {len(schema)} chars")
-    print(f"  Temperaturas (diversidade): {temperaturas}")
     
     sends = []
     for i, temp in enumerate(temperaturas):
