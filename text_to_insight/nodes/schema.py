@@ -661,7 +661,7 @@ def nos_nodo_esquema(estado: EstadoTextToInsight) -> dict:
     db_path = estado.get("db_path", "").strip()
     sc_bin  = estado.get("schemacrawler_bin", "").strip()
     db_cfg  = estado.get("db_config", {})
-    usar_schemacrawler = estado.get("usar_schemacrawler", True)
+    usar_schemacrawler = estado.get("usar_schemacrawler", False)
     inferir_pks_virtuais = estado.get("inferir_pks_virtuais", False)
     inferir_fks_virtuais = estado.get("inferir_fks_virtuais", False)
     # --- Validação ---
@@ -771,12 +771,3 @@ def nos_nodo_esquema(estado: EstadoTextToInsight) -> dict:
         "status": "schema_obtido",
         "tem_descricao": False,
     }
-
-#migrar para teste depois
-if __name__ == "__main__":
-    state = construir_estado_inicial(pergunta='',db_path= 'spider2-lite/resource/databases/spider2-localdb/bank_sales_trading.sqlite', 
-                                inferir_fks_virtuais = True,
-                                inferir_pks_virtuais = True,
-                                usar_schemacrawler = False)
-    new_state = nos_nodo_esquema(state)
-    print(new_state.get("contexto_schema", ""))

@@ -530,3 +530,27 @@ def test_executar_script_limpa_temporario(monkeypatch, tmp_path):
     ok, _ = gg._executar_script("print('GRAPH_OK')")
     assert ok is True
     assert temp_path.exists() is False
+
+
+# ============================================================
+# SCHEMA — com DB local (determinístico)
+# ============================================================
+
+def test_nos_nodo_esquema_banco_local():
+    """Testa a introspecção de schema (PKs/FKs virtuais) sem schemacrawler."""
+    from text_to_insight.nodes.schema import nos_nodo_esquema
+    from text_to_insight.runtime import construir_estado_inicial
+    
+    state = construir_estado_inicial(
+        pergunta='',
+        db_path='spider2-lite/resource/databases/spider2-localdb/bank_sales_trading.sqlite', 
+        inferir_fks_virtuais=True,
+        inferir_pks_virtuais=True,
+        usar_schemacrawler=False
+    )
+    new_state = nos_nodo_esquema(state)
+    
+    assert new_state is not None
+    assert "contexto_schema" in new_state
+    assert new_state.get("status") in ("schema_obtido", "exec_erro")
+    print(new_state.get("contexto_schema", ""))

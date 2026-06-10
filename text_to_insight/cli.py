@@ -46,8 +46,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--use-schemacrawler",
         choices=["on", "off"],
-        default="on",
-        help="Ativa/desativa o uso do SchemaCrawler. Se off, usa PRAGMA SQLite. Padrão: on.",
+        default="off",
+        help="Ativa/desativa o uso do SchemaCrawler. Se off, usa PRAGMA SQLite. Padrão: off.",
     )
     parser.add_argument(
         "--thread-id",
