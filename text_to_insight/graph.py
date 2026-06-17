@@ -39,10 +39,14 @@ def nos_nodo_espera_humana(estado: EstadoTextToInsight):
     return estado
 
 class Graph:
-    def __init__(self, api_key: str, model: str, hitl: bool = True, enable_graphs: bool = True, enrich_rag: bool = False):
+    def __init__(self, api_key: str, model: str, conn=None, hitl: bool = True, enable_graphs: bool = True, enrich_rag: bool = False):
         self.llm = get_model(model, api_key)
         self.memory = MemorySaver()
         self.enable_graphs = enable_graphs
+        # Conexão (PEP 249) injetada nos nós que tocam o banco. Pode ser None,
+        # caso em que os nós caem no modo legado (abrem a conexão a partir do
+        # `db_path` presente no estado).
+        self.conn = conn
         self.grafo_text_to_insight = self._compilar_grafo(hitl, enrich_rag)
 
     def _construir_grafo_text_to_insight(self, hitl: bool, enrich_rag: bool) -> StateGraph:
@@ -54,10 +58,10 @@ class Graph:
         # 1. ADICIONAR NÓS
         construtor_grafo.add_node("planejador", partial(nos_nodo_planejador, llm=self.llm, hitl=hitl))
         construtor_grafo.add_node("espera_humana", nos_nodo_espera_humana)
-        construtor_grafo.add_node("esquema", nos_nodo_esquema)
+        construtor_grafo.add_node("esquema", partial(nos_nodo_esquema, conn=self.conn))
         construtor_grafo.add_node("retriever", nos_nodo_retriever)
         construtor_grafo.add_node("agente_codigo", partial(nos_nodo_agente_codigo, llm=self.llm))
-        construtor_grafo.add_node("sandbox", nos_nodo_sandbox)
+        construtor_grafo.add_node("sandbox", partial(nos_nodo_sandbox, conn=self.conn))
         construtor_grafo.add_node("critico", partial(nos_nodo_critico, llm=self.llm))
         construtor_grafo.add_node("salvar_csv", nos_nodo_salvar_csv)
         construtor_grafo.add_node("gerador_grafico", partial(nos_nodo_gerador_grafico, llm=self.llm))

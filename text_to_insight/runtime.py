@@ -39,8 +39,12 @@ Retorne apenas:
 """
 
 
-def construir_estado_inicial(pergunta: str, db_path: str) -> dict[str, Any]:
-    """Cria o estado inicial padrão para uma execução do grafo."""
+def construir_estado_inicial(pergunta: str, db_path: str | None = None) -> dict[str, Any]:
+    """Cria o estado inicial padrão para uma execução do grafo.
+
+    `db_path` é opcional: serve apenas como metadado (cache de schema/logs).
+    O acesso ao banco é feito pela conexão injetada nos nós.
+    """
     return {
         "pergunta_original": pergunta,
         "pergunta_atual": pergunta,

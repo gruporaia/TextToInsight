@@ -90,79 +90,98 @@ def _formatar_schema_sqlite(conn: sqlite3.Connection) -> str:
 
     return "\n".join(partes)
 
-def nos_nodo_esquema(estado: EstadoTextToInsight) -> dict:
+def _ler_cache_schema(estado: EstadoTextToInsight) -> str | None:
+    """
+    Tenta ler o schema enriquecido em cache.
+
+    O nome do cache é derivado de `db_path` (metadado opcional). Quando não há
+    `db_path` disponível (ex.: conexão remota sem caminho de arquivo), não há
+    cache a consultar e retornamos None.
+    """
+    db_path = (estado.get("db_path") or "").strip()
+    if not db_path:
+        return None
+
+    caminho_db = Path(db_path)
+    cache_path = caminho_db.with_name(f"{caminho_db.stem}_enriched_schema.txt")
+    if cache_path.exists():
+        print(f"[SCHEMA] Schema enriquecido em cache encontrado para {caminho_db.stem}.")
+        with open(cache_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return None
+
+
+def nos_nodo_esquema(estado: EstadoTextToInsight, conn: sqlite3.Connection | None = None) -> dict:
     """
     Nó Schema: Busca contexto e metadados do banco de dados.
-    
+
     Executa uma consulta ao banco de dados para obter:
     - Estrutura das tabelas
     - Colunas e tipos de dados
     - Relacionamentos
     - Informações de índices
-    
+
+    Se uma conexão (`conn`) for injetada, a introspecção é feita sobre ela (a
+    conexão NÃO é fechada — pertence a quem a abriu). Caso contrário, cai no
+    modo legado e abre uma conexão somente-leitura a partir do `db_path` do
+    estado.
+
     Args:
         estado (EstadoTextToInsight): Estado atual do grafo.
-    
+        conn: Conexão PEP 249 já aberta (opcional).
+
     Returns:
         dict: Dicionário com atualizações do estado.
-              - contexto_schema: String com metadados simulados
+              - contexto_schema: String com o schema introspectado
               - status: 'schema_obtido'
     """
-    
-
-
-    # Simular busca de schema do banco de dados
     print("[SCHEMA] Iniciando introspecção do SQLite....")
-    
-    db_path = estado.get("db_path", "").strip()
-    if not db_path:
-        msg = "db_path não informado no estado."
-        print(f"[SCHEMA] Erro: {msg}")
-        return {
-            "contexto_schema": "",
-            "erro_execucao": msg,
-            "status": "exec_erro",
-        }
 
-    caminho_db = Path(db_path)
-    if not caminho_db.exists():
-        msg = f"Arquivo de banco não encontrado: {db_path}"
-        print(f"[SCHEMA] Erro: {msg}")
-        return {
-            "contexto_schema": "",
-            "erro_execucao": msg,
-            "status": "exec_erro",
-        }
-
-    cache_path = caminho_db.with_name(f"{caminho_db.stem}_enriched_schema.txt")
-    if cache_path.exists():
-        print(f"[SCHEMA] Schema enriquecido em cache encontrado para {caminho_db.stem}.")
-        with open(cache_path, "r", encoding="utf-8") as f:
-            contexto_cache = f.read()
-            
+    # Cache de schema enriquecido (depende de `db_path` como metadado).
+    contexto_cache = _ler_cache_schema(estado)
+    if contexto_cache is not None:
         return {
             "contexto_schema": contexto_cache,
             "erro_execucao": "",
             "status": "schema_obtido",
-            "tem_descricao": True  #Já tem descrição enriquecida, então pode pular o enrich
+            "tem_descricao": True,  # Já tem descrição enriquecida, então pode pular o enrich
         }
 
+    # Modo legado: sem conexão injetada, abre uma a partir do db_path.
+    conn_propria = None
+    if conn is None:
+        db_path = (estado.get("db_path") or "").strip()
+        if not db_path:
+            msg = "Nenhuma conexão fornecida e db_path não informado no estado."
+            print(f"[SCHEMA] Erro: {msg}")
+            return {
+                "contexto_schema": "",
+                "erro_execucao": msg,
+                "status": "exec_erro",
+            }
+
+        caminho_db = Path(db_path)
+        if not caminho_db.exists():
+            msg = f"Arquivo de banco não encontrado: {db_path}"
+            print(f"[SCHEMA] Erro: {msg}")
+            return {
+                "contexto_schema": "",
+                "erro_execucao": msg,
+                "status": "exec_erro",
+            }
+
+        # Modo somente leitura para maior segurança.
+        conn_propria = sqlite3.connect(f"file:{caminho_db}?mode=ro", uri=True)
+        conn = conn_propria
+
     try:
-        # Modo somente leitura para maior segurança
-        conn = sqlite3.connect(f"file:{caminho_db}?mode=ro", uri=True)
-        try:
-            contexto = _formatar_schema_sqlite(conn) # formatação do schema passando a conexão aberta
-        finally:
-            conn.close()
-        # cache_path = caminho_db.with_name(f"{caminho_db.stem}_full_schema.txt")
-        # with open(cache_path, "w", encoding="utf-8") as f:
-        #     f.write(contexto)
+        contexto = _formatar_schema_sqlite(conn)  # formatação do schema usando a conexão
         print("[SCHEMA] Contexto obtido com sucesso.")
         return {
             "contexto_schema": contexto,
             "erro_execucao": "",
             "status": "schema_obtido",
-            "tem_descricao": False #SQLite não vai ter descrição nunca, então sempre vai cair no enrich
+            "tem_descricao": False,  # SQLite não vai ter descrição nunca, então sempre vai cair no enrich
         }
     except Exception as e:
         msg = f"Falha ao ler schema SQLite: {e}"
@@ -172,3 +191,7 @@ def nos_nodo_esquema(estado: EstadoTextToInsight) -> dict:
             "erro_execucao": msg,
             "status": "exec_erro",
         }
+    finally:
+        # Só fechamos a conexão que nós mesmos abrimos (modo legado).
+        if conn_propria is not None:
+            conn_propria.close()

@@ -5,21 +5,26 @@ Responsabilidade única: validar e executar SQL gerada contra o banco real,
 retornando resultado estruturado.
 """
 
+from typing import Any
+
 from ..state import EstadoTextToInsight
-from .code_agent.code_sql import executar_sql_sqlite
+from .code_agent.code_sql import executar_sql_conn, executar_sql_sqlite
 
 
-def nos_nodo_sandbox(estado: EstadoTextToInsight) -> dict:
+def nos_nodo_sandbox(estado: EstadoTextToInsight, conn: Any | None = None) -> dict:
     """
-    Nó Executor: executa a SQL gerada contra o banco SQLite real.
+    Nó Executor: executa a SQL gerada contra o banco real.
 
-    Lê `sql_gerada` e `db_path` do estado, delega para `executar_sql_sqlite`
-    (que já faz validação de segurança) e retorna o resultado estruturado.
+    Lê `sql_gerada` do estado. Se uma conexão (`conn`) for injetada, executa a
+    SQL através dela (modo agnóstico ao banco); caso contrário, cai no modo
+    legado e abre uma conexão a partir do `db_path` presente no estado.
+    A validação de segurança da SQL acontece dentro do executor.
     """
     sql = estado.get("sql_gerada", "").strip()
     db_path = estado.get("db_path", "")
 
-    print(f"[EXECUTOR] Executando SQL contra {db_path}...")
+    alvo = "conexão fornecida" if conn is not None else db_path
+    print(f"[EXECUTOR] Executando SQL contra {alvo}...")
 
     if not sql:
         print("[EXECUTOR] Nenhuma SQL encontrada no estado.")
@@ -29,7 +34,10 @@ def nos_nodo_sandbox(estado: EstadoTextToInsight) -> dict:
             "status": "exec_erro",
         }
 
-    resultado = executar_sql_sqlite(db_path, sql)
+    if conn is not None:
+        resultado = executar_sql_conn(conn, sql)
+    else:
+        resultado = executar_sql_sqlite(db_path, sql)
 
     if resultado["ok"]:
         print(f"[EXECUTOR] SQL executada com sucesso — {resultado['total_linhas_resultado']} linhas.")

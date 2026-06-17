@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from typing import Any, Callable
 
 from .graph import Graph
@@ -14,9 +15,28 @@ class InsightEngine:
     Em termos simples:
     - `run(...)` inicia uma nova consulta.
     - `resume(...)` continua uma consulta que ficou pausada em HITL.
+
+    Sobre a conexão com o banco:
+    - O modo recomendado é passar uma conexão já aberta via `conn`. Qualquer
+      conexão compatível com a PEP 249 funciona (SQLite, PostgreSQL, etc.).
+      Quem abre a conexão é responsável por fechá-la — a engine não fecha
+      conexões que recebeu de fora.
+    - Por compatibilidade, ainda é possível passar `db_path` (string). Nesse
+      caso a engine abre uma conexão SQLite somente-leitura internamente e
+      a fecha ao chamar `close()` (ela é "dona" dessa conexão).
     """
 
-    def __init__(self, api_key: str, model: str, db_path: str, hitl: bool = False, show_output: bool = False, enable_graphs: bool = True, enrich_rag: bool = False):
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        conn: Any | None = None,
+        db_path: str | None = None,
+        hitl: bool = False,
+        show_output: bool = False,
+        enable_graphs: bool = True,
+        enrich_rag: bool = False,
+    ):
         self._hitl_ativado = hitl
         # `show_output` controla se a engine imprime o resultado final no terminal.
         # Em cenários com CLI, normalmente deixamos False para evitar saída duplicada.
@@ -24,14 +44,59 @@ class InsightEngine:
         self._enable_graphs = enable_graphs
         self._enrich_rag = enrich_rag
         self._model = model
+
+        # Resolve a conexão a ser usada pelo fluxo.
+        # `db_path` continua existindo como metadado opcional (cache/logs), mesmo
+        # quando uma conexão é passada diretamente.
         self._db_path = db_path
+        if conn is not None:
+            # Conexão fornecida pelo usuário: a engine NÃO é dona dela.
+            self._conn = conn
+            self._owns_conn = False
+        elif db_path:
+            # Compatibilidade: abre uma conexão SQLite somente-leitura.
+            # A engine é dona desta conexão e deve fechá-la em `close()`.
+            self._conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            self._owns_conn = True
+        else:
+            raise ValueError("Informe `conn` (conexão PEP 249 já aberta) ou `db_path`.")
+
+        # Valida a conexão antes de iniciar o fluxo, para falhar cedo e com
+        # mensagem clara em vez de estourar no primeiro nó que tocar o banco.
+        self._validar_conexao()
+
         # O grafo compila os nós/roteadores e guarda memória por thread_id.
-        self._grafo = Graph(api_key=api_key, model=self._model, hitl=self._hitl_ativado, enable_graphs=self._enable_graphs, enrich_rag=self._enrich_rag)
+        self._grafo = Graph(api_key=api_key, model=self._model, conn=self._conn, hitl=self._hitl_ativado, enable_graphs=self._enable_graphs, enrich_rag=self._enrich_rag)
 
         print(f"[CONFIG] HITL: {'ATIVADO' if self._hitl_ativado else 'DESATIVADO'}")
         print(f"[CONFIG] SHOW_OUTPUT: {'ATIVADO' if self._show_output else 'DESATIVADO'}")
         print(f"[CONFIG] GRÁFICOS: {'ATIVADO' if self._enable_graphs else 'DESATIVADO'}")
         print(f"[CONFIG] ENRICH-RAG: {'ATIVADO' if self._enrich_rag else 'DESATIVADO'}")
+
+    def _validar_conexao(self) -> None:
+        """Garante que a conexão recebida está viva antes de começar o fluxo."""
+        try:
+            cursor = self._conn.cursor()
+            cursor.execute("SELECT 1")
+            cursor.close()
+        except Exception as e:
+            raise ValueError(f"Conexão com o banco inválida ou inativa: {e}") from e
+
+    def close(self) -> None:
+        """
+        Fecha a conexão apenas se a engine for dona dela (aberta a partir de
+        `db_path`). Conexões recebidas via `conn` são de responsabilidade de
+        quem as abriu e não são fechadas aqui.
+        """
+        if self._owns_conn and self._conn is not None:
+            self._conn.close()
+            self._conn = None
+
+    def __enter__(self) -> "InsightEngine":
+        return self
+
+    def __exit__(self, *_exc: Any) -> None:
+        self.close()
 
     def _config(self, thread_id: str) -> dict[str, Any]:
         # O LangGraph usa esse bloco "configurable" para identificar a conversa.

@@ -26,11 +26,13 @@ StatusExecucao = Literal[
 ]
 
 # Criação de classe mãe que será estendida para EstadoTextToInsight para que
-# pergunta_original/pergunta_atual e db_path sejam obrigatorios
+# pergunta_original/pergunta_atual sejam obrigatorios.
+# A conexão com o banco NÃO vive no estado (não é serializável pelo
+# checkpointer): ela é injetada nos nós que tocam o banco. O `db_path` permanece
+# como metadado OPCIONAL, usado apenas para cache de schema e logs.
 class EstadoEntrada(TypedDict):
     pergunta_original: str
     pergunta_atual: str
-    db_path: str
 
 
 class EstadoTextToInsight(EstadoEntrada, total = False):
@@ -40,9 +42,11 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     Campos obrigatórios (via EstadoEntrada):
       - pergunta_original: pergunta inicial do usuario (imutavel apos o primeiro set).
       - pergunta_atual: pergunta corrente, fonte de verdade para o fluxo.
-      - db_path: caminho para o arquivo SQLite (.db).
 
     Campos opcionais (preenchidos progressivamente pelos nós):
+      - db_path: caminho para o arquivo SQLite (.db), quando aplicável.
+        Metadado opcional para cache de schema/logs; o acesso ao banco usa a
+        conexão injetada nos nós.
       - contexto_schema: schema textual extraído do SQLite.
       - sql_gerada: SQL produzida pelo agente de código.
       - linhas_resultado_preview: amostra de linhas retornadas (max 30).
@@ -54,6 +58,7 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
       - tentativas_loop: contador de tentativas de geração/execução.
     """
     
+    db_path: str
     contexto_schema: str
     contexto_rag_schema: str
     tem_descricao : bool

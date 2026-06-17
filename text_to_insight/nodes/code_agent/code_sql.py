@@ -54,15 +54,38 @@ def validar_sql_segura(sql: str) -> tuple[bool, str]:
 
 import time
 
-def executar_sql_sqlite(
-    db_path: str,
+
+def _linhas_como_dicts(cursor: Any, rows: list[Any]) -> list[dict[str, Any]]:
+    """
+    Converte as linhas retornadas por um cursor PEP 249 em dicionários.
+
+    Usa `cursor.description` para obter os nomes das colunas (modo portátil,
+    funciona com qualquer driver PEP 249) em vez de depender de
+    `sqlite3.Row` — assim não precisamos mutar a conexão do usuário.
+    """
+    if cursor.description is None:
+        return []
+    colunas = [coluna[0] for coluna in cursor.description]
+    return [dict(zip(colunas, linha)) for linha in rows]
+
+
+def executar_sql_conn(
+    conn: Any,
     sql: str,
     limite_preview: int = 5,
     timeout_segundos: float = 15.0,
 ) -> dict[str, Any]:
     """
-    Executa SQL validada em SQLite modo read-only e retorna resultado estruturado.
-    Possui um timeout embutido para evitar queries infinitas (ex: cross joins enormes).
+    Executa SQL validada usando uma conexão PEP 249 já aberta e retorna
+    resultado estruturado.
+
+    A conexão é de responsabilidade de quem a abriu: aqui criamos apenas um
+    cursor, executamos a query e descartamos o cursor — a conexão NÃO é
+    fechada. A proteção contra escrita vem de `validar_sql_segura` (a garantia
+    de somente-leitura via `mode=ro` só existe no caminho legado por `db_path`).
+
+    O timeout por `set_progress_handler` é específico do SQLite; em conexões de
+    outros bancos ele é silenciosamente ignorado.
     """
     ok, erro_validacao = validar_sql_segura(sql)
     if not ok:
@@ -75,39 +98,27 @@ def executar_sql_sqlite(
             "saida_terminal": f"[SANDBOX] SQL invalida: {erro_validacao}",
         }
 
-    caminho = Path(db_path)
-    if not caminho.exists():
-        msg = f"Arquivo de banco nao encontrado: {db_path}"
-        return {
-            "ok": False,
-            "erro_execucao": msg,
-            "linhas_resultado_preview": [],
-            "linhas_resultado_completo": [],
-            "total_linhas_resultado": 0,
-            "saida_terminal": f"[SANDBOX] {msg}",
-        }
+    # Timeout de execução: disponível apenas em conexões SQLite.
+    start_time = time.time()
+    tem_progress_handler = hasattr(conn, "set_progress_handler")
+
+    def _progress_handler():
+        if time.time() - start_time > timeout_segundos:
+            return 1  # abortar query
+        return 0
 
     try:
-        conn = sqlite3.connect(f"file:{caminho}?mode=ro", uri=True)
-        conn.row_factory = sqlite3.Row
-        
-        # Define um handler para monitorar o tempo de execução e abortar se passar do limite
-        start_time = time.time()
-        def _progress_handler():
-            if time.time() - start_time > timeout_segundos:
-                return 1 # abortar query
-            return 0
-            
-        # Invoca a cada 1000 instruções da máquina virtual do SQLite
-        conn.set_progress_handler(_progress_handler, 1000)
-        
+        if tem_progress_handler:
+            # Invoca a cada 1000 instruções da máquina virtual do SQLite.
+            conn.set_progress_handler(_progress_handler, 1000)
+
+        cur = conn.cursor()
         try:
-            cur = conn.cursor()
             cur.execute(sql)
             rows = cur.fetchall()
             total = len(rows)
-            preview_rows = [dict(r) for r in rows[:limite_preview]]
-            all_rows = [dict(r) for r in rows]
+            all_rows = _linhas_como_dicts(cur, rows)
+            preview_rows = all_rows[:limite_preview]
 
             return {
                 "ok": True,
@@ -121,7 +132,7 @@ def executar_sql_sqlite(
                 ),
             }
         finally:
-            conn.close()
+            cur.close()
     except sqlite3.OperationalError as e:
         erro_msg = str(e)
         if "interrupted" in erro_msg.lower():
@@ -143,3 +154,37 @@ def executar_sql_sqlite(
             "total_linhas_resultado": 0,
             "saida_terminal": f"[SANDBOX] Erro de execucao: {e}",
         }
+    finally:
+        # Remove o handler para não deixar efeito colateral na conexão.
+        if tem_progress_handler:
+            conn.set_progress_handler(None, 1000)
+
+
+def executar_sql_sqlite(
+    db_path: str,
+    sql: str,
+    limite_preview: int = 5,
+    timeout_segundos: float = 15.0,
+) -> dict[str, Any]:
+    """
+    Caminho legado: abre uma conexão SQLite somente-leitura a partir de
+    `db_path` e delega para `executar_sql_conn`. Mantido para compatibilidade
+    com chamadas que ainda passam o caminho do arquivo.
+    """
+    caminho = Path(db_path)
+    if not caminho.exists():
+        msg = f"Arquivo de banco nao encontrado: {db_path}"
+        return {
+            "ok": False,
+            "erro_execucao": msg,
+            "linhas_resultado_preview": [],
+            "linhas_resultado_completo": [],
+            "total_linhas_resultado": 0,
+            "saida_terminal": f"[SANDBOX] {msg}",
+        }
+
+    conn = sqlite3.connect(f"file:{caminho}?mode=ro", uri=True)
+    try:
+        return executar_sql_conn(conn, sql, limite_preview, timeout_segundos)
+    finally:
+        conn.close()
