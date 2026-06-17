@@ -7,7 +7,9 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
-
+from dotenv import load_dotenv
+load_dotenv()
+import os
 from tabulate import tabulate
 
 from .utils import salvar_metricas_csv
@@ -39,12 +41,17 @@ Retorne apenas:
 """
 
 
+<<<<<<< HEAD
 def construir_estado_inicial(pergunta: str, db_path: str | None = None) -> dict[str, Any]:
     """Cria o estado inicial padrão para uma execução do grafo.
 
     `db_path` é opcional: serve apenas como metadado (cache de schema/logs).
     O acesso ao banco é feito pela conexão injetada nos nós.
     """
+=======
+def construir_estado_inicial(pergunta: str, db_path: str, inferir_pks_virtuais: bool = False, inferir_fks_virtuais: bool = False, usar_schemacrawler: bool = False) -> dict[str, Any]:
+    """Cria o estado inicial padrão para uma execução do grafo."""
+>>>>>>> refs/remotes/origin/feature/RAG-schema
     return {
         "pergunta_original": pergunta,
         "pergunta_atual": pergunta,
@@ -60,6 +67,10 @@ def construir_estado_inicial(pergunta: str, db_path: str | None = None) -> dict[
         "espera_humana": False,
         "linhas_resultado_completo": [],
         "historico_tentativas": [],
+        "schemacrawler_bin": os.getenv("SCHEMACRAWLER_BIN", ""),
+        "inferir_pks_virtuais": inferir_pks_virtuais,
+        "inferir_fks_virtuais": inferir_fks_virtuais,
+        "usar_schemacrawler": usar_schemacrawler,
     }
 
 

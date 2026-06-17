@@ -4,21 +4,36 @@ interactions:
       sistema que transforma perguntas em consultas SQL.\n\nSeu papel: analisar a
       situa\u00e7\u00e3o atual e decidir a pr\u00f3xima a\u00e7\u00e3o.\n\nContexto
       atual:\n- Pergunta do usu\u00e1rio: \"Quem e o Brad Pitt?\"\n\n- conversa_previa:
-      Nenhuma\n\n- Schema: === SCHEMA SQLITE (INTROSPECCAO REAL) ===\n\nTabela: customers\n-
+      Nenhuma\n\n- Schema: === SCHEMA RELEVANTE (via RAG) ===\n\nTabela: products\n-
+      product_id: TEXT (PK)\n- product_category_name: TEXT\n- product_name_length:
+      REAL\n- product_description_length: REAL\n- product_photos_qty: REAL\n- product_weight_g:
+      REAL\n- product_length_cm: REAL\n- product_height_cm: REAL\n- product_width_cm:
+      REAL\n\nTabela: orders\n- order_id: TEXT (PK)\n- customer_id: TEXT\n- order_status:
+      TEXT\n- order_purchase_timestamp: TEXT\n- order_approved_at: TEXT\n- order_delivered_carrier_date:
+      TEXT\n- order_delivered_customer_date: TEXT\n- order_estimated_delivery_date:
+      TEXT\n  Foreign keys:\n  - customer_id -> customers.customer_id (on_update=NO
+      ACTION, on_delete=NO ACTION)\n\nTabela: order_items\n- order_id: TEXT (PK)\n-
+      order_item_id: INTEGER (PK)\n- product_id: TEXT\n- seller_id: TEXT\n- shipping_limit_date:
+      TEXT\n- price: REAL\n- freight_value: REAL\n  Foreign keys:\n  - seller_id ->
+      sellers.seller_id (on_update=NO ACTION, on_delete=NO ACTION)\n  - product_id
+      -> products.product_id (on_update=NO ACTION, on_delete=NO ACTION)\n  - order_id
+      -> orders.order_id (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela: customers\n-
       customer_id: TEXT (PK)\n- customer_unique_id: TEXT\n- customer_zip_code_prefix:
-      INTEGER\n- customer_city: TEXT\n- customer_state: TEXT\n\nTabela: geolocation\n-
-      geolocation_zip_code_prefix: INTEGER\n- geolocation_lat: REAL\n- geolocation_lng:
-      REAL\n- geolocation_city: TEXT\n- geolocation_state: TEXT\n\nTabela: order_items\n-
-      order_id: TEXT (PK)\n- order_item_id: INTEGER (PK)\n- product_id: TEXT\n- seller_id:
-      TEXT\n- shipping_limit_date: TEXT\n- price: \n\n- Feedback do cr\u00edtico:
-      Nenhum\n- Tentativas realizadas: 0\n- Status atual: schema_obtido\n- Erro anterior:
-      Nenhum\n\nAVALIA\u00c7\u00c3O CR\u00cdTICA:\nVerifique se a \"Pergunta do usu\u00e1rio\"
-      pode ser respondida com as tabelas e colunas do Schema.\nSe houver ambiguidade,
-      conceitos n\u00e3o mapeados no banco de dados, ou se a inten\u00e7\u00e3o do
-      usu\u00e1rio n\u00e3o estiver clara, voc\u00ea DEVE pedir mais informa\u00e7\u00f5es.\n\nResponda
-      EXATAMENTE no formato JSON abaixo, sem formata\u00e7\u00e3o markdown (```json):\n{{\n    \"decisao\":
+      INTEGER\n- customer_city: TEXT\n- customer_state: TEXT\n\nTabela: sellers\n-
+      seller_id: TEXT (PK)\n- seller_zip_code_prefix: INTEGER\n- seller_city: TEXT\n-
+      seller_state: TEXT\n\n=== RELA\u00c7\u00d5ES NECESS\u00c1RIAS (caminhos de JOIN)
+      ===\norders JOIN customers ON orders.customer_id = customers.customer_id\norder_items
+      JOIN orders ON order_items.order_id = orders.order_id\norder_items JOIN products
+      ON order_items.product_id = products.product_id\norder_items JOIN sellers ON
+      order_items.seller_id = sellers.seller_id\n\n\n- Feedback do cr\u00edtico: Nenhum\n-
+      Tentativas realizadas: 0\n- Status atual: schema_obtido\n- Erro anterior: Nenhum\n\nAVALIA\u00c7\u00c3O
+      CR\u00cdTICA:\nVerifique se a \"Pergunta do usu\u00e1rio\" pode ser respondida
+      com as tabelas e colunas do Schema.\nSe houver ambiguidade, conceitos n\u00e3o
+      mapeados no banco de dados, ou se a inten\u00e7\u00e3o do usu\u00e1rio n\u00e3o
+      estiver clara, voc\u00ea DEVE pedir mais informa\u00e7\u00f5es.\n\nResponda
+      EXATAMENTE no formato JSON abaixo, sem formata\u00e7\u00e3o markdown (```json):\n{\n    \"decisao\":
       \"escolha_uma_opcao\",\n    \"pergunta_ao_usuario\": \"escreva a pergunta aqui
-      se precisar de ajuda, ou deixe vazio se n\u00e3o precisar\"\n}}\n\nOp\u00e7\u00f5es
+      se precisar de ajuda, ou deixe vazio se n\u00e3o precisar\"\n}\n\nOp\u00e7\u00f5es
       v\u00e1lidas para ''decis\u00e3o'':\n- \"pronto_codificacao\" \u2192 se temos
       schema, a pergunta faz sentido e devemos gerar/regenerar SQL\n- \"revisando_estrategia\"
       \u2192 se o cr\u00edtico reprovou e devemos tentar uma abordagem diferente\n-
@@ -34,7 +49,7 @@ interactions:
       Connection:
       - k
       Content-Length:
-      - '2'
+      - '3'
       Content-Type:
       - a
       Host:
@@ -48,15 +63,15 @@ interactions:
   response:
     body:
       string: !!binary |
-        H4sIAAAAAAAC/2WSz2rbQBDG73qKYS+5OKEJNja9lPQPJYdS05pQqEoYa8f2ptKO2FmVJMYPU3oI
-        BHrsE+jFOmtbjtzqIHZnvtlv9rezzgBMgd46i5HEvISvGgFYb/8pxz6Sj5roQhqsMcRn7e5b99Yq
-        iXSXisw692mfG0uFE+Rcg7nxVJCIi3iDt43F3Aw6WU1h2fiU4JtGGgxuX3IpEHFOJQpYJzX79vcP
-        cgK+/cWQumyfKnB+waHC9rH9QwLC80BQqxNrVcEVw8nrgBamLsaTM7jmon0Cktj+hDpw0QQFwVBz
-        AIuWBYLaFY79doNQlE5RkAyg5AJL95CM1J0bcApJG0tuipJf5Sb3G9NDsjmsvw2eQQYuKVGq2FLZ
-        yTedwCycd7L6RCjsk+zz7OPUHLLOW7rT8IusM9gebRrBJX2giPqkeHg4ozes6jjj7+TfcLN90uFk
-        uDutNwJHgtFkn48csTxKjS/Gg/8Olrdq68r+bPTGRm+p1OJ9usrs3ZeZ6ZGI//TVsch6yExccbNc
-        xeMezyejbA9tx/GagrgdsCVVivD04mx0utDJWW0dTaA0P0JXNmnK2+k54vzhvb1fPoyvpkOZT9zl
-        0GSb7C9qGqlMHgMAAA==
+        H4sIAAAAAAAC/2VSwW4TMRC95ytGvvSSVmkQDeKCWoqqHhBRiVoQi6JhPUnc7noWjzcqjfI13JA4
+        8Qn5McabbLqB1cqy572ZeX6eVQ/A5OitsxhJzGv4ohGAVbMmjH0kHxVoQxqsMMRn7vZbdfZKifSY
+        kswq8+mcGUu5E+RMg5nxlJOIizjF+9piZvotraIwr30CeFpLjcHtUs5BT9DCIPwtEBxdBLQwdjEe
+        gd/8ZFBlWhpIIgYIVGDu2KNFQBawaNPqpGK/+b0kJ+BZfxEGcRKpxD58rwliQG1hCarAto4sfW2s
+        FqVNXjj1gwQIluQtWQ4kJ3DL+eYXzDk1dk3uDJ8oQF12RB8IUpGiZeLmT+VyljeZyfzadFxc7/df
+        +8/eBy4oGVuypaKlr1uCmTnvZHFDKOwT7ePkw9jsUaeCHzU86LUNmtKmFpzTe4oqLOL+rY1ev6zi
+        hB/Iv+W6mYJXZ2fbap2pOSCMBjs8csTiADodDkb9/yrLpfZ1RXeeOqOm18TCxR/pLpN3nyamY0X8
+        R1hrRq/jmYkLrueLeChyODrdwUJh6XKaOAqphT6ftxhsMrYxdevzLQVxW0PnVKrFx8OTl8ezAmXR
+        CDI6AzpUQtc2cdzV4B6XL8orvrx5Gl2Pp5/vLvj8wfTWvb/x021YcQMAAA==
     headers:
       Alt-Svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
@@ -65,11 +80,11 @@ interactions:
       Content-Type:
       - application/json; charset=UTF-8
       Date:
-      - Fri, 01 May 2026 23:13:28 GMT
+      - Sat, 06 Jun 2026 00:44:58 GMT
       Server:
       - scaffolding on HTTPServer2
       Server-Timing:
-      - gfet4t7; dur=1922
+      - gfet4t7; dur=2228
       Transfer-Encoding:
       - chunked
       Vary:
@@ -122,13 +137,13 @@ interactions:
   response:
     body:
       string: !!binary |
-        H4sIAAAAAAAC/2WR0U+DMBDG3/kryD1vZqLbkr0Y43yYiXEqMSZilsu4QSO0pD10G+F/t8DYOu0D
-        Kfd9ve/6a+X5PqxRxiJGJgMz/8NWfL9qv42mJJNkK/QlWyxQ88nbrcrZWwvTtjkEVQQsChXBLAKp
-        vnFVkE5KyRjBIIL+ZyWVzjETe4yxtT6XKFkZf50Jm07Gp60wTPlNBDU4SfVx/zk4zadVRk14rmLK
-        envdG2AjpDDpC6FRsrG9hk9LOKpCxrS15ZHXB7StoTSY0COxHZHxyAMKrfKCQ/VF8k6VLakgGHfd
-        HLLnhtFBZ8WYnUmTIBj8a2zmNlZkLnLnNewtLTreNVcJ799DcEjwn7l6Fp6DDDhVZZLy+YxX06l3
-        gNZxfCNtRAcsodwiHAYX4+EmQ5O2iaDJFEoaWsQt+/nyEjfEi8nO7KeLpXjYi5/ba/Bq7xdrmUMi
-        dQIAAA==
+        H4sIAAAAAAAC/2WR3WqDQBCF730KmeukiCE/5KaUttBQQtNWSqGWMMSJbqu7sjuGNOK7d9WYmNYL
+        WeecnTPzWTquCxuUkYiQycDc/bAV1y2bd60pySTZCl3JFnPUfPa2T9k7WwvTvr4EZQgschXCPASp
+        drjOSceFZAxhEEL3sZZKZ5iKA0bYWJ8LlKyMu0mFTSfj0l4Ypuw6hAp6SdXp/Dk4z6dVSnV4piJK
+        O3vVGWArpDDJC6FRsra9Bk8rOKlCRrS3Zc/pAprWUBiMaUlsR2Q88YBcqyznQH2TvFVFQ8r3x223
+        HtlLg3fUWTGmF9LEmw3+NTZ3NlakfeS9v2G3tOj4p14luH8PoEeC/8zVsXB6yIATVcQJX844moyO
+        siG9ExsKBOk6wrBdCnVUc22YtpjfSBvR8owps4SH/tV4uE3RJM1AoMnkShpaRLVH+N4X5nL6MCsW
+        h+lixfgozc0SnMr5BSfUtKCUAgAA
     headers:
       Alt-Svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
@@ -137,99 +152,11 @@ interactions:
       Content-Type:
       - application/json; charset=UTF-8
       Date:
-      - Fri, 01 May 2026 23:13:30 GMT
+      - Sat, 06 Jun 2026 00:45:01 GMT
       Server:
       - scaffolding on HTTPServer2
       Server-Timing:
-      - gfet4t7; dur=2302
-      Transfer-Encoding:
-      - chunked
-      Vary:
-      - Origin
-      - X-Origin
-      - Referer
-      X-Content-Type-Options:
-      - nosniff
-      X-Frame-Options:
-      - SAMEORIGIN
-      X-Gemini-Service-Tier:
-      - standard
-      X-XSS-Protection:
-      - '0'
-    status:
-      code: 200
-      message: OK
-- request:
-    body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 o planejador de um
-      sistema que transforma perguntas em consultas SQL.\n\nSeu papel: analisar a
-      situa\u00e7\u00e3o atual e decidir a pr\u00f3xima a\u00e7\u00e3o.\n\nContexto
-      atual:\n- Pergunta do usu\u00e1rio: \"Quantos clientes existem?\"\n\n- conversa_previa:
-      [[\"ai: As tabelas dispon\u00edveis n\u00e3o cont\u00eam informa\u00e7\u00f5es
-      sobre pessoas como ''Brad Pitt''. Voc\u00ea est\u00e1 procurando por dados relacionados
-      a clientes, localiza\u00e7\u00e3o ou itens de pedido?\", ''user: Quero saber
-      quantos clientes existem'']]\n\n- Schema: === SCHEMA SQLITE (INTROSPECCAO REAL)
-      ===\n\nTabela: customers\n- customer_id: TEXT (PK)\n- customer_unique_id: TEXT\n-
-      customer_zip_code_prefix: INTEGER\n- customer_city: TEXT\n- customer_state:
-      TEXT\n\nTabela: geolocation\n- geolocation_zip_code_prefix: INTEGER\n- geolocation_lat:
-      REAL\n- geolocation_lng: REAL\n- geolocation_city: TEXT\n- geolocation_state:
-      TEXT\n\nTabela: order_items\n- order_id: TEXT (PK)\n- order_item_id: INTEGER
-      (PK)\n- product_id: TEXT\n- seller_id: TEXT\n- shipping_limit_date: TEXT\n-
-      price: \n\n- Feedback do cr\u00edtico: Nenhum\n- Tentativas realizadas: 0\n-
-      Status atual: iniciado\n- Erro anterior: Nenhum\n\nAVALIA\u00c7\u00c3O CR\u00cdTICA:\nVerifique
-      se a \"Pergunta do usu\u00e1rio\" pode ser respondida com as tabelas e colunas
-      do Schema.\nSe houver ambiguidade, conceitos n\u00e3o mapeados no banco de dados,
-      ou se a inten\u00e7\u00e3o do usu\u00e1rio n\u00e3o estiver clara, voc\u00ea
-      DEVE pedir mais informa\u00e7\u00f5es.\n\nResponda EXATAMENTE no formato JSON
-      abaixo, sem formata\u00e7\u00e3o markdown (```json):\n{{\n    \"decisao\": \"escolha_uma_opcao\",\n    \"pergunta_ao_usuario\":
-      \"escreva a pergunta aqui se precisar de ajuda, ou deixe vazio se n\u00e3o precisar\"\n}}\n\nOp\u00e7\u00f5es
-      v\u00e1lidas para ''decis\u00e3o'':\n- \"pronto_codificacao\" \u2192 se temos
-      schema, a pergunta faz sentido e devemos gerar/regenerar SQL\n- \"revisando_estrategia\"
-      \u2192 se o cr\u00edtico reprovou e devemos tentar uma abordagem diferente\n-
-      \"necessita_ajuda\" \u2192 a pergunta n\u00e3o \u00e9 clara, n\u00e3o faz sentido,
-      falta contexto ou n\u00e3o h\u00e1 dados no schema para responder.\n"}], "role":
-      "user"}], "safetySettings": [], "generationConfig": {"temperature": 0.7, "candidateCount":
-      1}}'
-    headers:
-      Accept:
-      - '*'
-      Accept-Encoding:
-      - g
-      Connection:
-      - k
-      Content-Length:
-      - '2'
-      Content-Type:
-      - a
-      Host:
-      - g
-      User-Agent:
-      - g
-      x-goog-api-client:
-      - g
-    method: POST
-    uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
-  response:
-    body:
-      string: !!binary |
-        H4sIAAAAAAAC/2WRXU+DMBSG7/kVpNebccwZ9c5ML7wwLo4YE1mWM3oGzaAl7cFsEv67LYytU5qQ
-        9j1vz8fTJghDloLkggOhYQ/hl1XCsOn+LqYkoSQbGCQrVqDp7O2/xttbC+HeXWJNIt05YRxTYUAl
-        VkxYpW1atU4VF1uRQur00eCsUGe1JFiDWtemBi2Ot+ySLfPqtKf9anTuTqsCXelScSwGezsY2FZI
-        YfJ3BKOksy3jtwU7RYXkuLfydTAU6FKz2kCGr0hgOcGJhhukrChWO5RzVXecZlHUZ/O4Xhii+2Oc
-        FEFxEbq9m47+JTZPtqwofODeW9gpoRB0cKPEz58x80jQn74GFoGHjFGu6iynyx4nU2fuoPUcP1Ab
-        0QPLsLQIx9HVbLwtwORdRabRVEoafOEd+5/FBFK5mX8vb0raLeRGzw6PigVt8AtwLS/ocwIAAA==
-    headers:
-      Alt-Svc:
-      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
-      Content-Encoding:
-      - gzip
-      Content-Type:
-      - application/json; charset=UTF-8
-      Date:
-      - Fri, 01 May 2026 23:13:32 GMT
-      Server:
-      - scaffolding on HTTPServer2
-      Server-Timing:
-      - gfet4t7; dur=1455
+      - gfet4t7; dur=2822
       Transfer-Encoding:
       - chunked
       Vary:
@@ -256,7 +183,101 @@ interactions:
       comando de escrita.\n- N\u00c3O inclua explica\u00e7\u00f5es, apenas a SQL pura.\n-
       Use nomes de tabelas e colunas EXATAMENTE como aparecem no schema.\n- Se a pergunta
       for amb\u00edgua, fa\u00e7a a interpreta\u00e7\u00e3o mais razo\u00e1vel.\n\n===
-      SCHEMA DO BANCO ===\n=== SCHEMA SQLITE (INTROSPECCAO REAL) ===\n\nTabela: customers\n-
+      SCHEMA DO BANCO ===\n=== SCHEMA RELEVANTE (via RAG) ===\n\nTabela: products\n-
+      product_id: TEXT (PK)\n- product_category_name: TEXT\n- product_name_length:
+      REAL\n- product_description_length: REAL\n- product_photos_qty: REAL\n- product_weight_g:
+      REAL\n- product_length_cm: REAL\n- product_height_cm: REAL\n- product_width_cm:
+      REAL\n\nTabela: orders\n- order_id: TEXT (PK)\n- customer_id: TEXT\n- order_status:
+      TEXT\n- order_purchase_timestamp: TEXT\n- order_approved_at: TEXT\n- order_delivered_carrier_date:
+      TEXT\n- order_delivered_customer_date: TEXT\n- order_estimated_delivery_date:
+      TEXT\n  Foreign keys:\n  - customer_id -> customers.customer_id (on_update=NO
+      ACTION, on_delete=NO ACTION)\n\nTabela: order_items\n- order_id: TEXT (PK)\n-
+      order_item_id: INTEGER (PK)\n- product_id: TEXT\n- seller_id: TEXT\n- shipping_limit_date:
+      TEXT\n- price: REAL\n- freight_value: REAL\n  Foreign keys:\n  - seller_id ->
+      sellers.seller_id (on_update=NO ACTION, on_delete=NO ACTION)\n  - product_id
+      -> products.product_id (on_update=NO ACTION, on_delete=NO ACTION)\n  - order_id
+      -> orders.order_id (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela: customers\n-
+      customer_id: TEXT (PK)\n- customer_unique_id: TEXT\n- customer_zip_code_prefix:
+      INTEGER\n- customer_city: TEXT\n- customer_state: TEXT\n\nTabela: sellers\n-
+      seller_id: TEXT (PK)\n- seller_zip_code_prefix: INTEGER\n- seller_city: TEXT\n-
+      seller_state: TEXT\n\n=== RELA\u00c7\u00d5ES NECESS\u00c1RIAS (caminhos de JOIN)
+      ===\norders JOIN customers ON orders.customer_id = customers.customer_id\norder_items
+      JOIN orders ON order_items.order_id = orders.order_id\norder_items JOIN products
+      ON order_items.product_id = products.product_id\norder_items JOIN sellers ON
+      order_items.seller_id = sellers.seller_id\n\n\n=== PERGUNTA DO USU\u00c1RIO
+      ===\nQuero saber quantos clientes existem\n\n=== CONVERSA PR\u00c9VIA (CONTEXTO
+      ADICIONAL) ===\n[[\"ai: A sua pergunta sobre ''Brad Pitt'' n\u00e3o parece estar
+      relacionada aos dados dispon\u00edveis no nosso sistema, que trata de produtos,
+      pedidos, clientes e vendedores. Voc\u00ea gostaria de fazer uma pergunta relacionada
+      a esses t\u00f3picos?\", ''user: Quero saber quantos clientes existem'']]\n\n===
+      HIST\u00d3RICO DE TENTATIVAS ANTERIORES ===\nNenhuma tentativa anterior.\n\nResponda
+      APENAS com a consulta SQL, sem markdown, sem explica\u00e7\u00e3o."}], "role":
+      "user"}], "safetySettings": [], "generationConfig": {"temperature": 0.7, "candidateCount":
+      1}}'
+    headers:
+      Accept:
+      - '*'
+      Accept-Encoding:
+      - g
+      Connection:
+      - k
+      Content-Length:
+      - '3'
+      Content-Type:
+      - a
+      Host:
+      - g
+      User-Agent:
+      - g
+      x-goog-api-client:
+      - g
+    method: POST
+    uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAC/12RUU/CMBSF3/crmj5pIgZIDOqbwRkxwghWNDHGNOzCils72ztFCP/ddqNQ3EPT
+        3HN67z3fNhEhdMZlKlKOYOg1ebMVQjb16TQlESRawZdsseQaD97m2wR3a0FYuUf0KX6M+4z0k+cR
+        O5lVBlUB+kOkp+RukgyJrxgaPN/u7+9nh6Fa5eA6FiqF3Nu33kDnQgqTTYAbJevBLBnTvSpkCitb
+        bkd+QN2aVoYvYAjIbXy+D0lLrYoSmfoE2VdVHf+y02u6BbiODFc7GRXy/Fjp+qdBX3Nrp4o8xBgQ
+        tiF5LvDXJWHxK6MBCPy3lkcRBcQoZqpaZHi8Yqfd2ckG9LeYAROg3QiDNhPXqcNaI20oT+2PEQ3O
+        BRQWcKt7ftGa59xk9UJUgymVNDBInWf50l5ybH2NHu6n695gnCVy/HMT02gb/QHb00K7aAIAAA==
+    headers:
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=UTF-8
+      Date:
+      - Sat, 06 Jun 2026 00:45:02 GMT
+      Server:
+      - scaffolding on HTTPServer2
+      Server-Timing:
+      - gfet4t7; dur=1187
+      Transfer-Encoding:
+      - chunked
+      Vary:
+      - Origin
+      - X-Origin
+      - Referer
+      X-Content-Type-Options:
+      - nosniff
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Gemini-Service-Tier:
+      - standard
+      X-XSS-Protection:
+      - '0'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 um revisor de qualidade
+      para consultas SQL geradas por IA.\n\nSua tarefa: avaliar se a consulta SQL
+      e seus resultados respondem adequadamente\n\u00e0 pergunta original do usu\u00e1rio.\n\n===
+      PERGUNTA DO USU\u00c1RIO ===\nQuero saber quantos clientes existem\n\n=== SCHEMA
+      DO BANCO ===\n=== SCHEMA SQLITE (INTROSPECCAO REAL) ===\n\nTabela: customers\n-
       customer_id: TEXT (PK)\n- customer_unique_id: TEXT\n- customer_zip_code_prefix:
       INTEGER\n- customer_city: TEXT\n- customer_state: TEXT\n\nTabela: geolocation\n-
       geolocation_zip_code_prefix: INTEGER\n- geolocation_lat: REAL\n- geolocation_lng:
@@ -282,87 +303,69 @@ interactions:
       REAL\n- product_photos_qty: REAL\n- product_weight_g: REAL\n- product_length_cm:
       REAL\n- product_height_cm: REAL\n- product_width_cm: REAL\n\nTabela: sellers\n-
       seller_id: TEXT (PK)\n- seller_zip_code_prefix: INTEGER\n- seller_city: TEXT\n-
-      seller_state: TEXT\n\n\n=== PERGUNTA DO USU\u00c1RIO ===\nQuantos clientes existem?\n\n===
-      CONVERSA PR\u00c9VIA (CONTEXTO ADICIONAL) ===\n[[\"ai: As tabelas dispon\u00edveis
-      n\u00e3o cont\u00eam informa\u00e7\u00f5es sobre pessoas como ''Brad Pitt''.
-      Voc\u00ea est\u00e1 procurando por dados relacionados a clientes, localiza\u00e7\u00e3o
-      ou itens de pedido?\", ''user: Quero saber quantos clientes existem'']]\n\n===
-      FEEDBACK CR\u00cdTICO (SE HOUVER) ===\n\n\nResponda APENAS com a consulta SQL,
-      sem markdown, sem explica\u00e7\u00e3o."}], "role": "user"}], "safetySettings":
-      [], "generationConfig": {"temperature": 0.7, "candidateCount": 1}}'
-    headers:
-      Accept:
-      - '*'
-      Accept-Encoding:
-      - g
-      Connection:
-      - k
-      Content-Length:
-      - '3'
-      Content-Type:
-      - a
-      Host:
-      - g
-      User-Agent:
-      - g
-      x-goog-api-client:
-      - g
-    method: POST
-    uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
-  response:
-    body:
-      string: !!binary |
-        H4sIAAAAAAAC/12QXUvDMBSG7/srQq4UrKzD7zvpJgzcBzOKKCJxOVvD0qQ0p7BZ9t9N22XLzEUI
-        7/uec3KeOiKELrgWUnAESx/Ip1MIqdu78YxG0OgMLzmx4CUes92pg7eLIGyaIvoyfB6mjKTT1wk7
-        W1QWTQ7ltxTn5Gk+HROvWBqU7w7vr4vj0NIoaDrmRoDy8Z0P0KXU0mZz4NbodjCbzujBlVrAxsm9
-        yA9oW9PK8hWMAblbnx+WpEVp8gKZWYNOTdWuf9+/6boFuE4DexsNcnXiJL3E1waN7cCNlSrkGCB2
-        W3IlcduswobvjAYk8N+/PIsoQEYxM9Uqw9M/3iXRnlmH8c2Rlx2vFeSOYNy/vI6XitusHUhLsIXR
-        FkaiyejBLOEfVTX5iZe/t6NZfrXN1o+GRrvoDyEzHVFJAgAA
-    headers:
-      Alt-Svc:
-      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
-      Content-Encoding:
-      - gzip
-      Content-Type:
-      - application/json; charset=UTF-8
-      Date:
-      - Fri, 01 May 2026 23:13:33 GMT
-      Server:
-      - scaffolding on HTTPServer2
-      Server-Timing:
-      - gfet4t7; dur=1115
-      Transfer-Encoding:
-      - chunked
-      Vary:
-      - Origin
-      - X-Origin
-      - Referer
-      X-Content-Type-Options:
-      - nosniff
-      X-Frame-Options:
-      - SAMEORIGIN
-      X-Gemini-Service-Tier:
-      - standard
-      X-XSS-Protection:
-      - '0'
-    status:
-      code: 200
-      message: OK
-- request:
-    body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 um revisor de qualidade
-      para consultas SQL geradas por IA.\n\nSua tarefa: avaliar se a consulta SQL
-      e seus resultados respondem adequadamente\n\u00e0 pergunta original do usu\u00e1rio.\n\n===
-      PERGUNTA DO USU\u00c1RIO ===\nQuantos clientes existem?\n\n=== CONVERSA COM
-      O AGENTE (se houver) ===\n[[\"ai: As tabelas dispon\u00edveis n\u00e3o cont\u00eam
-      informa\u00e7\u00f5es sobre pessoas como ''Brad Pitt''. Voc\u00ea est\u00e1
-      procurando por dados relacionados a clientes, localiza\u00e7\u00e3o ou itens
-      de pedido?\", ''user: Quero saber quantos clientes existem'']]\n\n=== SQL GERADA
-      ===\nSELECT COUNT(customer_id) FROM customers\n\n=== RESULTADO DA EXECU\u00c7\u00c3O
-      ===\nStatus: exec_ok\nTotal de linhas: 1\nAmostra dos resultados (primeiras
-      linhas):\n[{''COUNT(customer_id)'': 99441}]\n\n=== ERROS (se houver) ===\nNenhum\n\nAvalie:\n1.
-      A SQL responde \u00e0 pergunta do usu\u00e1rio?\n2. Os resultados fazem sentido?\n3.
-      H\u00e1 algum erro l\u00f3gico ou de interpreta\u00e7\u00e3o?\n\nResponda no
-      formato:\nVEREDITO: APROVADO ou REPROVADO\nFEEDBACK: <sua avalia\u00e7\u00e3o
+      seller_state: TEXT\n\n\n=== CONVERSA COM O AGENTE (se houver) ===\n[[\"ai: A
+      sua pergunta sobre ''Brad Pitt'' n\u00e3o parece estar relacionada aos dados
+      dispon\u00edveis no nosso sistema, que trata de produtos, pedidos, clientes
+      e vendedores. Voc\u00ea gostaria de fazer uma pergunta relacionada a esses t\u00f3picos?\",
+      ''user: Quero saber quantos clientes existem'']]\n\n=== SQL GERADA ===\nSELECT
+      COUNT(customer_id) FROM customers\n\n=== RESULTADO DA EXECU\u00c7\u00c3O ===\nStatus:
+      exec_ok\nTotal de linhas: 1\nAmostra dos resultados (primeiras linhas):\n[{''COUNT(customer_id)'':
+      99441}]\n\n=== ERROS (se houver) ===\nNenhum\n\n=== TENTATIVAS ANTERIORES ===\nNenhuma
+      tentativa anterior (esta \u00e9 a primeira).\n\n=== EXEMPLOS DE AVALIA\u00c7\u00c3O
+      ===\n\n-- EXEMPLO 1: REPROVADO (escopo incompleto) --\nPergunta: \"Which airport
+      has the least number of flights?\"\nSQL: SELECT SourceAirport FROM flights GROUP
+      BY SourceAirport ORDER BY COUNT(*) ASC LIMIT 1\nResultado: [(''AID'',)]\nVEREDITO:
+      REPROVADO\nRaz\u00e3o: A query conta apenas voos com partida (SourceAirport)
+      e ignora voos com chegada (DestAirport).\nO escopo da pergunta \u00e9 \"flights\"
+      em geral \u2014 a query responde a uma pergunta diferente.\n\n-- EXEMPLO 2:
+      REPROVADO (erro sem\u00e2ntico: MIN vs MAX) --\nPergunta: \"Which Asian countries
+      have a population larger than any country in Africa?\"\nSQL: SELECT Name FROM
+      country WHERE Continent=''Asia'' AND Population > (SELECT MAX(Population) FROM
+      country WHERE Continent=''Africa'')\nResultado: [] (vazio)\nVEREDITO: REPROVADO\nRaz\u00e3o:
+      \"Larger than any country in Africa\" significa maior que pelo menos um pa\u00eds
+      africano (MIN),\nn\u00e3o maior que todos os pa\u00edses africanos (MAX). A
+      l\u00f3gica est\u00e1 semanticamente errada.\n\n-- EXEMPLO 3: REPROVADO (resultado
+      vazio suspeito) --\nPergunta: \"Find the last name of students who live in North
+      Carolina and are not enrolled in any degree.\"\nSQL: SELECT last_name FROM Students
+      WHERE state_province_county = ''North Carolina'' AND ...\nResultado: [] (vazio)\nVEREDITO:
+      REPROVADO\nRaz\u00e3o: Resultado vazio quando a pergunta espera dados reais
+      \u00e9 suspeito. Verifique se o filtro\nde string corresponde exatamente ao
+      valor no banco (ex: ''NorthCarolina'' vs ''North Carolina'').\n\n-- EXEMPLO
+      4: REPROVADO (JOIN incorreto muda o que est\u00e1 sendo contado) --\nPergunta:
+      \"Find the name of makers that produced some cars in 1970.\"\nSQL: SELECT DISTINCT
+      Maker FROM car_makers JOIN car_names ON car_makers.Id = car_names.MakeId JOIN
+      cars_data ON car_names.MakeId = cars_data.Id WHERE cars_data.Year = 1970\nResultado:
+      [(''chevrolet'',), (''buick'',)]\nVEREDITO: REPROVADO\nRaz\u00e3o: O JOIN usa
+      car_names.MakeId para conectar a cars_data, mas cars_data.Id refere-se\nao ID
+      do carro, n\u00e3o do fabricante. O caminho correto seria via model_list. Os
+      resultados\nparecem plaus\u00edveis mas derivam de uma jun\u00e7\u00e3o incorreta.\n\n--
+      EXEMPLO 5: APROVADO (formato diferente, resposta correta) --\nPergunta: \"On
+      average, when were the transcripts printed?\"\nSQL: SELECT AVG(transcript_date)
+      AS average_transcript_date FROM Transcripts\nResultado: [(''1989.9333333333334'',)]\nVEREDITO:
+      APROVADO\nRaz\u00e3o: O resultado \u00e9 um n\u00famero que representa a m\u00e9dia
+      das datas (formato num\u00e9rico do SQLite).\nEmbora n\u00e3o seja uma data
+      formatada, responde corretamente \u00e0 pergunta. Diferen\u00e7a de\nrepresenta\u00e7\u00e3o
+      n\u00e3o \u00e9 motivo de reprova\u00e7\u00e3o.\n\n-- EXEMPLO 6: APROVADO (query
+      mais simples que o gold, resultado equivalente) --\nPergunta: \"Which model
+      of car has the minimum horsepower?\"\nSQL: SELECT Model FROM car_names JOIN
+      cars_data ON car_names.MakeId = cars_data.Id WHERE Horsepower = (SELECT MIN(Horsepower)
+      FROM cars_data) LIMIT 1\nResultado: [(''triumph'',)]\nVEREDITO: APROVADO\nRaz\u00e3o:
+      A query retorna corretamente o modelo com menor pot\u00eancia. O LIMIT 1 garante
+      unicidade\ne o resultado \u00e9 semanticamente correto. Aprovar.\n\n=== CRIT\u00c9RIOS
+      DE AVALIA\u00c7\u00c3O ===\n\nREPROVE quando houver:\n- Escopo incompleto: query
+      cobre apenas parte do que a pergunta pede\n- Erro sem\u00e2ntico: l\u00f3gica
+      correta na forma mas errada no significado (MIN vs MAX, ANY vs ALL)\n- JOIN
+      incorreto que altera os dados sendo agregados ou filtrados\n- Resultado vazio
+      quando a pergunta claramente espera dados\n- Filtro com valor literal diferente
+      do que est\u00e1 no banco\n- M\u00e9trica errada (SUM vs AVG, COUNT vs COUNT
+      DISTINCT, etc.)\n- Erro de execu\u00e7\u00e3o SQL\n\nAPROVE quando:\n- O resultado
+      responde \u00e0 pergunta, mesmo com formato ou representa\u00e7\u00e3o diferente\n-
+      H\u00e1 colunas extras que n\u00e3o prejudicam a resposta\n- A precis\u00e3o
+      num\u00e9rica difere mas o valor est\u00e1 correto\n- A query \u00e9 mais simples
+      que o esperado mas semanticamente equivalente\n\nAvalie com rigor sem\u00e2ntico.
+      Resultados que parecem plaus\u00edveis mas derivam de l\u00f3gica\nincorreta
+      devem ser reprovados. N\u00e3o presuma que uma query bem-formada est\u00e1 correta.\n\nResponda
+      no formato:\nVEREDITO: APROVADO ou REPROVADO\nFEEDBACK: <sua avalia\u00e7\u00e3o
       em 1-3 frases>"}], "role": "user"}], "safetySettings": [], "generationConfig":
       {"temperature": 0.7, "candidateCount": 1}}'
     headers:
@@ -373,7 +376,7 @@ interactions:
       Connection:
       - k
       Content-Length:
-      - '1'
+      - '7'
       Content-Type:
       - a
       Host:
@@ -387,16 +390,15 @@ interactions:
   response:
     body:
       string: !!binary |
-        H4sIAAAAAAAC/2VSTW/TQBC951eM9gRSGjVVQtXeQuKKiBaniQlIgMgSb5It6x2zH1WbKP8FxAH1
-        zI2r/xizsZw44IO1mnn73pu3s2kAsDnXqUy5E5ZdwgeqAGx2/9BD7YR21KhKVMy5cQds+W1qZ4I4
-        8RAusWk0jgbDJL6E3mgcT3uD+KO+iqLBy17/NdWA+K1XjsPk9hpmk+g66ifQj9++SZ7NvXWYCfNZ
-        ps/hahzfQFWxMzDC5qhTAak0wvGMPAoovkMuzNJr4ksRvPXFDyOxGVQcDYmAoIs/xIBAV+dKhmsW
-        NAfHvwjFYXaQaEEcVII5uji7uOh02jMonsBncM8VGtA+K56MnCN88wIWfA2W+CSh55iRfMZL4aXI
-        QJDwTwSeE6UI/oQxaEEVv5dEYAF9cCTJjsnDQMUvgrdYLdTt/vypeXgKg0qEnDNMharg2wrAFlJL
-        uxoLblEH2CSJR2zflRTgA5VPG5XAjpp5S55vyAUtBd8/PcsNZrlL8KvQffS7pTh70S3Zakt0BDiv
-        +g4dV0etTve0+R+xHZCsVPXtqi0eTcmVdI9hlCR6n7BaEu4fX1UWjVpkzK3QL1fu2GO7HQLYhVbm
-        OKX3l2Vg9HYU4clZq3uyUNyudoqs3D4rhmnA6LtRm6ej1av7u+n6fDhau3fj7NayxrbxF7u4rjZg
-        AwAA
+        H4sIAAAAAAAC/2VSwY7aQAy98xXWnFqJRWyq3cPeKIQKdbehkKJKpYJpYmC2yQzMOLu0iH/ptb+w
+        V36sHtJAaHOYWPbzs/3sXQNAJFKnKpWETtzBF/YA7I6vjxlNqIkDlYuda2npjC2/Xc1mCOHWJ4lJ
+        OAp7gzi6g85wFE06vWiq+2HYe9vpvmcfML8rMpIw/ngP83F4H3Zj6EafPsSvksKRydHOVPoa+qPo
+        ASqPm/s8TkqMtUgy5w4RDOjDC0cNpAiDnvO/JFM+5kBLIPkNMwnzM0uTczYFljRubTRnpOrMePgF
+        a7TLwpeaik0hNRl35sStcoT5VLQgAibwc6QGFsZqTBRbh99Q5KeuDi9aJQZ8ObSeoSVqmu1P9tfm
+        WWlrMvQy5ibFrILvK4BYKK3caoTSGe1h4zgailNU8TxbdrcbVYEjtSicXOIDT8k7l6fNirU1+Zpi
+        8x111xTHnQft63ZJVzuSC8Ttm79xMiSzy+QguG3+R+16XFhl9fOpXRbPKTNFP/wwcfg5FjUt6N/O
+        KjkaNdUErUyxXNFll9c3VZsO7ZNKMFZofQ1HPJa0qZf2KGup9ISvQ5WSLjFnka+C1s3VIpNudexI
+        lOficJB6zGPQfpQ0M/3h4ueG3HD2FLxTnWfR2Df+AM7jezhhAwAA
     headers:
       Alt-Svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
@@ -405,11 +407,11 @@ interactions:
       Content-Type:
       - application/json; charset=UTF-8
       Date:
-      - Fri, 01 May 2026 23:13:35 GMT
+      - Sat, 06 Jun 2026 00:45:04 GMT
       Server:
       - scaffolding on HTTPServer2
       Server-Timing:
-      - gfet4t7; dur=1607
+      - gfet4t7; dur=1798
       Transfer-Encoding:
       - chunked
       Vary:

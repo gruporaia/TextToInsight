@@ -83,9 +83,9 @@ def nos_nodo_planejador(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI
         }
     
     diretrizes = """Responda EXATAMENTE no formato JSON abaixo, sem formatação markdown (```json):
-{{
+{
     "decisao": "escolha_uma_opcao"
-}}
+}
 Opções válidas para 'decisão':
 - "pronto_codificacao" → se temos schema, a pergunta faz sentido e devemos gerar/regenerar SQL
 - "revisando_estrategia" → se o crítico reprovou e devemos tentar uma abordagem diferente"""
@@ -96,10 +96,10 @@ Verifique se a "Pergunta do usuário" pode ser respondida com as tabelas e colun
 Se houver ambiguidade, conceitos não mapeados no banco de dados, ou se a intenção do usuário não estiver clara, você DEVE pedir mais informações.
 
 Responda EXATAMENTE no formato JSON abaixo, sem formatação markdown (```json):
-{{
+{
     "decisao": "escolha_uma_opcao",
     "pergunta_ao_usuario": "escreva a pergunta aqui se precisar de ajuda, ou deixe vazio se não precisar"
-}}
+}
 
 Opções válidas para 'decisão':
 - "pronto_codificacao" → se temos schema, a pergunta faz sentido e devemos gerar/regenerar SQL

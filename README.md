@@ -8,10 +8,11 @@ O namespace oficial do pacote e `text_to_insight`.
 
 O runtime padrao garante:
 
-- fluxo completo do grafo (planejador -> schema -> agente de codigo -> executor -> critico -> resposta);
+- fluxo completo do grafo (planejador -> schema -> agente de codigo -> executor -> critico -> salvar CSV -> roteador grafico -> gerador grafico (quando aplicavel) -> resposta);
 - HITL ligado e desligado;
 - retomada por `thread_id`;
-- persistencia de metricas em `data/metricas_execucao.csv`.
+- persistencia de metricas em `data/metricas_execucao.csv`;
+- geracao opcional de graficos quando a visualizacao for relevante.
 
 ## Contrato HITL (perguntas)
 
@@ -43,6 +44,8 @@ engine = InsightEngine(
     model="gemini-2.5-flash",
     db_path="data/olist_relational.db",
     hitl=True,
+    inferir_fks_virtuais=False, # (Opcional) Infere FKs baseadas em colunas _id (ex: tabelas do Spider 2)
+    usar_schemacrawler=True,    # (Opcional) Desative para forçar o fallback ao PRAGMA do SQLite
 )
 
 resultado = engine.run(
@@ -76,6 +79,9 @@ python main.py --hitl on "Quais categorias vendem mais?"
 # modo nao interativo
 python main.py --hitl off "Quais categorias vendem mais?"
 
+# desativando schemacrawler e forçando FKs virtuais (Spider 2 local)
+python main.py --hitl off --infer-fks on --use-schemacrawler off "Quantos times tem no banco?"
+
 # via entrypoint instalado pelo pacote
 text-to-insight --hitl on "Quantos pedidos existem no banco?"
 ```
@@ -100,6 +106,10 @@ O template de apresentacao usa `tabulate` para montar as linhas da query:
 - Ate 5 linhas: exibe a tabela completa
 - Acima de 5 linhas: mostra as 3 primeiras, omite as intermediarias, exibe as 2 ultimas
 - Resultado completo e exportado em CSV em `results/` automaticamente
+
+### Geração de gráficos
+
+Quando o roteador de gráficos decide que a visualização é útil, um grafico é salvo em `graphs/` a partir do CSV de resultados.
 
 ## Testes
 
@@ -137,10 +147,59 @@ pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=none
 
 As cassetes ficam em `tests/cassettes/`.
 
+Para gravar cassetes com um provider/modelo especifico, sobrescreva o ambiente antes de rodar o pytest:
+
+```bash
+TEXT_TO_INSIGHT_TEST_PROVIDER=google \
+TEXT_TO_INSIGHT_TEST_MODEL=gemini-2.5-flash \
+pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=new_episodes
+```
+
+```bash
+TEXT_TO_INSIGHT_TEST_PROVIDER=openai \
+TEXT_TO_INSIGHT_TEST_MODEL=gpt-4o-mini \
+pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=new_episodes
+```
+
+Se você preferir definir em comandos separados, use `export` antes de rodar o `pytest`. Sem `export`, a variavel fica apenas no shell atual e os testes nao herdam o valor.
+
+Uso recomendado:
+
+```bash
+export TEXT_TO_INSIGHT_TEST_PROVIDER=google
+export TEXT_TO_INSIGHT_TEST_MODEL=gemini-2.5-flash
+pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=new_episodes
+```
+
+Se quiser tudo em uma linha só, sem `export`, use:
+
+```bash
+TEXT_TO_INSIGHT_TEST_PROVIDER=google TEXT_TO_INSIGHT_TEST_MODEL=gemini-2.5-flash \
+pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=new_episodes
+```
+
+Sem esses overrides, a suite tenta `GOOGLE_API_KEY` primeiro e depois `OPENAI_API_KEY`.
+
 Teste opcional com API real (drift provider/modelo):
 
 ```bash
 pytest tests/test_real_api_smoke.py -v -s -m real_api
+```
+
+## Benchmark Spider
+
+Spider 1.0 (requer `spider_data/` com `dev.json` e `database/`):
+
+```bash
+python scripts/test_spider_eval.py --sample-size 10 --seed 42 --data-dir spider_data
+```
+
+Spider 2.0 Lite (requer `spider2-lite/` e bancos em `spider2-lite/resource/databases/spider2-localdb`):
+
+```bash
+python scripts/test_spider2_eval.py --sample-size 10 --seed 42 \
+    --data-dir spider2-lite \
+    --sqlite-dir spider2-lite/resource/databases/spider2-localdb
 ```
 
 ## CI hibrida

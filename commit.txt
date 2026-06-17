@@ -1,0 +1,34 @@
+feat: adicionar FKs virtuais robustas, RAG Adaptativo, injeção de conhecimentos e correções do agente
+
+Implementação focada em melhorar o suporte aos bancos do benchmark Spider 2, resolver limitações matemáticas do SQLite e corrigir loops infinitos no grafo. A nova lógica garante um mecanismo inteligente para inferir chaves, recuperar contextos complexos e blindar o sistema contra erros de roteamento e limitações de dialeto.
+
+Detalhes das alterações:
+
+### 1. Robustez no Reconhecimento de Schemas
+- **Heurística de FKs Virtuais Poliglota** (`text_to_insight/nodes/schema.py`):
+  - Expandida para identificar sufixos `_id`, `_code` e `_no`, e suportar mapeamento para tabelas no plural (ex: `flights`, `tickets`) ou com sufixos analíticos (`_data`).
+- **Limpeza do SchemaCrawler**: Removida a dependência do arquivo solto `schemacrawler.config.properties`. Os parâmetros `-schemacrawler.format.hide_weakassociations=false` foram acoplados nativamente na chamada via `subprocess.run` em `schema.py`.
+
+### 2. RAG Adaptativo e Roteamento Condicional
+- **Steiner Tree Resiliente** (`text_to_insight/retriever/graph_logic.py`): O grafo do RAG agora ignora tabelas "intrusas" e forma caminhos agrupados sem abortar a busca.
+- **Expansão Dinâmica do Top-K** (`text_to_insight/retriever/engine.py`, `text_to_insight/nodes/retriever.py`): O parâmetro `top_k` agora cresce automaticamente (5, 9, 13) baseado nas falhas do Planejador (`tentativas_loop`).
+- **Fluxo do Grafo**: Em caso de erros, o Planejador (`status: revisando_estrategia`) passou a rotear de volta para o Retriever para aproveitar o novo Top-K expandido.
+
+### 3. Melhorias no Motor de Avaliação (Spider 2) e Dialetos
+- **Injeção de Conhecimento Externo (`scripts/test_spider2_eval.py`)**: O script de avaliação agora extrai automaticamente regras de negócio e contextos matemáticos da coluna `external_knowledge` no JSONL e as anexa ao prompt dentro das tags `<additional_context>`.
+- **Injeção de Funções Matemáticas no SQLite (`src/spider/query_executor.py`)**: A conexão local foi estendida via `.create_function()` com 19 funções trigonométricas e matemáticas (SIN, COS, SQRT, POWER, PI, LOG, etc.), permitindo que o LLM resolva perguntas que usam cálculo espacial sem esbarrar no "No such function" (ex: DB Airlines).
+
+### 4. Correções de Bug (Bugfixes)
+- **Quebra de Loops Infinitos no Grafo** (`text_to_insight/routers/edges.py`, `text_to_insight/nodes/retriever.py`, `text_to_insight/state.py`, `text_to_insight/graph.py`):
+  Corrigidos ciclos infinitos onde o Planejador decidia `"revisando_estrategia"`, o Roteador enviava ao Retriever, mas o Retriever devolvia `"schema_obtido"` sem mudanças efetivas, fazendo o Planejador reavaliar e decidir `"revisando_estrategia"` novamente, infinitamente.
+  Três proteções no Roteador do Planejador:
+    - **Schema pequeno** (<1500 chars): RAG não consegue filtrar, Retriever é bypassed e o fluxo segue direto para `agente_codigo`.
+    - **Limite de expansões RAG** (`MAX_TENTATIVAS_REVISAO=2`): para schemas grandes, o Retriever pode ser chamado até 2 vezes via novo campo `tentativas_revisao_retriever` no estado. Após esgotar, o roteador força `agente_codigo`.
+    - **Eliminação do auto-loop do Planejador**: o path default do roteador agora envia para `agente_codigo` em vez de reenviar para o próprio `planejador`, impedindo auto-loops por status não reconhecido.
+- **Correção de Prompt JSON (`text_to_insight/nodes/planner.py`)**: Substituídas as chaves duplas `{{` e `}}` no template de diretrizes, que estavam induzindo o LLM a alucinar o formato do JSON e gerar erros no decoder.
+  Exemplo de erro no log: 
+                          [PLANEJADOR] Erro ao parsear JSON: {{
+    "decisao": "revisando_estrategia"
+}}
+
+- **Documentação Atualizada** (`README.md`, `DESENVOLVIMENTO.md`): documentação e tutoriais refletindo o uso programático e por CLI.

@@ -1,0 +1,145 @@
+interactions:
+- request:
+    body: "{\"messages\":[{\"content\":\"Voc\xEA \xE9 um especialista em SQL para
+      bancos SQLite.\\n\\nSua tarefa: gerar UMA \xFAnica consulta SQL SELECT que responda
+      \xE0 pergunta do usu\xE1rio,\\nusando o schema do banco de dados fornecido abaixo.\\n\\nRegras:\\n-
+      Gere APENAS uma consulta SELECT (ou WITH/CTE seguido de SELECT).\\n- N\xC3O
+      use INSERT, UPDATE, DELETE, DROP, ALTER ou qualquer comando de escrita.\\n-
+      N\xC3O inclua explica\xE7\xF5es, apenas a SQL pura.\\n- Use nomes de tabelas
+      e colunas EXATAMENTE como aparecem no schema.\\n- Se a pergunta for amb\xEDgua,
+      fa\xE7a a interpreta\xE7\xE3o mais razo\xE1vel.\\n\\n=== SCHEMA DO BANCO ===\\n===
+      SCHEMA SQLITE (INTROSPECCAO REAL) ===\\n\\nTabela: customers\\n- customer_id:
+      TEXT (PK)\\n- customer_unique_id: TEXT\\n- customer_zip_code_prefix: INTEGER\\n-
+      customer_city: TEXT\\n- customer_state: TEXT\\n\\nTabela: geolocation\\n- geolocation_zip_code_prefix:
+      INTEGER\\n- geolocation_lat: REAL\\n- geolocation_lng: REAL\\n- geolocation_city:
+      TEXT\\n- geolocation_state: TEXT\\n\\nTabela: order_items\\n- order_id: TEXT
+      (PK)\\n- order_item_id: INTEGER (PK)\\n- product_id: TEXT\\n- seller_id: TEXT\\n-
+      shipping_limit_date: TEXT\\n- price: REAL\\n- freight_value: REAL\\n  Foreign
+      keys:\\n  - seller_id -> sellers.seller_id (on_update=NO ACTION, on_delete=NO
+      ACTION)\\n  - product_id -> products.product_id (on_update=NO ACTION, on_delete=NO
+      ACTION)\\n  - order_id -> orders.order_id (on_update=NO ACTION, on_delete=NO
+      ACTION)\\n\\nTabela: order_payments\\n- order_id: TEXT (PK)\\n- payment_sequential:
+      INTEGER (PK)\\n- payment_type: TEXT\\n- payment_installments: INTEGER\\n- payment_value:
+      REAL\\n  Foreign keys:\\n  - order_id -> orders.order_id (on_update=NO ACTION,
+      on_delete=NO ACTION)\\n\\nTabela: order_reviews\\n- review_id: TEXT (PK)\\n-
+      order_id: TEXT\\n- review_score: INTEGER\\n- review_comment_title: TEXT\\n-
+      review_comment_message: TEXT\\n- review_creation_date: TEXT\\n- review_answer_timestamp:
+      TEXT\\n  Foreign keys:\\n  - order_id -> orders.order_id (on_update=NO ACTION,
+      on_delete=NO ACTION)\\n\\nTabela: orders\\n- order_id: TEXT (PK)\\n- customer_id:
+      TEXT\\n- order_status: TEXT\\n- order_purchase_timestamp: TEXT\\n- order_approved_at:
+      TEXT\\n- order_delivered_carrier_date: TEXT\\n- order_delivered_customer_date:
+      TEXT\\n- order_estimated_delivery_date: TEXT\\n  Foreign keys:\\n  - customer_id
+      -> customers.customer_id (on_update=NO ACTION, on_delete=NO ACTION)\\n\\nTabela:
+      products\\n- product_id: TEXT (PK)\\n- product_category_name: TEXT\\n- product_name_length:
+      REAL\\n- product_description_length: REAL\\n- product_photos_qty: REAL\\n- product_weight_g:
+      REAL\\n- product_length_cm: REAL\\n- product_height_cm: REAL\\n- product_width_cm:
+      REAL\\n\\nTabela: sellers\\n- seller_id: TEXT (PK)\\n- seller_zip_code_prefix:
+      INTEGER\\n- seller_city: TEXT\\n- seller_state: TEXT\\n\\n\\n=== PERGUNTA DO
+      USU\xC1RIO ===\\nQuantos clientes existem no banco?\\n\\n=== CONVERSA PR\xC9VIA
+      (CONTEXTO ADICIONAL) ===\\nNenhuma\\n\\n=== HIST\xD3RICO DE TENTATIVAS ANTERIORES
+      ===\\nNenhuma tentativa anterior.\\n\\nResponda APENAS com a consulta SQL, sem
+      markdown, sem explica\xE7\xE3o.\",\"role\":\"user\"}],\"model\":\"gpt-4o-mini\",\"stream\":false}"
+    headers:
+      Accept:
+      - a
+      Accept-Encoding:
+      - g
+      Connection:
+      - k
+      Content-Length:
+      - '3'
+      Content-Type:
+      - a
+      Cookie:
+      - _
+      Host:
+      - a
+      User-Agent:
+      - O
+      X-Stainless-Arch:
+      - x
+      X-Stainless-Async:
+      - f
+      X-Stainless-Lang:
+      - p
+      X-Stainless-OS:
+      - L
+      X-Stainless-Package-Version:
+      - '2'
+      X-Stainless-Raw-Response:
+      - t
+      X-Stainless-Runtime:
+      - C
+      X-Stainless-Runtime-Version:
+      - '3'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAA/6rmUlBQykxRslJQSs5ILEnOLcjRdclItTBJSwUAAAD//4xSy07DMBC89ysinwA1
+        KH2mFSeoijjwEM8LQpHrbFODY0deB4FQ/5110pIAReJiyTs765nxjrPxzQBtD04uo+PIXc9G6sGe
+        sa5nmMUzCLdlHQpDPHDS6BoWFrgDP7UXx9P+dBgP+hWQmxSUp2WFC4cmzKWWYT/qD8MoDnuTDXtl
+        pACktke6BsFHdXqdOoU3KkfdbSUHRJ4B1bZNVLRG+QrjiBId1451G1AY7UBX0m/n5/PZXTC7ur+8
+        2zvYD05vri4CUaIzOVg8arMsLEvkXrkulWoBXGvjuHde6X3aIOsvhcpkhTUL/EFlS3KOq4SCQkqN
+        1NCzBavQNZ1PVRLlN3OMBuWFS5x5geq5OO7V81jzAQ063mCOBKo2Ke7uGJek4LhU2IqSCS5WkDbU
+        JndeptK0gE7L9G8xu2bXxqXO/jO+AYSAgjYrKSykUnw33LRZ8Ov5V9tXyJVghmBfad8SJ8H6j0hh
+        yUtVLw3Dd3SQJ/RbGdjCynpzlkUynQxisRhNRpx11p1PAAAA//8DALb873xHAwAA
+    headers:
+      Access-Control-Expose-Headers:
+      - CF-Ray
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-Ray:
+      - <REDACTED>
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Wed, 20 May 2026 16:32:12 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      - CF-Ray
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - <REDACTED>
+      openai-processing-ms:
+      - '571'
+      openai-project:
+      - <REDACTED>
+      openai-version:
+      - '2020-10-01'
+      x-openai-proxy-wasm:
+      - v0.1
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '200000'
+      x-ratelimit-remaining-requests:
+      - <REDACTED>
+      x-ratelimit-remaining-tokens:
+      - <REDACTED>
+      x-ratelimit-reset-requests:
+      - 5m38.18s
+      x-ratelimit-reset-tokens:
+      - 216ms
+      x-request-id:
+      - <REDACTED>
+    status:
+      code: 200
+      message: OK
+version: 1

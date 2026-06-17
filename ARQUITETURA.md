@@ -4,9 +4,10 @@
 
 O sistema combina:
 
-- um grafo LangGraph com 7 nos;
+- um grafo LangGraph com 9 nos (inclui salvamento de CSV e geracao de graficos);
 - uma camada de runtime compartilhada (`text_to_insight/runtime.py`);
 - duas interfaces de entrada: biblioteca (`InsightEngine`) e CLI (`main.py` -> `text_to_insight/cli.py`).
+- um modulo de benchmark para Spider 1.0 e Spider 2.0 Lite (`scripts/` + `src/spider/`).
 
 Fluxo principal:
 
@@ -17,6 +18,9 @@ START
   -> Agente de Codigo
   -> Executor
   -> Critico
+  -> Salvar CSV
+  -> Roteador Grafico
+  -> Gerador Grafico (quando aplicavel)
   -> Resposta
 END
 ```
@@ -123,13 +127,23 @@ Arquivos:
 
 - gera resposta natural final quando status aprovado
 
+### Salvar CSV (`text_to_insight/nodes/csv_saver.py`)
+
+- salva o resultado completo em `results/` e registra `caminho_csv_resultado`
+
+### Gerador de Graficos (`text_to_insight/nodes/graph_generator.py`)
+
+- gera codigo matplotlib via LLM, executa em subprocesso e salva imagem em `graphs/`
+- registra `grafico_gerado` e `caminho_grafico` no estado
+
 ## Roteadores
 
 Arquivo: `text_to_insight/routers/edges.py`
 
 - `roteador_sandbox`: controla retry apos execucao
 - `roteador_planejador`: decide schema, codificacao, HITL ou fim
-- `roteador_critico` (interno em `graph.py`): aprovado -> resposta; senao -> planejador
+- `roteador_grafico`: decide entre gerar grafico ou ir direto para resposta
+- `roteador_critico` (interno em `graph.py`): aprovado -> salvar_csv (ou resposta); senao -> planejador
 
 ## Estado compartilhado
 
@@ -143,10 +157,17 @@ Campos obrigatorios:
 
 Campos principais do fluxo:
 
-- `contexto_schema`, `sql_gerada`, `linhas_resultado_preview`, `total_linhas_resultado`
+- `contexto_schema`, `sql_gerada`, `linhas_resultado_preview`, `linhas_resultado_completo`, `total_linhas_resultado`
 - `erro_execucao`, `saida_terminal`, `feedback_critico`, `resposta_natural`
 - `status`, `tentativas_loop`, `historico_conversa`, `espera_humana`, `pergunta_ao_usuario`
+- `caminho_csv_resultado`, `grafico_gerado`, `caminho_grafico`
 - telemetria: `tokens_input`, `tokens_output`, `tokens_total`
+
+## Benchmark Spider
+
+- Spider 1.0: `scripts/test_spider_eval.py`
+- Spider 2.0 Lite: `scripts/test_spider2_eval.py`
+- Componentes: `src/spider/` (loader, executor, metrics, csv_reporter, analise_empirica)
 
 ## HITL e perguntas
 
@@ -170,4 +191,4 @@ Os testes marcados com `@pytest.mark.vcr` usam cassetes em `tests/cassettes/`.
 - para gravar ou atualizar cassetes: `--record-mode=new_episodes`;
 - apos gravacao: execute novamente com `--record-mode=none` para validar reproducibilidade.
 
-Na CI existe um job manual `record-vcr-cassettes` (workflow_dispatch) para gravacao/atualizacao controlada.
+Na CI existe um job manual `record-vcr-cassettes` (workflow_dispatch) para gravação/atualização controlada.

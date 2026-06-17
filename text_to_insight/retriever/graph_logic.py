@@ -42,6 +42,14 @@ class SchemaGraph:
             #Se não houver FK, roda SchemaCrawler ou qualquer outra técnica (Isso aqui é discutível, provavelmente deveriamso passar o SC para um nó antes do RAG)
 
     def _get_relations(self, tables: list):
+        """
+        Recebe uma lista de tabelas (que foram recuperadas pelo RAG) e tenta encontrar
+        o caminho mais curto de ligações (Foreign Keys / JOINs) entre elas, usando
+        a teoria de grafos (Árvore de Steiner).
+        
+        Isso é vital porque o RAG só devolve "quais tabelas", mas o LLM precisa saber 
+        "como essas tabelas se conectam" para escrever a query SQL corretamente.
+        """
         relations = set()
         valid_tables = [t for t in tables if t in self.graph]
         missing_tables = [t for t in tables if t not in self.graph]
@@ -50,22 +58,35 @@ class SchemaGraph:
             return list(relations), list(missing_tables)
         
         try:
-            componente_conectado = nx.node_connected_component(self.graph, valid_tables[0])
+            # 1. Encontra todos os subgrafos (ilhas ou componentes conectados)
+            # O grafo principal pode ter várias "ilhas" de tabelas que não se conversam
+            componentes = list(nx.connected_components(self.graph))
             
-            if all(t in componente_conectado for t in valid_tables):
-                subgrafo = self.graph.subgraph(componente_conectado)
-                path = steiner_tree(subgrafo, valid_tables)
-                edges = list(path.edges(data=True))
+            for comp in componentes:
+                # 2. Verifica quais tabelas que o RAG recuperou estão DENTRO desta ilha específica
+                tabelas_no_comp = [t for t in valid_tables if t in comp]
                 
-                for u, v, data in edges:
-                    origem = data.get('tabela_origem')
-                    destino = data.get('tabela_destino')
-                    child_col = data.get('child_col')
-                    parent_col = data.get('parent_col')
+                # 3. Se houver 2 ou mais tabelas recuperadas na mesma ilha,
+                # precisamos encontrar as chaves (FKs) que ligam elas.
+                if len(tabelas_no_comp) >= 2:
+                    subgrafo = self.graph.subgraph(comp)
                     
-                    if origem and destino: 
-                        relations.add((origem, destino, child_col, parent_col))
-            else:
+                    # 4. A Árvore de Steiner encontra o menor caminho conectando 
+                    # as tabelas alvo, inclusive passando por tabelas intermediárias se necessário.
+                    path = steiner_tree(subgrafo, tabelas_no_comp)
+                    edges = list(path.edges(data=True))
+                    
+                    # 5. Salva todas as relações (JOINs/FKs) encontradas nesse caminho
+                    for u, v, data in edges:
+                        origem = data.get('tabela_origem')
+                        destino = data.get('tabela_destino')
+                        child_col = data.get('child_col')
+                        parent_col = data.get('parent_col')
+                        
+                        if origem and destino: 
+                            relations.add((origem, destino, child_col, parent_col))
+                            
+            if not relations:
                 print("[GRAPH STEINER] As tabelas solicitadas não possuem caminhos (FK) entre si.")
 
         except nx.NetworkXException as e:

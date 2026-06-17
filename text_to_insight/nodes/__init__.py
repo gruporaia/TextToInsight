@@ -16,7 +16,7 @@ Nós disponíveis:
 
 from .planner import nos_nodo_planejador
 from .schema import nos_nodo_esquema
-from .erich_schema import nos_nodo_enrich
+from .enrich_schema import nos_nodo_enrich
 from .retriever import nos_nodo_retriever
 from .code_agent.code_agent import nos_nodo_agente_codigo
 from .sandbox import nos_nodo_sandbox

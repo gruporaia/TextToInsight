@@ -73,9 +73,15 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     pergunta_ao_usuario: str
     historico_conversa: list[tuple[str, str]]
     tentativas_loop: int
+    tentativas_revisao_retriever: int
     resposta_natural: str
     historico_tentativas: Annotated[list[dict[str, str]], operator.add]
     linhas_resultado_completo: list[dict[str, Any]]
+    schemacrawler_bin : str | None
+    db_config: dict[str, Any] | None
+    inferir_fks_virtuais: bool
+    inferir_pks_virtuais: bool
+    usar_schemacrawler: bool
 
     # Campos para geração de gráficos
     caminho_csv_resultado: str
