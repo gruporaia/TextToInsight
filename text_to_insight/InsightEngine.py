@@ -26,7 +26,6 @@ class InsightEngine:
       a fecha ao chamar `close()` (ela é "dona" dessa conexão).
     """
 
-<<<<<<< HEAD
     def __init__(
         self,
         api_key: str,
@@ -37,10 +36,10 @@ class InsightEngine:
         show_output: bool = False,
         enable_graphs: bool = True,
         enrich_rag: bool = False,
+        inferir_fks_virtuais: bool = False,
+        inferir_pks_virtuais: bool = False,
+        usar_schemacrawler: bool = False,
     ):
-=======
-    def __init__(self, api_key: str, model: str, db_path: str, hitl: bool = False, show_output: bool = False, enable_graphs: bool = True, enrich_rag: bool = False, inferir_fks_virtuais: bool = False, inferir_pks_virtuais: bool = False, usar_schemacrawler: bool = False):
->>>>>>> refs/remotes/origin/feature/RAG-schema
         self._hitl_ativado = hitl
         # `show_output` controla se a engine imprime o resultado final no terminal.
         # Em cenários com CLI, normalmente deixamos False para evitar saída duplicada.

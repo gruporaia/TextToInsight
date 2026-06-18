@@ -34,10 +34,13 @@ dependencies = [
     "pandas>=2.0.0",  # uso na geração de gráficos e análise de dados
     "matplotlib>=3.8.0", # uso na geração de gráficos e visualizações
     "networkx>=3.0",
+    "prompt_toolkit>=3.0",  # interface CLI de chat (cli_interface)
+    "rich>=13.0",           # renderização da saída no terminal (cli_interface)
 ]
 
 [project.scripts]
 text-to-insight = "text_to_insight.cli:main"
+t2i = "cli_interface.app:main"
 
 [project.optional-dependencies]
 dev = [
@@ -63,7 +66,7 @@ Repository = "https://github.com/gruporaia/TextToInsight.git"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["text_to_insight*"]
+include = ["text_to_insight*", "cli_interface*"]
 exclude = ["tests*", "build*", "meus_testes*"]
 
 [tool.black]

@@ -58,7 +58,7 @@ class Graph:
         # 1. ADICIONAR NÓS
         construtor_grafo.add_node("planejador", partial(nos_nodo_planejador, llm=self.llm, hitl=hitl))
         construtor_grafo.add_node("espera_humana", nos_nodo_espera_humana)
-        construtor_grafo.add_node("esquema", partial(nos_nodo_esquema, conn=self.conn))
+        construtor_grafo.add_node("esquema", nos_nodo_esquema)
         construtor_grafo.add_node("retriever", nos_nodo_retriever)
         construtor_grafo.add_node("agente_codigo", partial(nos_nodo_agente_codigo, llm=self.llm))
         construtor_grafo.add_node("sandbox", partial(nos_nodo_sandbox, conn=self.conn))

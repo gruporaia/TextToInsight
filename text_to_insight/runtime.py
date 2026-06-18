@@ -41,17 +41,8 @@ Retorne apenas:
 """
 
 
-<<<<<<< HEAD
-def construir_estado_inicial(pergunta: str, db_path: str | None = None) -> dict[str, Any]:
-    """Cria o estado inicial padrão para uma execução do grafo.
-
-    `db_path` é opcional: serve apenas como metadado (cache de schema/logs).
-    O acesso ao banco é feito pela conexão injetada nos nós.
-    """
-=======
 def construir_estado_inicial(pergunta: str, db_path: str, inferir_pks_virtuais: bool = False, inferir_fks_virtuais: bool = False, usar_schemacrawler: bool = False) -> dict[str, Any]:
     """Cria o estado inicial padrão para uma execução do grafo."""
->>>>>>> refs/remotes/origin/feature/RAG-schema
     return {
         "pergunta_original": pergunta,
         "pergunta_atual": pergunta,
