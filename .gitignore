@@ -48,6 +48,8 @@ coverage.xml
 *.py,cover
 .hypothesis/
 .pytest_cache/
+results/
+graphs/
 
 # Translations
 *.mo
@@ -139,7 +141,18 @@ Thumbs.db
 config_local.py
 
 # data 
+results/
 data/
+chroma_db/
+.schema_hash
+spider2-lite
+Spider2/
 
 # testes
 /meus_testes/*
+
+# reports testes spider
+/reports/
+
+# commit.txt (arquivo temporário usado para textos de commit personalizados)
+commit.txt

@@ -1,5 +1,107 @@
 interactions:
 - request:
+    body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 o planejador de um
+      sistema que transforma perguntas em consultas SQL.\n\nSeu papel: analisar a
+      situa\u00e7\u00e3o atual e decidir a pr\u00f3xima a\u00e7\u00e3o.\n\nContexto
+      atual:\n- Pergunta do usu\u00e1rio: \"Qual o valor medio dos pedidos?\"\n\n-
+      conversa_previa: Nenhuma\n\n- Schema: === SCHEMA RELEVANTE (via RAG) ===\n\nTabela:
+      order_reviews\n- review_id: TEXT (PK)\n- order_id: TEXT\n- review_score: INTEGER\n-
+      review_comment_title: TEXT\n- review_comment_message: TEXT\n- review_creation_date:
+      TEXT\n- review_answer_timestamp: TEXT\n  Foreign keys:\n  - order_id -> orders.order_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela: sellers\n- seller_id:
+      TEXT (PK)\n- seller_zip_code_prefix: INTEGER\n- seller_city: TEXT\n- seller_state:
+      TEXT\n\nTabela: order_items\n- order_id: TEXT (PK)\n- order_item_id: INTEGER
+      (PK)\n- product_id: TEXT\n- seller_id: TEXT\n- shipping_limit_date: TEXT\n-
+      price: REAL\n- freight_value: REAL\n  Foreign keys:\n  - seller_id -> sellers.seller_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\n  - product_id -> products.product_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\n  - order_id -> orders.order_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela: order_payments\n- order_id:
+      TEXT (PK)\n- payment_sequential: INTEGER (PK)\n- payment_type: TEXT\n- payment_installments:
+      INTEGER\n- payment_value: REAL\n  Foreign keys:\n  - order_id -> orders.order_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\n\nTabela: orders\n- order_id: TEXT
+      (PK)\n- customer_id: TEXT\n- order_status: TEXT\n- order_purchase_timestamp:
+      TEXT\n- order_approved_at: TEXT\n- order_delivered_carrier_date: TEXT\n- order_delivered_customer_date:
+      TEXT\n- order_estimated_delivery_date: TEXT\n  Foreign keys:\n  - customer_id
+      -> customers.customer_id (on_update=NO ACTION, on_delete=NO ACTION)\n\n=== RELA\u00c7\u00d5ES
+      NECESS\u00c1RIAS (caminhos de JOIN) ===\norder_items JOIN orders ON order_items.order_id
+      = orders.order_id\norder_payments JOIN orders ON order_payments.order_id = orders.order_id\norder_reviews
+      JOIN orders ON order_reviews.order_id = orders.order_id\norder_items JOIN sellers
+      ON order_items.seller_id = sellers.seller_id\n\n\n- Feedback do cr\u00edtico:
+      Nenhum\n- Tentativas realizadas: 0\n- Status atual: schema_obtido\n- Erro anterior:
+      Nenhum\n\nAVALIA\u00c7\u00c3O CR\u00cdTICA:\nVerifique se a \"Pergunta do usu\u00e1rio\"
+      pode ser respondida com as tabelas e colunas do Schema.\nSe houver ambiguidade,
+      conceitos n\u00e3o mapeados no banco de dados, ou se a inten\u00e7\u00e3o do
+      usu\u00e1rio n\u00e3o estiver clara, voc\u00ea DEVE pedir mais informa\u00e7\u00f5es.\n\nResponda
+      EXATAMENTE no formato JSON abaixo, sem formata\u00e7\u00e3o markdown (```json):\n{\n    \"decisao\":
+      \"escolha_uma_opcao\",\n    \"pergunta_ao_usuario\": \"escreva a pergunta aqui
+      se precisar de ajuda, ou deixe vazio se n\u00e3o precisar\"\n}\n\nOp\u00e7\u00f5es
+      v\u00e1lidas para ''decis\u00e3o'':\n- \"pronto_codificacao\" \u2192 se temos
+      schema, a pergunta faz sentido e devemos gerar/regenerar SQL\n- \"revisando_estrategia\"
+      \u2192 se o cr\u00edtico reprovou e devemos tentar uma abordagem diferente\n-
+      \"necessita_ajuda\" \u2192 a pergunta n\u00e3o \u00e9 clara, n\u00e3o faz sentido,
+      falta contexto ou n\u00e3o h\u00e1 dados no schema para responder.\n"}], "role":
+      "user"}], "safetySettings": [], "generationConfig": {"temperature": 0.7, "candidateCount":
+      1}}'
+    headers:
+      Accept:
+      - '*'
+      Accept-Encoding:
+      - g
+      Connection:
+      - k
+      Content-Length:
+      - '3'
+      Content-Type:
+      - a
+      Host:
+      - g
+      User-Agent:
+      - g
+      x-goog-api-client:
+      - g
+    method: POST
+    uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAC/12RXU+DMBSG7/kVpNebcTNkmXdGvdiFukz8ipjlSM+gG2tJe1imhP9uC2PrhIS0
+        73nP10MdhCFLQXLBgdCw6/DTKmFYt18XU5JQkg30khVL0HTydk/tna2FcO+SWJ1Id08Yx1QYUIkV
+        E1ZqW1YtU8XFSqSQOn3QO0vUWSUJlqCWlalAi0OWfWXDvD7N8fw1OE2nVYGu9VZxLHp70xvYSkhh
+        8gWCUdLZnuOnOTtGheS4t/Jl0DdoS7PKQIYPSGA5wZGGW2RbUqw2KG9V1XKajqKumsf1zDCeHuKk
+        CIqz0OiU7FU2d7avKHzi3s+wa0Ih6MftEt+/x8xDQf8G62EEHjNGuaqynM6HnE5Gh7BBvRMpxgK1
+        a2HIbgWaO7At1I7zK2ojOqAZbi3i4fgiGq4KMHk7ENNoSiUNzrjzfL9droEmH4/R7uV3Mpuvo6vF
+        5kaxoAn+AFyQdU2TAgAA
+    headers:
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=UTF-8
+      Date:
+      - Sat, 06 Jun 2026 00:44:34 GMT
+      Server:
+      - scaffolding on HTTPServer2
+      Server-Timing:
+      - gfet4t7; dur=5080
+      Transfer-Encoding:
+      - chunked
+      Vary:
+      - Origin
+      - X-Origin
+      - Referer
+      X-Content-Type-Options:
+      - nosniff
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Gemini-Service-Tier:
+      - standard
+      X-XSS-Protection:
+      - '0'
+    status:
+      code: 200
+      message: OK
+- request:
     body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 um especialista em
       SQL para bancos SQLite.\n\nSua tarefa: gerar UMA \u00fanica consulta SQL SELECT
       que responda \u00e0 pergunta do usu\u00e1rio,\nusando o schema do banco de dados
@@ -8,7 +110,99 @@ interactions:
       comando de escrita.\n- N\u00c3O inclua explica\u00e7\u00f5es, apenas a SQL pura.\n-
       Use nomes de tabelas e colunas EXATAMENTE como aparecem no schema.\n- Se a pergunta
       for amb\u00edgua, fa\u00e7a a interpreta\u00e7\u00e3o mais razo\u00e1vel.\n\n===
-      SCHEMA DO BANCO ===\n=== SCHEMA SQLITE (INTROSPECCAO REAL) ===\n\nTabela: customers\n-
+      SCHEMA DO BANCO ===\n=== SCHEMA RELEVANTE (via RAG) ===\n\nTabela: order_reviews\n-
+      review_id: TEXT (PK)\n- order_id: TEXT\n- review_score: INTEGER\n- review_comment_title:
+      TEXT\n- review_comment_message: TEXT\n- review_creation_date: TEXT\n- review_answer_timestamp:
+      TEXT\n  Foreign keys:\n  - order_id -> orders.order_id (on_update=NO ACTION,
+      on_delete=NO ACTION)\n\nTabela: sellers\n- seller_id: TEXT (PK)\n- seller_zip_code_prefix:
+      INTEGER\n- seller_city: TEXT\n- seller_state: TEXT\n\nTabela: order_items\n-
+      order_id: TEXT (PK)\n- order_item_id: INTEGER (PK)\n- product_id: TEXT\n- seller_id:
+      TEXT\n- shipping_limit_date: TEXT\n- price: REAL\n- freight_value: REAL\n  Foreign
+      keys:\n  - seller_id -> sellers.seller_id (on_update=NO ACTION, on_delete=NO
+      ACTION)\n  - product_id -> products.product_id (on_update=NO ACTION, on_delete=NO
+      ACTION)\n  - order_id -> orders.order_id (on_update=NO ACTION, on_delete=NO
+      ACTION)\n\nTabela: order_payments\n- order_id: TEXT (PK)\n- payment_sequential:
+      INTEGER (PK)\n- payment_type: TEXT\n- payment_installments: INTEGER\n- payment_value:
+      REAL\n  Foreign keys:\n  - order_id -> orders.order_id (on_update=NO ACTION,
+      on_delete=NO ACTION)\n\nTabela: orders\n- order_id: TEXT (PK)\n- customer_id:
+      TEXT\n- order_status: TEXT\n- order_purchase_timestamp: TEXT\n- order_approved_at:
+      TEXT\n- order_delivered_carrier_date: TEXT\n- order_delivered_customer_date:
+      TEXT\n- order_estimated_delivery_date: TEXT\n  Foreign keys:\n  - customer_id
+      -> customers.customer_id (on_update=NO ACTION, on_delete=NO ACTION)\n\n=== RELA\u00c7\u00d5ES
+      NECESS\u00c1RIAS (caminhos de JOIN) ===\norder_items JOIN orders ON order_items.order_id
+      = orders.order_id\norder_payments JOIN orders ON order_payments.order_id = orders.order_id\norder_reviews
+      JOIN orders ON order_reviews.order_id = orders.order_id\norder_items JOIN sellers
+      ON order_items.seller_id = sellers.seller_id\n\n\n=== PERGUNTA DO USU\u00c1RIO
+      ===\nQual o valor medio dos pedidos?\n\n=== CONVERSA PR\u00c9VIA (CONTEXTO ADICIONAL)
+      ===\nNenhuma\n\n=== HIST\u00d3RICO DE TENTATIVAS ANTERIORES ===\nNenhuma tentativa
+      anterior.\n\nResponda APENAS com a consulta SQL, sem markdown, sem explica\u00e7\u00e3o."}],
+      "role": "user"}], "safetySettings": [], "generationConfig": {"temperature":
+      0.7, "candidateCount": 1}}'
+    headers:
+      Accept:
+      - '*'
+      Accept-Encoding:
+      - g
+      Connection:
+      - k
+      Content-Length:
+      - '2'
+      Content-Type:
+      - a
+      Host:
+      - g
+      User-Agent:
+      - g
+      x-goog-api-client:
+      - g
+    method: POST
+    uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAC/2WRW2vCMBiG7/srQq4UdHgabLtz6mQwUbTKDgwJzafN1iY1+SqK+N9NT1q1FyW8
+        75vv8OTgEEI9JrngDMHQF/JjFUIO6T/xlESQaI1CsmLENF6y2XconW0EYZdcorPBx6Dnku5iWEGF
+        LFgqzUEvtyyIoUrepuMRqeSZ2XxUidg+tO0Kvzsjd7eyS5mQxw0ZTsfzCXn9ynXBq7Q0z/F8/q1d
+        ttAqgGTEUHEIivixCNCVkML4U2BGyXQTdzyhZ1dIDjsrN5yiQVqaxoatYQTILE92pkYjrcIIXfUP
+        sqfilOdTs51VK/G/CrQ7uZ8iuLKeO83aXWHTt21FUH6Y0pvZLVkgcJ+s4g4+XVoigTdzFSycEjKK
+        vorXPpqbQXLXgN4KD1wBOulg0O7ENE+wpkgzygvQRmQ41xBawPXWw2N9FTDjp/NQDSZS0sA7TzJe
+        q/HHdH/R38R6g2ay1Po77nrUOTon4Y2fNbkCAAA=
+    headers:
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=UTF-8
+      Date:
+      - Sat, 06 Jun 2026 00:44:36 GMT
+      Server:
+      - scaffolding on HTTPServer2
+      Server-Timing:
+      - gfet4t7; dur=1064
+      Transfer-Encoding:
+      - chunked
+      Vary:
+      - Origin
+      - X-Origin
+      - Referer
+      X-Content-Type-Options:
+      - nosniff
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Gemini-Service-Tier:
+      - standard
+      X-XSS-Protection:
+      - '0'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 um revisor de qualidade
+      para consultas SQL geradas por IA.\n\nSua tarefa: avaliar se a consulta SQL
+      e seus resultados respondem adequadamente\n\u00e0 pergunta original do usu\u00e1rio.\n\n===
+      PERGUNTA DO USU\u00c1RIO ===\nQual o valor medio dos pedidos?\n\n=== SCHEMA
+      DO BANCO ===\n=== SCHEMA SQLITE (INTROSPECCAO REAL) ===\n\nTabela: customers\n-
       customer_id: TEXT (PK)\n- customer_unique_id: TEXT\n- customer_zip_code_prefix:
       INTEGER\n- customer_city: TEXT\n- customer_state: TEXT\n\nTabela: geolocation\n-
       geolocation_zip_code_prefix: INTEGER\n- geolocation_lat: REAL\n- geolocation_lng:
@@ -34,115 +228,100 @@ interactions:
       REAL\n- product_photos_qty: REAL\n- product_weight_g: REAL\n- product_length_cm:
       REAL\n- product_height_cm: REAL\n- product_width_cm: REAL\n\nTabela: sellers\n-
       seller_id: TEXT (PK)\n- seller_zip_code_prefix: INTEGER\n- seller_city: TEXT\n-
-      seller_state: TEXT\n\n\n=== PERGUNTA DO USU\u00c1RIO ===\nQual o valor medio
-      dos pedidos?\n\n\n\nResponda APENAS com a consulta SQL, sem markdown, sem explica\u00e7\u00e3o."}],
-      "role": "user"}], "safetySettings": [], "generationConfig": {"temperature":
-      0.7, "candidateCount": 1}}'
-    headers:
-      Accept:
-      - '*/*'
-      Accept-Encoding:
-      - gzip, deflate, zstd
-      Connection:
-      - keep-alive
-      Content-Length:
-      - '3052'
-      Content-Type:
-      - application/json
-      Host:
-      - generativelanguage.googleapis.com
-      User-Agent:
-      - google-genai-sdk/1.68.0 gl-python/3.10.12
-      x-goog-api-client:
-      - google-genai-sdk/1.68.0 gl-python/3.10.12
-    method: POST
-    uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
-  response:
-    body:
-      string: !!binary |
-        H4sIAAAAAAAC/2WRXU/CMBSG7/crml5BAgYmROId8hVEAsJAjTGkoYetcWuXtjMi4b/bfVJ0F0tz
-        3vd8PefkIIT3hFNGiQaF79G7iSB0yv6pJrgGro1QhkwwJlJfvPl3st7GouE7TcLr0dNo4KH+dlLT
-        QpNwJyQFufsiYQJ1NF4t5qhWeHKF0QZab+a1mBwj07h09tfoX36engcKu0KT1WKzRA9vVbk6tiY7
-        V++PxmUfKUJIh40EhbC0n0sDPjDOVLACogTPdvIWS1ypjFP4NuGWUzbISuNEER/moIkhSyp+OJYi
-        irUnPoEPRJKR7XU7eTXrEleG216hZwiuJLfdKpOtympo+rLQvpF1PrMmCZk+prt4o1cPWyj0n8FK
-        GI7FDOtAJH6gr4dsu23XKbDlJLcgFcuR+RAZiE33pts8hEQFWUssQcWCK5jSDOvBG5L9bP6oX8Y/
-        d9OlbM6o/9zBztn5BRkQnuGnAgAA
-    headers:
-      Alt-Svc:
-      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
-      Content-Encoding:
-      - gzip
-      Content-Type:
-      - application/json; charset=UTF-8
-      Date:
-      - Wed, 25 Mar 2026 14:42:24 GMT
-      Server:
-      - scaffolding on HTTPServer2
-      Server-Timing:
-      - gfet4t7; dur=6709
-      Transfer-Encoding:
-      - chunked
-      Vary:
-      - Origin
-      - X-Origin
-      - Referer
-      X-Content-Type-Options:
-      - nosniff
-      X-Frame-Options:
-      - SAMEORIGIN
-      X-Gemini-Service-Tier:
-      - standard
-      X-XSS-Protection:
-      - '0'
-    status:
-      code: 200
-      message: OK
-- request:
-    body: '{"contents": [{"parts": [{"text": "Voc\u00ea \u00e9 um revisor de qualidade
-      para consultas SQL geradas por IA.\n\nSua tarefa: avaliar se a consulta SQL
-      e seus resultados respondem adequadamente\n\u00e0 pergunta original do usu\u00e1rio.\n\n===
-      PERGUNTA DO USU\u00c1RIO ===\nQual o valor medio dos pedidos?\n\n=== SQL GERADA
-      ===\nSELECT AVG(total_order_value) FROM (SELECT order_id, SUM(payment_value)
+      seller_state: TEXT\n\n\n=== CONVERSA COM O AGENTE (se houver) ===\nNenhuma\n\n===
+      SQL GERADA ===\nSELECT AVG(total_order_value) FROM (SELECT SUM(payment_value)
       AS total_order_value FROM order_payments GROUP BY order_id)\n\n=== RESULTADO
       DA EXECU\u00c7\u00c3O ===\nStatus: exec_ok\nTotal de linhas: 1\nAmostra dos
-      resultados (primeiras linhas):\n[{''AVG(total_order_value)'': 160.99026669347316}]\n\n===
-      ERROS (se houver) ===\nNenhum\n\nAvalie:\n1. A SQL responde \u00e0 pergunta
-      do usu\u00e1rio?\n2. Os resultados fazem sentido?\n3. H\u00e1 algum erro l\u00f3gico
-      ou de interpreta\u00e7\u00e3o?\n\nResponda no formato:\nVEREDITO: APROVADO ou
-      REPROVADO\nFEEDBACK: <sua avalia\u00e7\u00e3o em 1-3 frases>"}], "role": "user"}],
-      "safetySettings": [], "generationConfig": {"temperature": 0.7, "candidateCount":
-      1}}'
+      resultados (primeiras linhas):\n[{''AVG(total_order_value)'': 160.9902666934835}]\n\n===
+      ERROS (se houver) ===\nNenhum\n\n=== TENTATIVAS ANTERIORES ===\nNenhuma tentativa
+      anterior (esta \u00e9 a primeira).\n\n=== EXEMPLOS DE AVALIA\u00c7\u00c3O ===\n\n--
+      EXEMPLO 1: REPROVADO (escopo incompleto) --\nPergunta: \"Which airport has the
+      least number of flights?\"\nSQL: SELECT SourceAirport FROM flights GROUP BY
+      SourceAirport ORDER BY COUNT(*) ASC LIMIT 1\nResultado: [(''AID'',)]\nVEREDITO:
+      REPROVADO\nRaz\u00e3o: A query conta apenas voos com partida (SourceAirport)
+      e ignora voos com chegada (DestAirport).\nO escopo da pergunta \u00e9 \"flights\"
+      em geral \u2014 a query responde a uma pergunta diferente.\n\n-- EXEMPLO 2:
+      REPROVADO (erro sem\u00e2ntico: MIN vs MAX) --\nPergunta: \"Which Asian countries
+      have a population larger than any country in Africa?\"\nSQL: SELECT Name FROM
+      country WHERE Continent=''Asia'' AND Population > (SELECT MAX(Population) FROM
+      country WHERE Continent=''Africa'')\nResultado: [] (vazio)\nVEREDITO: REPROVADO\nRaz\u00e3o:
+      \"Larger than any country in Africa\" significa maior que pelo menos um pa\u00eds
+      africano (MIN),\nn\u00e3o maior que todos os pa\u00edses africanos (MAX). A
+      l\u00f3gica est\u00e1 semanticamente errada.\n\n-- EXEMPLO 3: REPROVADO (resultado
+      vazio suspeito) --\nPergunta: \"Find the last name of students who live in North
+      Carolina and are not enrolled in any degree.\"\nSQL: SELECT last_name FROM Students
+      WHERE state_province_county = ''North Carolina'' AND ...\nResultado: [] (vazio)\nVEREDITO:
+      REPROVADO\nRaz\u00e3o: Resultado vazio quando a pergunta espera dados reais
+      \u00e9 suspeito. Verifique se o filtro\nde string corresponde exatamente ao
+      valor no banco (ex: ''NorthCarolina'' vs ''North Carolina'').\n\n-- EXEMPLO
+      4: REPROVADO (JOIN incorreto muda o que est\u00e1 sendo contado) --\nPergunta:
+      \"Find the name of makers that produced some cars in 1970.\"\nSQL: SELECT DISTINCT
+      Maker FROM car_makers JOIN car_names ON car_makers.Id = car_names.MakeId JOIN
+      cars_data ON car_names.MakeId = cars_data.Id WHERE cars_data.Year = 1970\nResultado:
+      [(''chevrolet'',), (''buick'',)]\nVEREDITO: REPROVADO\nRaz\u00e3o: O JOIN usa
+      car_names.MakeId para conectar a cars_data, mas cars_data.Id refere-se\nao ID
+      do carro, n\u00e3o do fabricante. O caminho correto seria via model_list. Os
+      resultados\nparecem plaus\u00edveis mas derivam de uma jun\u00e7\u00e3o incorreta.\n\n--
+      EXEMPLO 5: APROVADO (formato diferente, resposta correta) --\nPergunta: \"On
+      average, when were the transcripts printed?\"\nSQL: SELECT AVG(transcript_date)
+      AS average_transcript_date FROM Transcripts\nResultado: [(''1989.9333333333334'',)]\nVEREDITO:
+      APROVADO\nRaz\u00e3o: O resultado \u00e9 um n\u00famero que representa a m\u00e9dia
+      das datas (formato num\u00e9rico do SQLite).\nEmbora n\u00e3o seja uma data
+      formatada, responde corretamente \u00e0 pergunta. Diferen\u00e7a de\nrepresenta\u00e7\u00e3o
+      n\u00e3o \u00e9 motivo de reprova\u00e7\u00e3o.\n\n-- EXEMPLO 6: APROVADO (query
+      mais simples que o gold, resultado equivalente) --\nPergunta: \"Which model
+      of car has the minimum horsepower?\"\nSQL: SELECT Model FROM car_names JOIN
+      cars_data ON car_names.MakeId = cars_data.Id WHERE Horsepower = (SELECT MIN(Horsepower)
+      FROM cars_data) LIMIT 1\nResultado: [(''triumph'',)]\nVEREDITO: APROVADO\nRaz\u00e3o:
+      A query retorna corretamente o modelo com menor pot\u00eancia. O LIMIT 1 garante
+      unicidade\ne o resultado \u00e9 semanticamente correto. Aprovar.\n\n=== CRIT\u00c9RIOS
+      DE AVALIA\u00c7\u00c3O ===\n\nREPROVE quando houver:\n- Escopo incompleto: query
+      cobre apenas parte do que a pergunta pede\n- Erro sem\u00e2ntico: l\u00f3gica
+      correta na forma mas errada no significado (MIN vs MAX, ANY vs ALL)\n- JOIN
+      incorreto que altera os dados sendo agregados ou filtrados\n- Resultado vazio
+      quando a pergunta claramente espera dados\n- Filtro com valor literal diferente
+      do que est\u00e1 no banco\n- M\u00e9trica errada (SUM vs AVG, COUNT vs COUNT
+      DISTINCT, etc.)\n- Erro de execu\u00e7\u00e3o SQL\n\nAPROVE quando:\n- O resultado
+      responde \u00e0 pergunta, mesmo com formato ou representa\u00e7\u00e3o diferente\n-
+      H\u00e1 colunas extras que n\u00e3o prejudicam a resposta\n- A precis\u00e3o
+      num\u00e9rica difere mas o valor est\u00e1 correto\n- A query \u00e9 mais simples
+      que o esperado mas semanticamente equivalente\n\nAvalie com rigor sem\u00e2ntico.
+      Resultados que parecem plaus\u00edveis mas derivam de l\u00f3gica\nincorreta
+      devem ser reprovados. N\u00e3o presuma que uma query bem-formada est\u00e1 correta.\n\nResponda
+      no formato:\nVEREDITO: APROVADO ou REPROVADO\nFEEDBACK: <sua avalia\u00e7\u00e3o
+      em 1-3 frases>"}], "role": "user"}], "safetySettings": [], "generationConfig":
+      {"temperature": 0.7, "candidateCount": 1}}'
     headers:
       Accept:
-      - '*/*'
+      - '*'
       Accept-Encoding:
-      - gzip, deflate, zstd
+      - g
       Connection:
-      - keep-alive
+      - k
       Content-Length:
-      - '1048'
+      - '7'
       Content-Type:
-      - application/json
+      - a
       Host:
-      - generativelanguage.googleapis.com
+      - g
       User-Agent:
-      - google-genai-sdk/1.68.0 gl-python/3.10.12
+      - g
       x-goog-api-client:
-      - google-genai-sdk/1.68.0 gl-python/3.10.12
+      - g
     method: POST
     uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
   response:
     body:
       string: !!binary |
-        H4sIAAAAAAAC/2VSy27bMBC86ysWPCtG68DN4+ZGKmo0hRxHdYM+0DDSWiZKkQofRRLDH9NjfqFX
-        /1iXsuXIrQ4StTuc2Z3dVQTACq5KUXKHlp3DV4oArNp3yGnlUDlKdCEKNty4F+z2WfXOBHH4EC6x
-        eTpLk0mencN4Osvm4yT7pt6lafJ2fPGBYkD81kvH4frqEgRpmcYg/RbahG9N2ggcGjSVVxQvNXjr
-        N7+N0DEUXBZeUvUaNPziUhtw2nEJVCBR8DJcpNZ0YKCahQEKOX6HksOtNiWaHw1/DCL2FjAGrMFi
-        5cmMGPQdNd5erTfPpSBptBZtqyDsADIw2JZOmM0z+HpXgfKEN6Kg6B9FnxjuPcKCPxG1cqGYQtfU
-        Rd0RD1jPuvX+/D1+MdxoicHNWpcoO/i6A7CFUMIuZ8itVgF2nWdTts8KVeIDhV9FnUBLzbzlFX4k
-        k2n0fD9g1hhdNy7XP1FdaN+Ofjgabtl6q3IAeHO6y7f2H6TOXh/H/xHbhGSF7O9Qb72oSy6Fewyt
-        5OlNznpOuH/q6ryIepYxt9S+WrrDGkdnx9HOtK2PczRWbA2rsCYLj4aD0dFCcrtsFRnNt6H1xEkZ
-        MJ+mecK/fH4/mZ7op5PJtLoUN/dXpyxaR38BltTQRkYDAAA=
+        H4sIAAAAAAAC/2VSwW7aQBC98xWjPRPkpmoiciOBViipIMRCldoqTNgJbGt7nJ01Sor4l177Hfmx
+        ju0YTOuDbb15O+/Nm912AMwSM+ssBhJzAV8VAdhW77LGWaAsaKGBFMzRhwO3fratf6UEei4Pmflo
+        NhqO48kFDKazyXwwnHzLPo5Gw8vB1bVioP2lSALC3e0NLDFZFgkq6D0FTFWYgGGDCXsIHDABS8qy
+        CDmpZQbhVM0zsMAix5fyxL3SC1qAkgI+kLZbsLfk79/qsugCAaUgtCp07O5eFiF9/WMdqogISa2r
+        31LZSQ/GIgwK5JypDbT0VKiV2uXrb7XkV0Wmowg/+IPvqieDVYu1aemZVla7/f/37iFhzwmV8aVs
+        KWnou4ZgHl3mZD0jFM5K2l08mZp91am9Z4WjTiNQtTaF4Io+a7C6a9xv1OSe0zzE/JOyKy6qXb/r
+        98/rdq3LccQ4e/9Wr9ZyVDrtn0Xd/1rLUIVd0r42rRulc2Liwks5TDz6EptWFuFfZ00cnVZqJqy5
+        WK3Dsct+1DgR8hu3pNiRLzUk6FjobRltFWud9Jy8uDrSFaUa8slp78PJY4KyrhyZevtCY1ty7Kfo
+        B/LN5XX/SX6dj6fRZhKKwa3p7Dp/AXwV3txZAwAA
     headers:
       Alt-Svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
@@ -151,11 +330,11 @@ interactions:
       Content-Type:
       - application/json; charset=UTF-8
       Date:
-      - Wed, 25 Mar 2026 14:42:28 GMT
+      - Sat, 06 Jun 2026 00:44:41 GMT
       Server:
       - scaffolding on HTTPServer2
       Server-Timing:
-      - gfet4t7; dur=4091
+      - gfet4t7; dur=5395
       Transfer-Encoding:
       - chunked
       Vary:

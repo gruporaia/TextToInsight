@@ -1,0 +1,173 @@
+interactions:
+- request:
+    body: "{\"messages\":[{\"content\":\"Voc\xEA \xE9 um revisor de qualidade para
+      consultas SQL geradas por IA.\\n\\nSua tarefa: avaliar se a consulta SQL e seus
+      resultados respondem adequadamente\\n\xE0 pergunta original do usu\xE1rio.\\n\\n===
+      PERGUNTA DO USU\xC1RIO ===\\nQuantos pedidos existem no banco?\\n\\n=== SCHEMA
+      DO BANCO ===\\n\\n\\n=== CONVERSA COM O AGENTE (se houver) ===\\nNenhuma\\n\\n===
+      SQL GERADA ===\\nSELECT COUNT(*) as total_pedidos FROM orders\\n\\n=== RESULTADO
+      DA EXECU\xC7\xC3O ===\\nStatus: exec_ok\\nTotal de linhas: 1\\nAmostra dos resultados
+      (primeiras linhas):\\n[{'total_pedidos': 99441}]\\n\\n=== ERROS (se houver)
+      ===\\nNenhum\\n\\n=== TENTATIVAS ANTERIORES ===\\nNenhuma tentativa anterior
+      (esta \xE9 a primeira).\\n\\n=== EXEMPLOS DE AVALIA\xC7\xC3O ===\\n\\n-- EXEMPLO
+      1: REPROVADO (escopo incompleto) --\\nPergunta: \\\"Which airport has the least
+      number of flights?\\\"\\nSQL: SELECT SourceAirport FROM flights GROUP BY SourceAirport
+      ORDER BY COUNT(*) ASC LIMIT 1\\nResultado: [('AID',)]\\nVEREDITO: REPROVADO\\nRaz\xE3o:
+      A query conta apenas voos com partida (SourceAirport) e ignora voos com chegada
+      (DestAirport).\\nO escopo da pergunta \xE9 \\\"flights\\\" em geral \u2014 a
+      query responde a uma pergunta diferente.\\n\\n-- EXEMPLO 2: REPROVADO (erro
+      sem\xE2ntico: MIN vs MAX) --\\nPergunta: \\\"Which Asian countries have a population
+      larger than any country in Africa?\\\"\\nSQL: SELECT Name FROM country WHERE
+      Continent='Asia' AND Population > (SELECT MAX(Population) FROM country WHERE
+      Continent='Africa')\\nResultado: [] (vazio)\\nVEREDITO: REPROVADO\\nRaz\xE3o:
+      \\\"Larger than any country in Africa\\\" significa maior que pelo menos um
+      pa\xEDs africano (MIN),\\nn\xE3o maior que todos os pa\xEDses africanos (MAX).
+      A l\xF3gica est\xE1 semanticamente errada.\\n\\n-- EXEMPLO 3: REPROVADO (resultado
+      vazio suspeito) --\\nPergunta: \\\"Find the last name of students who live in
+      North Carolina and are not enrolled in any degree.\\\"\\nSQL: SELECT last_name
+      FROM Students WHERE state_province_county = 'North Carolina' AND ...\\nResultado:
+      [] (vazio)\\nVEREDITO: REPROVADO\\nRaz\xE3o: Resultado vazio quando a pergunta
+      espera dados reais \xE9 suspeito. Verifique se o filtro\\nde string corresponde
+      exatamente ao valor no banco (ex: 'NorthCarolina' vs 'North Carolina').\\n\\n--
+      EXEMPLO 4: REPROVADO (JOIN incorreto muda o que est\xE1 sendo contado) --\\nPergunta:
+      \\\"Find the name of makers that produced some cars in 1970.\\\"\\nSQL: SELECT
+      DISTINCT Maker FROM car_makers JOIN car_names ON car_makers.Id = car_names.MakeId
+      JOIN cars_data ON car_names.MakeId = cars_data.Id WHERE cars_data.Year = 1970\\nResultado:
+      [('chevrolet',), ('buick',)]\\nVEREDITO: REPROVADO\\nRaz\xE3o: O JOIN usa car_names.MakeId
+      para conectar a cars_data, mas cars_data.Id refere-se\\nao ID do carro, n\xE3o
+      do fabricante. O caminho correto seria via model_list. Os resultados\\nparecem
+      plaus\xEDveis mas derivam de uma jun\xE7\xE3o incorreta.\\n\\n-- EXEMPLO 5:
+      APROVADO (formato diferente, resposta correta) --\\nPergunta: \\\"On average,
+      when were the transcripts printed?\\\"\\nSQL: SELECT AVG(transcript_date) AS
+      average_transcript_date FROM Transcripts\\nResultado: [('1989.9333333333334',)]\\nVEREDITO:
+      APROVADO\\nRaz\xE3o: O resultado \xE9 um n\xFAmero que representa a m\xE9dia
+      das datas (formato num\xE9rico do SQLite).\\nEmbora n\xE3o seja uma data formatada,
+      responde corretamente \xE0 pergunta. Diferen\xE7a de\\nrepresenta\xE7\xE3o n\xE3o
+      \xE9 motivo de reprova\xE7\xE3o.\\n\\n-- EXEMPLO 6: APROVADO (query mais simples
+      que o gold, resultado equivalente) --\\nPergunta: \\\"Which model of car has
+      the minimum horsepower?\\\"\\nSQL: SELECT Model FROM car_names JOIN cars_data
+      ON car_names.MakeId = cars_data.Id WHERE Horsepower = (SELECT MIN(Horsepower)
+      FROM cars_data) LIMIT 1\\nResultado: [('triumph',)]\\nVEREDITO: APROVADO\\nRaz\xE3o:
+      A query retorna corretamente o modelo com menor pot\xEAncia. O LIMIT 1 garante
+      unicidade\\ne o resultado \xE9 semanticamente correto. Aprovar.\\n\\n=== CRIT\xC9RIOS
+      DE AVALIA\xC7\xC3O ===\\n\\nREPROVE quando houver:\\n- Escopo incompleto: query
+      cobre apenas parte do que a pergunta pede\\n- Erro sem\xE2ntico: l\xF3gica correta
+      na forma mas errada no significado (MIN vs MAX, ANY vs ALL)\\n- JOIN incorreto
+      que altera os dados sendo agregados ou filtrados\\n- Resultado vazio quando
+      a pergunta claramente espera dados\\n- Filtro com valor literal diferente do
+      que est\xE1 no banco\\n- M\xE9trica errada (SUM vs AVG, COUNT vs COUNT DISTINCT,
+      etc.)\\n- Erro de execu\xE7\xE3o SQL\\n\\nAPROVE quando:\\n- O resultado responde
+      \xE0 pergunta, mesmo com formato ou representa\xE7\xE3o diferente\\n- H\xE1
+      colunas extras que n\xE3o prejudicam a resposta\\n- A precis\xE3o num\xE9rica
+      difere mas o valor est\xE1 correto\\n- A query \xE9 mais simples que o esperado
+      mas semanticamente equivalente\\n\\nAvalie com rigor sem\xE2ntico. Resultados
+      que parecem plaus\xEDveis mas derivam de l\xF3gica\\nincorreta devem ser reprovados.
+      N\xE3o presuma que uma query bem-formada est\xE1 correta.\\n\\nResponda no formato:\\nVEREDITO:
+      APROVADO ou REPROVADO\\nFEEDBACK: <sua avalia\xE7\xE3o em 1-3 frases>\",\"role\":\"user\"}],\"model\":\"gpt-4o-mini\",\"stream\":false}"
+    headers:
+      Accept:
+      - a
+      Accept-Encoding:
+      - g
+      Connection:
+      - k
+      Content-Length:
+      - '4'
+      Content-Type:
+      - a
+      Cookie:
+      - _
+      Host:
+      - a
+      User-Agent:
+      - O
+      X-Stainless-Arch:
+      - x
+      X-Stainless-Async:
+      - f
+      X-Stainless-Lang:
+      - p
+      X-Stainless-OS:
+      - L
+      X-Stainless-Package-Version:
+      - '2'
+      X-Stainless-Raw-Response:
+      - t
+      X-Stainless-Runtime:
+      - C
+      X-Stainless-Runtime-Version:
+      - '3'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAA/6rmUlBQykxRslJQSs5ILEnOLcjRdclINa8oNQYAAAD//41T227TQBB971eM/FJA
+        SZSYhBDeQhMkBDS9S1wqa7w7cRfsHbO7rrgo/wK/wWt/jLGT1CkUCclayXPmnD07l9np9G31zuDC
+        VOfx4Zvl+fG3o5GPOjWD04+kwpbVUyw8CobtGlaOMFCtOhiPJ/FkOI5HDVCwprymZWXoDrlbGGu6
+        cT8edvvj7uDphn3FRpGXtPfyC/C9OWufVtMXCfc720hB3mNGEtsmSdBxXkci9N74gDZEnRZUbAPZ
+        xvrF/GQ+e3m2eAbTo5PFxXS2APhgX8zns+fTg1cSBUn2VR4QTo9fw8Hi/PDswaOHEnWOJEiAmj5X
+        qLEQRQJHvmSxCDc/oCSXVVaSNEPlq5ufzjB4Th0Bg735VZBjCBwwByGUpI1mD5YhRau4I1qBnUUr
+        dIZrzNnVeZPJcDjowQLIKy4ZNLYWMXVoM9q6W1sKXMvK5yiTWrj6DoSAKeUI++w0Ob/fEU7Boimm
+        UXNvt1yOlpXHumW2yvMdAK0V93XLm0ZdbpDVbWtyzkrHqf+DGi2l5f4qkQnxMi7SBh+4jBp0Jedl
+        MwLVna5GIlSUIQn8iZrrBvEgXgtG7ei18JPHG7Ap8C5tPOrco5hoKZjJ/c4YRQrVFemW284cVtrw
+        DrC38+6/7dynvX67sdn/yLeAUlTKViWlk3FRd5/cpjmqV/Nfabd1bgxHnty17FoSDLm6F5qWKNO0
+        3kP/1QcqEmlYRq50Zr01yzKJY+yroU5HOtpb7f0G9PywcUMEAAA=
+    headers:
+      Access-Control-Expose-Headers:
+      - CF-Ray
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-Ray:
+      - <REDACTED>
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Wed, 20 May 2026 16:32:06 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      - CF-Ray
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - <REDACTED>
+      openai-processing-ms:
+      - '1528'
+      openai-project:
+      - <REDACTED>
+      openai-version:
+      - '2020-10-01'
+      x-openai-proxy-wasm:
+      - v0.1
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '200000'
+      x-ratelimit-remaining-requests:
+      - <REDACTED>
+      x-ratelimit-remaining-tokens:
+      - <REDACTED>
+      x-ratelimit-reset-requests:
+      - 5m35.928s
+      x-ratelimit-reset-tokens:
+      - 355ms
+      x-request-id:
+      - <REDACTED>
+    status:
+      code: 200
+      message: OK
+version: 1

@@ -1,0 +1,153 @@
+interactions:
+- request:
+    body: "{\"messages\":[{\"content\":\"Voc\xEA \xE9 o planejador de um sistema que
+      transforma perguntas em consultas SQL.\\n\\nSeu papel: analisar a situa\xE7\xE3o
+      atual e decidir a pr\xF3xima a\xE7\xE3o.\\n\\nContexto atual:\\n- Pergunta do
+      usu\xE1rio: \\\"Quantos pedidos existem no banco?\\\"\\n\\n- conversa_previa:
+      Nenhuma\\n\\n- Schema: === SCHEMA SQLITE (INTROSPECCAO REAL) ===\\n\\nTabela:
+      customers\\n- customer_id: TEXT (PK)\\n- customer_unique_id: TEXT\\n- customer_zip_code_prefix:
+      INTEGER\\n- customer_city: TEXT\\n- customer_state: TEXT\\n\\nTabela: geolocation\\n-
+      geolocation_zip_code_prefix: INTEGER\\n- geolocation_lat: REAL\\n- geolocation_lng:
+      REAL\\n- geolocation_city: TEXT\\n- geolocation_state: TEXT\\n\\nTabela: order_items\\n-
+      order_id: TEXT (PK)\\n- order_item_id: INTEGER (PK)\\n- product_id: TEXT\\n-
+      seller_id: TEXT\\n- shipping_limit_date: TEXT\\n- price: REAL\\n- freight_value:
+      REAL\\n  Foreign keys:\\n  - seller_id -> sellers.seller_id (on_update=NO ACTION,
+      on_delete=NO ACTION)\\n  - product_id -> products.product_id (on_update=NO ACTION,
+      on_delete=NO ACTION)\\n  - order_id -> orders.order_id (on_update=NO ACTION,
+      on_delete=NO ACTION)\\n\\nTabela: order_payments\\n- order_id: TEXT (PK)\\n-
+      payment_sequential: INTEGER (PK)\\n- payment_type: TEXT\\n- payment_installments:
+      INTEGER\\n- payment_value: REAL\\n  Foreign keys:\\n  - order_id -> orders.order_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\\n\\nTabela: order_reviews\\n- review_id:
+      TEXT (PK)\\n- order_id: TEXT\\n- review_score: INTEGER\\n- review_comment_title:
+      TEXT\\n- review_comment_message: TEXT\\n- review_creation_date: TEXT\\n- review_answer_timestamp:
+      TEXT\\n  Foreign keys:\\n  - order_id -> orders.order_id (on_update=NO ACTION,
+      on_delete=NO ACTION)\\n\\nTabela: orders\\n- order_id: TEXT (PK)\\n- customer_id:
+      TEXT\\n- order_status: TEXT\\n- order_purchase_timestamp: TEXT\\n- order_approved_at:
+      TEXT\\n- order_delivered_carrier_date: TEXT\\n- order_delivered_customer_date:
+      TEXT\\n- order_estimated_delivery_date: TEXT\\n  Foreign keys:\\n  - customer_id
+      -> customers.customer_id (on_update=NO ACTION, on_delete=NO ACTION)\\n\\nTabela:
+      products\\n- product_id: TEXT (PK)\\n- product_category_name: TEXT\\n- product_name_length:
+      REAL\\n- product_description_length: REAL\\n- product_photos_qty: REAL\\n- product_weight_g:
+      REAL\\n- product_length_cm: REAL\\n- product_height_cm: REAL\\n- product_width_cm:
+      REAL\\n\\nTabela: sellers\\n- seller_id: TEXT (PK)\\n- seller_zip_code_prefix:
+      INTEGER\\n- seller_city: TEXT\\n- seller_state: TEXT\\n\\n\\n- Feedback do cr\xEDtico:
+      Nenhum\\n- Tentativas realizadas: 0\\n- Status atual: schema_obtido\\n- Erro
+      anterior: Nenhum\\n\\nAVALIA\xC7\xC3O CR\xCDTICA:\\nVerifique se a \\\"Pergunta
+      do usu\xE1rio\\\" pode ser respondida com as tabelas e colunas do Schema.\\nSe
+      houver ambiguidade, conceitos n\xE3o mapeados no banco de dados, ou se a inten\xE7\xE3o
+      do usu\xE1rio n\xE3o estiver clara, voc\xEA DEVE pedir mais informa\xE7\xF5es.\\n\\nResponda
+      EXATAMENTE no formato JSON abaixo, sem formata\xE7\xE3o markdown (```json):\\n{{\\n
+      \   \\\"decisao\\\": \\\"escolha_uma_opcao\\\",\\n    \\\"pergunta_ao_usuario\\\":
+      \\\"escreva a pergunta aqui se precisar de ajuda, ou deixe vazio se n\xE3o precisar\\\"\\n}}\\n\\nOp\xE7\xF5es
+      v\xE1lidas para 'decis\xE3o':\\n- \\\"pronto_codificacao\\\" \u2192 se temos
+      schema, a pergunta faz sentido e devemos gerar/regenerar SQL\\n- \\\"revisando_estrategia\\\"
+      \u2192 se o cr\xEDtico reprovou e devemos tentar uma abordagem diferente\\n-
+      \\\"necessita_ajuda\\\" \u2192 a pergunta n\xE3o \xE9 clara, n\xE3o faz sentido,
+      falta contexto ou n\xE3o h\xE1 dados no schema para responder.\\n\",\"role\":\"user\"}],\"model\":\"gpt-4o-mini\",\"stream\":false}"
+    headers:
+      Accept:
+      - a
+      Accept-Encoding:
+      - g
+      Connection:
+      - k
+      Content-Length:
+      - '3'
+      Content-Type:
+      - a
+      Host:
+      - a
+      User-Agent:
+      - O
+      X-Stainless-Arch:
+      - x
+      X-Stainless-Async:
+      - f
+      X-Stainless-Lang:
+      - p
+      X-Stainless-OS:
+      - L
+      X-Stainless-Package-Version:
+      - '2'
+      X-Stainless-Raw-Response:
+      - t
+      X-Stainless-Runtime:
+      - C
+      X-Stainless-Runtime-Version:
+      - '3'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAA/6rmUlBQykxRslJQSs5ILEnOLcjRdclINQ8pdgIAAAD//4xSTWvjMBC951cUne0l
+        TZPYPhfK3rqnHtoUoUhjR1tbo9XIZZeS/74jO6ndLygGgd+bN5r3NLc39d3N+r67/hO34emu+HW/
+        /GluRZYUuP8NOp5VPzSyDqJFN9I6gIqQul4WRbWq1ttqMxAdGmiTrPExX2PeWWfz1XK1zpdFflme
+        1Ae0GojLHvj34uJlONOczsBfhpfZGemASDXA2LmIwYBtQoQishSViyKbSI0ughtGf9m5BO2EAW1J
+        4Y7BnfCBK1BqNLa2WumEZ+dKD6HpXVRSoeypV8GeVPy54/yeAHVPKnl1fdvOCOUcRpWyGhw+npjj
+        q6cWG55hT++kouas6CA5WuKceX6K6MXAHvl8HLLr38SRzHQ+yohPMFxXbrdjPzE92cSurk5k5Anb
+        maqssk/6SQNR2ZZm6QsO7ABmkk5PpXpjcUYsZq4/TvNZ79G5dc132k+E1uB5GaUPYKx+63gqC5A2
+        +quy15SHgQVBeOYVldFCSC9hoFZ9O+6ZoH8UoZP8XA0EH+y4bLWXVXlV6P2m3CixOC7+AwAA//8D
+        AOO2dWF6AwAA
+    headers:
+      Access-Control-Expose-Headers:
+      - CF-Ray
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-Ray:
+      - <REDACTED>
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Wed, 20 May 2026 16:31:36 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      - CF-Ray
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - <REDACTED>
+      openai-processing-ms:
+      - '911'
+      openai-project:
+      - <REDACTED>
+      openai-version:
+      - '2020-10-01'
+      set-cookie:
+      - __cf_bm=2XGZi8XxCTtNcmNd0CGshkXoSLHNL3wEniErjFXfAWA-1779294695.1340203-1.0.1.1-Xg7.x.7HfMzJJXbSFY0DXW2lNFfqHY4X7F2fOj4R.k4X.Z6Lc3T3.yyA8ysFjZBxWlcAUiKyD1L4tWsnBtSTyq8nheJaruWP_fWjBa8610VZPMIbs.KuYoEuJ5P0mo9F;
+        HttpOnly; SameSite=None; Secure; Path=/; Domain=api.openai.com; Expires=Wed,
+        20 May 2026 17:01:36 GMT
+      x-openai-proxy-wasm:
+      - v0.1
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '200000'
+      x-ratelimit-remaining-requests:
+      - <REDACTED>
+      x-ratelimit-remaining-tokens:
+      - <REDACTED>
+      x-ratelimit-reset-requests:
+      - 3m47.483s
+      x-ratelimit-reset-tokens:
+      - 247ms
+      x-request-id:
+      - <REDACTED>
+    status:
+      code: 200
+      message: OK
+version: 1

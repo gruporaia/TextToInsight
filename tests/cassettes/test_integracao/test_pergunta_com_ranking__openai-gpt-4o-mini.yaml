@@ -1,0 +1,1440 @@
+interactions:
+- request:
+    body: "{\"messages\":[{\"content\":\"Voc\xEA \xE9 o planejador de um sistema que
+      transforma perguntas em consultas SQL.\\n\\nSeu papel: analisar a situa\xE7\xE3o
+      atual e decidir a pr\xF3xima a\xE7\xE3o.\\n\\nContexto atual:\\n- Pergunta do
+      usu\xE1rio: \\\"Quais s\xE3o as 5 categorias com a maior quantidade total de
+      itens vendidos?\\\"\\n\\n- conversa_previa: Nenhuma\\n\\n- Schema: === SCHEMA
+      RELEVANTE (via RAG) ===\\n\\nTabela: products\\n- product_id: TEXT (PK)\\n-
+      product_category_name: TEXT\\n- product_name_length: REAL\\n- product_description_length:
+      REAL\\n- product_photos_qty: REAL\\n- product_weight_g: REAL\\n- product_length_cm:
+      REAL\\n- product_height_cm: REAL\\n- product_width_cm: REAL\\n\\nTabela: sellers\\n-
+      seller_id: TEXT (PK)\\n- seller_zip_code_prefix: INTEGER\\n- seller_city: TEXT\\n-
+      seller_state: TEXT\\n\\nTabela: customers\\n- customer_id: TEXT (PK)\\n- customer_unique_id:
+      TEXT\\n- customer_zip_code_prefix: INTEGER\\n- customer_city: TEXT\\n- customer_state:
+      TEXT\\n\\nTabela: geolocation\\n- geolocation_zip_code_prefix: INTEGER\\n- geolocation_lat:
+      REAL\\n- geolocation_lng: REAL\\n- geolocation_city: TEXT\\n- geolocation_state:
+      TEXT\\n\\nTabela: order_items\\n- order_id: TEXT (PK)\\n- order_item_id: INTEGER
+      (PK)\\n- product_id: TEXT\\n- seller_id: TEXT\\n- shipping_limit_date: TEXT\\n-
+      price: REAL\\n- freight_value: REAL\\n  Foreign keys:\\n  - seller_id -> sellers.seller_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\\n  - product_id -> products.product_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\\n  - order_id -> orders.order_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\\n\\nTabela: orders\\n- order_id:
+      TEXT (PK)\\n- customer_id: TEXT\\n- order_status: TEXT\\n- order_purchase_timestamp:
+      TEXT\\n- order_approved_at: TEXT\\n- order_delivered_carrier_date: TEXT\\n-
+      order_delivered_customer_date: TEXT\\n- order_estimated_delivery_date: TEXT\\n
+      \ Foreign keys:\\n  - customer_id -> customers.customer_id (on_update=NO ACTION,
+      on_delete=NO ACTION)\\n\\n=== RELA\xC7\xD5ES NECESS\xC1RIAS (caminhos de JOIN)
+      ===\\norder_items JOIN products ON order_items.product_id = products.product_id\\norders
+      JOIN customers ON orders.customer_id = customers.customer_id\\norder_items JOIN
+      sellers ON order_items.seller_id = sellers.seller_id\\norder_items JOIN orders
+      ON order_items.order_id = orders.order_id\\n\\n\\n- Feedback do cr\xEDtico:
+      Nenhum\\n- Tentativas realizadas: 0\\n- Status atual: schema_obtido\\n- Erro
+      anterior: Nenhum\\n\\nAVALIA\xC7\xC3O CR\xCDTICA:\\nVerifique se a \\\"Pergunta
+      do usu\xE1rio\\\" pode ser respondida com as tabelas e colunas do Schema.\\nSe
+      houver ambiguidade, conceitos n\xE3o mapeados no banco de dados, ou se a inten\xE7\xE3o
+      do usu\xE1rio n\xE3o estiver clara, voc\xEA DEVE pedir mais informa\xE7\xF5es.\\n\\nResponda
+      EXATAMENTE no formato JSON abaixo, sem formata\xE7\xE3o markdown (```json):\\n{\\n
+      \   \\\"decisao\\\": \\\"escolha_uma_opcao\\\",\\n    \\\"pergunta_ao_usuario\\\":
+      \\\"escreva a pergunta aqui se precisar de ajuda, ou deixe vazio se n\xE3o precisar\\\"\\n}\\n\\nOp\xE7\xF5es
+      v\xE1lidas para 'decis\xE3o':\\n- \\\"pronto_codificacao\\\" \u2192 se temos
+      schema, a pergunta faz sentido e devemos gerar/regenerar SQL\\n- \\\"revisando_estrategia\\\"
+      \u2192 se o cr\xEDtico reprovou e devemos tentar uma abordagem diferente\\n-
+      \\\"necessita_ajuda\\\" \u2192 a pergunta n\xE3o \xE9 clara, n\xE3o faz sentido,
+      falta contexto ou n\xE3o h\xE1 dados no schema para responder.\\n\",\"role\":\"user\"}],\"model\":\"gpt-4o-mini\",\"stream\":false}"
+    headers:
+      Accept:
+      - a
+      Accept-Encoding:
+      - g
+      Connection:
+      - k
+      Content-Length:
+      - '3'
+      Content-Type:
+      - a
+      Cookie:
+      - _
+      Host:
+      - a
+      User-Agent:
+      - O
+      X-Stainless-Arch:
+      - x
+      X-Stainless-Async:
+      - f
+      X-Stainless-Lang:
+      - p
+      X-Stainless-OS:
+      - L
+      X-Stainless-Package-Version:
+      - '2'
+      X-Stainless-Raw-Response:
+      - t
+      X-Stainless-Runtime:
+      - C
+      X-Stainless-Runtime-Version:
+      - '3'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAA/6rmUlBQykxRslJQSs5ILEnOLcjRdclLNDNOSwQAAAD//41Sy2rDMBC85yuKznZx
+        3JYkv9BDobdCU8RWWjtqbUlopdAH+feu7KR2X1AMAs/srHZGu+/T7fXd035zF96u6hsTX5fBKFFk
+        hXt8QhVPqnPlWIfRODvSKiBEzF2Xq3W1qjbLzWYgeqexy7LWx/LSlb2xpqyr+rKsVuVyfVTvnFFI
+        XHbPv2dn78OZ57QaXxiuihPSIxG0yNipiMHguowIIDIUwUZRTKRyNqIdRn/f2gxthUZlCNyWwa3w
+        gSucVE6bxihQGS9OlR5Dm2wECU4mShDMUcWfPczvCdgkguzVpq6bEWCti5CzGhw+HJnDp6fOtTzD
+        I32Tioazop3kaIlz5vkpOi8G9sDnw5Bd+hJHNtP7KKN7xuG6dVWP/cT0ZBNbXxzJyBN2M1V9VfzS
+        T2qMYDqapS84sB3qSTo9FSRt3IxYzFz/nOa33qNzY9v/tJ8IpdDzMkofUBv11fFUFjBv9F9lnykP
+        AwvCsOcVldFgyC+hsYHUjXsm6JUi9pKfq8XggxmXrfGyutAaoFIKxOKw+AC5TbcJegMAAA==
+    headers:
+      Access-Control-Expose-Headers:
+      - CF-Ray
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-Ray:
+      - <REDACTED>
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Sat, 06 Jun 2026 01:26:39 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      - CF-Ray
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - <REDACTED>
+      openai-processing-ms:
+      - '591'
+      openai-project:
+      - <REDACTED>
+      openai-version:
+      - '2020-10-01'
+      x-openai-proxy-wasm:
+      - v0.1
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '200000'
+      x-ratelimit-remaining-requests:
+      - <REDACTED>
+      x-ratelimit-remaining-tokens:
+      - <REDACTED>
+      x-ratelimit-reset-requests:
+      - 15.54s
+      x-ratelimit-reset-tokens:
+      - 233ms
+      x-request-id:
+      - <REDACTED>
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"Voc\xEA \xE9 um especialista em SQL para
+      bancos SQLite.\\n\\nSua tarefa: gerar UMA \xFAnica consulta SQL SELECT que responda
+      \xE0 pergunta do usu\xE1rio,\\nusando o schema do banco de dados fornecido abaixo.\\n\\nRegras:\\n-
+      Gere APENAS uma consulta SELECT (ou WITH/CTE seguido de SELECT).\\n- N\xC3O
+      use INSERT, UPDATE, DELETE, DROP, ALTER ou qualquer comando de escrita.\\n-
+      N\xC3O inclua explica\xE7\xF5es, apenas a SQL pura.\\n- Use nomes de tabelas
+      e colunas EXATAMENTE como aparecem no schema.\\n- Se a pergunta for amb\xEDgua,
+      fa\xE7a a interpreta\xE7\xE3o mais razo\xE1vel.\\n\\n=== SCHEMA DO BANCO ===\\n===
+      SCHEMA RELEVANTE (via RAG) ===\\n\\nTabela: products\\n- product_id: TEXT (PK)\\n-
+      product_category_name: TEXT\\n- product_name_length: REAL\\n- product_description_length:
+      REAL\\n- product_photos_qty: REAL\\n- product_weight_g: REAL\\n- product_length_cm:
+      REAL\\n- product_height_cm: REAL\\n- product_width_cm: REAL\\n\\nTabela: sellers\\n-
+      seller_id: TEXT (PK)\\n- seller_zip_code_prefix: INTEGER\\n- seller_city: TEXT\\n-
+      seller_state: TEXT\\n\\nTabela: customers\\n- customer_id: TEXT (PK)\\n- customer_unique_id:
+      TEXT\\n- customer_zip_code_prefix: INTEGER\\n- customer_city: TEXT\\n- customer_state:
+      TEXT\\n\\nTabela: geolocation\\n- geolocation_zip_code_prefix: INTEGER\\n- geolocation_lat:
+      REAL\\n- geolocation_lng: REAL\\n- geolocation_city: TEXT\\n- geolocation_state:
+      TEXT\\n\\nTabela: order_items\\n- order_id: TEXT (PK)\\n- order_item_id: INTEGER
+      (PK)\\n- product_id: TEXT\\n- seller_id: TEXT\\n- shipping_limit_date: TEXT\\n-
+      price: REAL\\n- freight_value: REAL\\n  Foreign keys:\\n  - seller_id -> sellers.seller_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\\n  - product_id -> products.product_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\\n  - order_id -> orders.order_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\\n\\nTabela: orders\\n- order_id:
+      TEXT (PK)\\n- customer_id: TEXT\\n- order_status: TEXT\\n- order_purchase_timestamp:
+      TEXT\\n- order_approved_at: TEXT\\n- order_delivered_carrier_date: TEXT\\n-
+      order_delivered_customer_date: TEXT\\n- order_estimated_delivery_date: TEXT\\n
+      \ Foreign keys:\\n  - customer_id -> customers.customer_id (on_update=NO ACTION,
+      on_delete=NO ACTION)\\n\\n=== RELA\xC7\xD5ES NECESS\xC1RIAS (caminhos de JOIN)
+      ===\\norder_items JOIN products ON order_items.product_id = products.product_id\\norders
+      JOIN customers ON orders.customer_id = customers.customer_id\\norder_items JOIN
+      sellers ON order_items.seller_id = sellers.seller_id\\norder_items JOIN orders
+      ON order_items.order_id = orders.order_id\\n\\n\\n=== PERGUNTA DO USU\xC1RIO
+      ===\\nQuais s\xE3o as 5 categorias com a maior quantidade total de itens vendidos?\\n\\n===
+      CONVERSA PR\xC9VIA (CONTEXTO ADICIONAL) ===\\nNenhuma\\n\\n=== HIST\xD3RICO
+      DE TENTATIVAS ANTERIORES ===\\nNenhuma tentativa anterior.\\n\\nResponda APENAS
+      com a consulta SQL, sem markdown, sem explica\xE7\xE3o.\",\"role\":\"user\"}],\"model\":\"gpt-4o-mini\",\"stream\":false}"
+    headers:
+      Accept:
+      - a
+      Accept-Encoding:
+      - g
+      Connection:
+      - k
+      Content-Length:
+      - '2'
+      Content-Type:
+      - a
+      Cookie:
+      - _
+      Host:
+      - a
+      User-Agent:
+      - O
+      X-Stainless-Arch:
+      - x
+      X-Stainless-Async:
+      - f
+      X-Stainless-Lang:
+      - p
+      X-Stainless-OS:
+      - L
+      X-Stainless-Package-Version:
+      - '2'
+      X-Stainless-Raw-Response:
+      - t
+      X-Stainless-Runtime:
+      - C
+      X-Stainless-Runtime-Version:
+      - '3'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAA/4xTXW/aMBR951dYftokggKjJN20hw5YxVZggnbaB5Vl7JvgLbEj29lWVfz32gkl
+        6ce0vUTOPfccn+t7720HISw4fo0w21HL8iILJpKOhvKL/kaV/djPF1tmx4M4P/8df351hrueobY/
+        gNl7Vo8pxwMrlKxhpoFa8Kr9KA6j8HQQhhWQKw6Zp6WFDYYqyIUUwSAcDIMwCvrxgb1TgoFxad/d
+        L0K31df7lBz+uHClVUVyMIam4GL3SS6oVeYjmBojjKXS4m4DMiUtyMr6enoxHV+iQiteMmt6hwNh
+        znuq9A2RNIcuWl/NXyjNQRNhITe95kwEf4nO1sgqS7MaJUZlfCPfr5Zz1CJt5IflbHG8Ci0XbfR4
+        s+Do7VM/wgmer5ZXn9C7r/9wu5HL1WS68omPTaHJdD3eyIvZfHaJTt6030RDUhrq+yLLLGsBVEqn
+        4vtadeP6gOyP75+p1PnYmkdUnLi+mh1xY2DcTLi3NlYVuEL37ntd9bl80DrshPLCEqt+QnVdFMa1
+        Hm7Gq0FPhgewrrNhjQbdZ/QIB0tFZlqTghllO+ANtRkrWnKhWkCnVfVTN89p15ULmf6PfAMwBoVb
+        HFJo4II9rLhJ0+C3729px1euDGMD+pdbJ2IFaN8JDgkts3onsLkxfo5du1LQhRb1YiQFSVi8TUZR
+        P2a4s+/cAQAA//8DAJSDkJkmBAAA
+    headers:
+      Access-Control-Expose-Headers:
+      - CF-Ray
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-Ray:
+      - <REDACTED>
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Sat, 06 Jun 2026 01:26:41 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      - CF-Ray
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - <REDACTED>
+      openai-processing-ms:
+      - '997'
+      openai-project:
+      - <REDACTED>
+      openai-version:
+      - '2020-10-01'
+      x-openai-proxy-wasm:
+      - v0.1
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '200000'
+      x-ratelimit-remaining-requests:
+      - <REDACTED>
+      x-ratelimit-remaining-tokens:
+      - <REDACTED>
+      x-ratelimit-reset-requests:
+      - 23.092s
+      x-ratelimit-reset-tokens:
+      - 202ms
+      x-request-id:
+      - <REDACTED>
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"Voc\xEA \xE9 um revisor de qualidade para
+      consultas SQL geradas por IA.\\n\\nSua tarefa: avaliar se a consulta SQL e seus
+      resultados respondem adequadamente\\n\xE0 pergunta original do usu\xE1rio.\\n\\n===
+      PERGUNTA DO USU\xC1RIO ===\\nQuais s\xE3o as 5 categorias com a maior quantidade
+      total de itens vendidos?\\n\\n=== SCHEMA DO BANCO ===\\n=== SCHEMA SQLITE (INTROSPECCAO
+      REAL) ===\\n\\nTabela: customers\\n- customer_id: TEXT (PK)\\n- customer_unique_id:
+      TEXT\\n- customer_zip_code_prefix: INTEGER\\n- customer_city: TEXT\\n- customer_state:
+      TEXT\\n\\nTabela: geolocation\\n- geolocation_zip_code_prefix: INTEGER\\n- geolocation_lat:
+      REAL\\n- geolocation_lng: REAL\\n- geolocation_city: TEXT\\n- geolocation_state:
+      TEXT\\n\\nTabela: order_items\\n- order_id: TEXT (PK)\\n- order_item_id: INTEGER
+      (PK)\\n- product_id: TEXT\\n- seller_id: TEXT\\n- shipping_limit_date: TEXT\\n-
+      price: REAL\\n- freight_value: REAL\\n  Foreign keys:\\n  - seller_id -> sellers.seller_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\\n  - product_id -> products.product_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\\n  - order_id -> orders.order_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\\n\\nTabela: order_payments\\n- order_id:
+      TEXT (PK)\\n- payment_sequential: INTEGER (PK)\\n- payment_type: TEXT\\n- payment_installments:
+      INTEGER\\n- payment_value: REAL\\n  Foreign keys:\\n  - order_id -> orders.order_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\\n\\nTabela: order_reviews\\n- review_id:
+      TEXT (PK)\\n- order_id: TEXT\\n- review_score: INTEGER\\n- review_comment_title:
+      TEXT\\n- review_comment_message: TEXT\\n- review_creation_date: TEXT\\n- review_answer_timestamp:
+      TEXT\\n  Foreign keys:\\n  - order_id -> orders.order_id (on_update=NO ACTION,
+      on_delete=NO ACTION)\\n\\nTabela: orders\\n- order_id: TEXT (PK)\\n- customer_id:
+      TEXT\\n- order_status: TEXT\\n- order_purchase_timestamp: TEXT\\n- order_approved_at:
+      TEXT\\n- order_delivered_carrier_date: TEXT\\n- order_delivered_customer_date:
+      TEXT\\n- order_estimated_delivery_date: TEXT\\n  Foreign keys:\\n  - customer_id
+      -> customers.customer_id (on_update=NO ACTION, on_delete=NO ACTION)\\n\\nTabela:
+      products\\n- product_id: TEXT (PK)\\n- product_category_name: TEXT\\n- product_name_length:
+      REAL\\n- product_description_length: REAL\\n- product_photos_qty: REAL\\n- product_weight_g:
+      REAL\\n- product_length_cm: REAL\\n- product_height_cm: REAL\\n- product_width_cm:
+      REAL\\n\\nTabela: sellers\\n- seller_id: TEXT (PK)\\n- seller_zip_code_prefix:
+      INTEGER\\n- seller_city: TEXT\\n- seller_state: TEXT\\n\\n\\n=== CONVERSA COM
+      O AGENTE (se houver) ===\\nNenhuma\\n\\n=== SQL GERADA ===\\nSELECT products.product_category_name,
+      SUM(order_items.order_item_id) AS total_items_sold\\nFROM order_items\\nJOIN
+      products ON order_items.product_id = products.product_id\\nGROUP BY products.product_category_name\\nORDER
+      BY total_items_sold DESC\\nLIMIT 5;\\n\\n=== RESULTADO DA EXECU\xC7\xC3O ===\\nStatus:
+      exec_ok\\nTotal de linhas: 5\\nAmostra dos resultados (primeiras linhas):\\n[{'product_category_name':
+      'cama_mesa_banho', 'total_items_sold': 13665}, {'product_category_name': 'moveis_decoracao',
+      'total_items_sold': 11540}, {'product_category_name': 'beleza_saude', 'total_items_sold':
+      11081}, {'product_category_name': 'esporte_lazer', 'total_items_sold': 9932},
+      {'product_category_name': 'informatica_acessorios', 'total_items_sold': 9874}]\\n\\n===
+      ERROS (se houver) ===\\nNenhum\\n\\n=== TENTATIVAS ANTERIORES ===\\nNenhuma
+      tentativa anterior (esta \xE9 a primeira).\\n\\n=== EXEMPLOS DE AVALIA\xC7\xC3O
+      ===\\n\\n-- EXEMPLO 1: REPROVADO (escopo incompleto) --\\nPergunta: \\\"Which
+      airport has the least number of flights?\\\"\\nSQL: SELECT SourceAirport FROM
+      flights GROUP BY SourceAirport ORDER BY COUNT(*) ASC LIMIT 1\\nResultado: [('AID',)]\\nVEREDITO:
+      REPROVADO\\nRaz\xE3o: A query conta apenas voos com partida (SourceAirport)
+      e ignora voos com chegada (DestAirport).\\nO escopo da pergunta \xE9 \\\"flights\\\"
+      em geral \u2014 a query responde a uma pergunta diferente.\\n\\n-- EXEMPLO 2:
+      REPROVADO (erro sem\xE2ntico: MIN vs MAX) --\\nPergunta: \\\"Which Asian countries
+      have a population larger than any country in Africa?\\\"\\nSQL: SELECT Name
+      FROM country WHERE Continent='Asia' AND Population > (SELECT MAX(Population)
+      FROM country WHERE Continent='Africa')\\nResultado: [] (vazio)\\nVEREDITO: REPROVADO\\nRaz\xE3o:
+      \\\"Larger than any country in Africa\\\" significa maior que pelo menos um
+      pa\xEDs africano (MIN),\\nn\xE3o maior que todos os pa\xEDses africanos (MAX).
+      A l\xF3gica est\xE1 semanticamente errada.\\n\\n-- EXEMPLO 3: REPROVADO (resultado
+      vazio suspeito) --\\nPergunta: \\\"Find the last name of students who live in
+      North Carolina and are not enrolled in any degree.\\\"\\nSQL: SELECT last_name
+      FROM Students WHERE state_province_county = 'North Carolina' AND ...\\nResultado:
+      [] (vazio)\\nVEREDITO: REPROVADO\\nRaz\xE3o: Resultado vazio quando a pergunta
+      espera dados reais \xE9 suspeito. Verifique se o filtro\\nde string corresponde
+      exatamente ao valor no banco (ex: 'NorthCarolina' vs 'North Carolina').\\n\\n--
+      EXEMPLO 4: REPROVADO (JOIN incorreto muda o que est\xE1 sendo contado) --\\nPergunta:
+      \\\"Find the name of makers that produced some cars in 1970.\\\"\\nSQL: SELECT
+      DISTINCT Maker FROM car_makers JOIN car_names ON car_makers.Id = car_names.MakeId
+      JOIN cars_data ON car_names.MakeId = cars_data.Id WHERE cars_data.Year = 1970\\nResultado:
+      [('chevrolet',), ('buick',)]\\nVEREDITO: REPROVADO\\nRaz\xE3o: O JOIN usa car_names.MakeId
+      para conectar a cars_data, mas cars_data.Id refere-se\\nao ID do carro, n\xE3o
+      do fabricante. O caminho correto seria via model_list. Os resultados\\nparecem
+      plaus\xEDveis mas derivam de uma jun\xE7\xE3o incorreta.\\n\\n-- EXEMPLO 5:
+      APROVADO (formato diferente, resposta correta) --\\nPergunta: \\\"On average,
+      when were the transcripts printed?\\\"\\nSQL: SELECT AVG(transcript_date) AS
+      average_transcript_date FROM Transcripts\\nResultado: [('1989.9333333333334',)]\\nVEREDITO:
+      APROVADO\\nRaz\xE3o: O resultado \xE9 um n\xFAmero que representa a m\xE9dia
+      das datas (formato num\xE9rico do SQLite).\\nEmbora n\xE3o seja uma data formatada,
+      responde corretamente \xE0 pergunta. Diferen\xE7a de\\nrepresenta\xE7\xE3o n\xE3o
+      \xE9 motivo de reprova\xE7\xE3o.\\n\\n-- EXEMPLO 6: APROVADO (query mais simples
+      que o gold, resultado equivalente) --\\nPergunta: \\\"Which model of car has
+      the minimum horsepower?\\\"\\nSQL: SELECT Model FROM car_names JOIN cars_data
+      ON car_names.MakeId = cars_data.Id WHERE Horsepower = (SELECT MIN(Horsepower)
+      FROM cars_data) LIMIT 1\\nResultado: [('triumph',)]\\nVEREDITO: APROVADO\\nRaz\xE3o:
+      A query retorna corretamente o modelo com menor pot\xEAncia. O LIMIT 1 garante
+      unicidade\\ne o resultado \xE9 semanticamente correto. Aprovar.\\n\\n=== CRIT\xC9RIOS
+      DE AVALIA\xC7\xC3O ===\\n\\nREPROVE quando houver:\\n- Escopo incompleto: query
+      cobre apenas parte do que a pergunta pede\\n- Erro sem\xE2ntico: l\xF3gica correta
+      na forma mas errada no significado (MIN vs MAX, ANY vs ALL)\\n- JOIN incorreto
+      que altera os dados sendo agregados ou filtrados\\n- Resultado vazio quando
+      a pergunta claramente espera dados\\n- Filtro com valor literal diferente do
+      que est\xE1 no banco\\n- M\xE9trica errada (SUM vs AVG, COUNT vs COUNT DISTINCT,
+      etc.)\\n- Erro de execu\xE7\xE3o SQL\\n\\nAPROVE quando:\\n- O resultado responde
+      \xE0 pergunta, mesmo com formato ou representa\xE7\xE3o diferente\\n- H\xE1
+      colunas extras que n\xE3o prejudicam a resposta\\n- A precis\xE3o num\xE9rica
+      difere mas o valor est\xE1 correto\\n- A query \xE9 mais simples que o esperado
+      mas semanticamente equivalente\\n\\nAvalie com rigor sem\xE2ntico. Resultados
+      que parecem plaus\xEDveis mas derivam de l\xF3gica\\nincorreta devem ser reprovados.
+      N\xE3o presuma que uma query bem-formada est\xE1 correta.\\n\\nResponda no formato:\\nVEREDITO:
+      APROVADO ou REPROVADO\\nFEEDBACK: <sua avalia\xE7\xE3o em 1-3 frases>\",\"role\":\"user\"}],\"model\":\"gpt-4o-mini\",\"stream\":false}"
+    headers:
+      Accept:
+      - a
+      Accept-Encoding:
+      - g
+      Connection:
+      - k
+      Content-Length:
+      - '7'
+      Content-Type:
+      - a
+      Cookie:
+      - _
+      Host:
+      - a
+      User-Agent:
+      - O
+      X-Stainless-Arch:
+      - x
+      X-Stainless-Async:
+      - f
+      X-Stainless-Lang:
+      - p
+      X-Stainless-OS:
+      - L
+      X-Stainless-Package-Version:
+      - '2'
+      X-Stainless-Raw-Response:
+      - t
+      X-Stainless-Runtime:
+      - C
+      X-Stainless-Runtime-Version:
+      - '3'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAA/41Uy24aQRC88xWtOSUSoAXZYHxzDE6iPLAc8CWxlvFOAxPvPDIzi/yQ/yVWTvkF
+        X/mx9A7ghTiJcllpu7qqq2dq964GwKRgh8CyOQ+Zsnmjr3mnM349VG9G3f3F+9P+8Xh0Eq5bV/bg
+        5oTVS4a5/IpZ2LCamSEeBmn0Cs4c8oClaqt7kHSTXjtpR0AZgXlJm9nQ2DMNJbVsELjXSLqN1sGa
+        PTcyQ09tn+kV4C4+S59a4DWVk/qmotB7PkOqbZqo6ExeVhj3XvrAdWD1CsyMDqij9fPB2aD/djQ8
+        hLPB6dnw/Kg/BPiiTwaD/quj43eHcATU7Ys8cEAflg/gjeJaGJgYJ9ClMqBKpZgAKljgLQgsCYE7
+        MKCXjwqdKWvUpj01aCGF8U0YQuEjMPk0/vCikvLNHdmXExL5YWD5E7jAbwWnwZY7vpkRZetgjfTP
+        DBFHG6d4rmhXhOWjlhmxTWQpwJWyQ+vQUwcHDjRAByloFAQTeL42zJvbxyBwgU5yWoAMTI6H44+j
+        fy4Q/dIMa+jqHOk4h4GvTX0Hi25WlONptcIXywcnTXP7thxOaVSZGF3k+RbAtSaTZeJiTi7WyP1T
+        MnIzs85c+t+obEqJ8/OUAuoprZQCH4xlEb2n50VMYLETKkZCyoY0mCuM41q9VnclyKrkV3BvnU8W
+        z7Gqt5NkQ9tRTAWdicz9VopZxrM5iopbRZ4XQpotoLa193M7f9Je7S717H/kKyDL0NJHnVJmhMx2
+        V67aHJZ/hr+1PZ1zNMw8ugV96mmQ6Mq7EDjllLPVb8Df+DJHdGEzdNbJ1Uc7tWmr15nutzu8vc9q
+        97Vfe94DlMIEAAA=
+    headers:
+      Access-Control-Expose-Headers:
+      - CF-Ray
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-Ray:
+      - <REDACTED>
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Sat, 06 Jun 2026 01:26:43 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      - CF-Ray
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - <REDACTED>
+      openai-processing-ms:
+      - '1158'
+      openai-project:
+      - <REDACTED>
+      openai-version:
+      - '2020-10-01'
+      x-openai-proxy-wasm:
+      - v0.1
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '200000'
+      x-ratelimit-remaining-requests:
+      - <REDACTED>
+      x-ratelimit-remaining-tokens:
+      - <REDACTED>
+      x-ratelimit-reset-requests:
+      - 29.389s
+      x-ratelimit-reset-tokens:
+      - 553ms
+      x-request-id:
+      - <REDACTED>
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"Voc\xEA \xE9 o planejador de um sistema que
+      transforma perguntas em consultas SQL.\\n\\nSeu papel: analisar a situa\xE7\xE3o
+      atual e decidir a pr\xF3xima a\xE7\xE3o.\\n\\nContexto atual:\\n- Pergunta do
+      usu\xE1rio: \\\"Quais s\xE3o as 5 categorias com a maior quantidade total de
+      itens vendidos?\\\"\\n\\n- conversa_previa: Nenhuma\\n\\n- Schema: === SCHEMA
+      RELEVANTE (via RAG) ===\\n\\nTabela: products\\n- product_id: TEXT (PK)\\n-
+      product_category_name: TEXT\\n- product_name_length: REAL\\n- product_description_length:
+      REAL\\n- product_photos_qty: REAL\\n- product_weight_g: REAL\\n- product_length_cm:
+      REAL\\n- product_height_cm: REAL\\n- product_width_cm: REAL\\n\\nTabela: sellers\\n-
+      seller_id: TEXT (PK)\\n- seller_zip_code_prefix: INTEGER\\n- seller_city: TEXT\\n-
+      seller_state: TEXT\\n\\nTabela: customers\\n- customer_id: TEXT (PK)\\n- customer_unique_id:
+      TEXT\\n- customer_zip_code_prefix: INTEGER\\n- customer_city: TEXT\\n- customer_state:
+      TEXT\\n\\nTabela: geolocation\\n- geolocation_zip_code_prefix: INTEGER\\n- geolocation_lat:
+      REAL\\n- geolocation_lng: REAL\\n- geolocation_city: TEXT\\n- geolocation_state:
+      TEXT\\n\\nTabela: order_items\\n- order_id: TEXT (PK)\\n- order_item_id: INTEGER
+      (PK)\\n- product_id: TEXT\\n- seller_id: TEXT\\n- shipping_limit_date: TEXT\\n-
+      price: REAL\\n- freight_value: REAL\\n  Foreign keys:\\n  - seller_id -> sellers.seller_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\\n  - product_id -> products.product_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\\n  - order_id -> orders.order_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\\n\\nTabela: orders\\n- order_id:
+      TEXT (PK)\\n- customer_id: TEXT\\n- order_status: TEXT\\n- order_purchase_timestamp:
+      TEXT\\n- order_approved_at: TEXT\\n- order_delivered_carrier_date: TEXT\\n-
+      order_delivered_customer_date: TEXT\\n- order_estimated_delivery_date: TEXT\\n
+      \ Foreign keys:\\n  - customer_id -> customers.customer_id (on_update=NO ACTION,
+      on_delete=NO ACTION)\\n\\n=== RELA\xC7\xD5ES NECESS\xC1RIAS (caminhos de JOIN)
+      ===\\norder_items JOIN products ON order_items.product_id = products.product_id\\norders
+      JOIN customers ON orders.customer_id = customers.customer_id\\norder_items JOIN
+      sellers ON order_items.seller_id = sellers.seller_id\\norder_items JOIN orders
+      ON order_items.order_id = orders.order_id\\n\\n\\n- Feedback do cr\xEDtico:
+      A consulta est\xE1 somando `order_item_id` em vez de contar o n\xFAmero de itens
+      vendidos. O uso de `SUM(order_items.order_item_id)` n\xE3o \xE9 adequado para
+      contar itens, pois `order_item_id` \xE9 normalmente \xFAnico por item e n\xE3o
+      representa a quantidade total vendida. A consulta deveria usar `COUNT(order_items.order_item_id)`
+      para responder corretamente \xE0 pergunta do usu\xE1rio.\\n- Tentativas realizadas:
+      1\\n- Status atual: reprovado\\n- Erro anterior: Nenhum\\n\\nAVALIA\xC7\xC3O
+      CR\xCDTICA:\\nVerifique se a \\\"Pergunta do usu\xE1rio\\\" pode ser respondida
+      com as tabelas e colunas do Schema.\\nSe houver ambiguidade, conceitos n\xE3o
+      mapeados no banco de dados, ou se a inten\xE7\xE3o do usu\xE1rio n\xE3o estiver
+      clara, voc\xEA DEVE pedir mais informa\xE7\xF5es.\\n\\nResponda EXATAMENTE no
+      formato JSON abaixo, sem formata\xE7\xE3o markdown (```json):\\n{\\n    \\\"decisao\\\":
+      \\\"escolha_uma_opcao\\\",\\n    \\\"pergunta_ao_usuario\\\": \\\"escreva a
+      pergunta aqui se precisar de ajuda, ou deixe vazio se n\xE3o precisar\\\"\\n}\\n\\nOp\xE7\xF5es
+      v\xE1lidas para 'decis\xE3o':\\n- \\\"pronto_codificacao\\\" \u2192 se temos
+      schema, a pergunta faz sentido e devemos gerar/regenerar SQL\\n- \\\"revisando_estrategia\\\"
+      \u2192 se o cr\xEDtico reprovou e devemos tentar uma abordagem diferente\\n-
+      \\\"necessita_ajuda\\\" \u2192 a pergunta n\xE3o \xE9 clara, n\xE3o faz sentido,
+      falta contexto ou n\xE3o h\xE1 dados no schema para responder.\\n\",\"role\":\"user\"}],\"model\":\"gpt-4o-mini\",\"stream\":false}"
+    headers:
+      Accept:
+      - a
+      Accept-Encoding:
+      - g
+      Connection:
+      - k
+      Content-Length:
+      - '3'
+      Content-Type:
+      - a
+      Cookie:
+      - _
+      Host:
+      - a
+      User-Agent:
+      - O
+      X-Stainless-Arch:
+      - x
+      X-Stainless-Async:
+      - f
+      X-Stainless-Lang:
+      - p
+      X-Stainless-OS:
+      - L
+      X-Stainless-Package-Version:
+      - '2'
+      X-Stainless-Raw-Response:
+      - t
+      X-Stainless-Runtime:
+      - C
+      X-Stainless-Runtime-Version:
+      - '3'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAA/6rmUlBQykxRslJQSs5ILEnOLcjRdclLNLOocAIAAAD//41TS27bMBDd+xQE13Yg
+        f1I7q6BACtQFuu0HVSCMybHMROIIHMpoE/hCPUK3uViHkh05bQp0Q4Dz5r35L97x8kt9Q+v15v7z
+        9sPHh6/vyznocWLQ5g5NPLEuDAkPoyPfwyYgREyq0+UqW2ZXs2zRATVZrBKtbOJkQZPaeTeZZbPF
+        JFtOpqsje0fOIIvbN/kq9di9KU9v8buYs/HJUiMzlCi2k5MYA1XJooHZcQQf9XgADfmIvkv9MffJ
+        lGuLxjFQLsZcB9zLx1sqkGOQMkoHuR6ffBsMZesjFEBFyy0Ed+R9IvP0U1lkvAOVokBQpPzTrxoD
+        qUgRKkGVk+is9uits8SqoaBMCkLBwVh4IWCka/U2SXBbRVBSAEqUoCQf2INiqlN6Ir6+UUmjl8Ra
+        VB9SiD74Ra5zfzgvPeC2ZUjt921VnQHgvaSXxtc1/faIHJ7bXFHZBNrwH1S9lfHxrpBps4xeWsqR
+        Gt2hB3lvu3G2LyakRahuYhHpHrtwq+WbXk8PWzSgl5dHsGvgYL+aT8ev6BUWI7iKzxZCGzA7tAN1
+        2B5oraMzYHRW9d/ZvKbdV+58+T/yA2AMNnIfRRPQOvOy4sEtYDqyf7k9d7lLWDOGvVxNER2GNAmL
+        W5D16S+Kf3DEupBxlRia4Pr93zZFNrcWIDMG9Ogw+g3S21d4DQQAAA==
+    headers:
+      Access-Control-Expose-Headers:
+      - CF-Ray
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-Ray:
+      - <REDACTED>
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Sat, 06 Jun 2026 01:26:45 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      - CF-Ray
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - <REDACTED>
+      openai-processing-ms:
+      - '1131'
+      openai-project:
+      - <REDACTED>
+      openai-version:
+      - '2020-10-01'
+      x-openai-proxy-wasm:
+      - v0.1
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '200000'
+      x-ratelimit-remaining-requests:
+      - <REDACTED>
+      x-ratelimit-remaining-tokens:
+      - <REDACTED>
+      x-ratelimit-reset-requests:
+      - 36.261s
+      x-ratelimit-reset-tokens:
+      - 260ms
+      x-request-id:
+      - <REDACTED>
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"Voc\xEA \xE9 o planejador de um sistema que
+      transforma perguntas em consultas SQL.\\n\\nSeu papel: analisar a situa\xE7\xE3o
+      atual e decidir a pr\xF3xima a\xE7\xE3o.\\n\\nContexto atual:\\n- Pergunta do
+      usu\xE1rio: \\\"Quais s\xE3o as 5 categorias com a maior quantidade total de
+      itens vendidos?\\\"\\n\\n- conversa_previa: Nenhuma\\n\\n- Schema: === SCHEMA
+      RELEVANTE (via RAG) ===\\n\\nTabela: products\\n- product_id: TEXT (PK)\\n-
+      product_category_name: TEXT\\n- product_name_length: REAL\\n- product_description_length:
+      REAL\\n- product_photos_qty: REAL\\n- product_weight_g: REAL\\n- product_length_cm:
+      REAL\\n- product_height_cm: REAL\\n- product_width_cm: REAL\\n\\nTabela: sellers\\n-
+      seller_id: TEXT (PK)\\n- seller_zip_code_prefix: INTEGER\\n- seller_city: TEXT\\n-
+      seller_state: TEXT\\n\\nTabela: customers\\n- customer_id: TEXT (PK)\\n- customer_unique_id:
+      TEXT\\n- customer_zip_code_prefix: INTEGER\\n- customer_city: TEXT\\n- customer_state:
+      TEXT\\n\\nTabela: geolocation\\n- geolocation_zip_code_prefix: INTEGER\\n- geolocation_lat:
+      REAL\\n- geolocation_lng: REAL\\n- geolocation_city: TEXT\\n- geolocation_state:
+      TEXT\\n\\nTabela: order_items\\n- order_id: TEXT (PK)\\n- order_item_id: INTEGER
+      (PK)\\n- product_id: TEXT\\n- seller_id: TEXT\\n- shipping_limit_date: TEXT\\n-
+      price: REAL\\n- freight_value: REAL\\n  Foreign keys:\\n  - seller_id -> sellers.seller_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\\n  - product_id -> products.product_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\\n  - order_id -> orders.order_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\\n\\nTabela: order_payments\\n- order_id:
+      TEXT (PK)\\n- payment_sequential: INTEGER (PK)\\n- payment_type: TEXT\\n- payment_installments:
+      INTEGER\\n- payment_value: REAL\\n  Foreign keys:\\n  - order_id -> orders.order_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\\n\\nTabela: orders\\n- order_id:
+      TEXT (PK)\\n- customer_id: TEXT\\n- order_status: TEXT\\n- order_purchase_timestamp:
+      TEXT\\n- order_approved_at: TEXT\\n- order_delivered_carrier_date: TEXT\\n-
+      order_delivered_customer_date: TEXT\\n- order_estimated_delivery_date: TEXT\\n
+      \ Foreign keys:\\n  - customer_id -> customers.customer_id (on_update=NO ACTION,
+      on_delete=NO ACTION)\\n\\nTabela: order_reviews\\n- review_id: TEXT (PK)\\n-
+      order_id: TEXT\\n- review_score: INTEGER\\n- review_comment_title: TEXT\\n-
+      review_comment_message: TEXT\\n- review_creation_date: TEXT\\n- review_answer_timestamp:
+      TEXT\\n  Foreign keys:\\n  - order_id -> orders.order_id (on_update=NO ACTION,
+      on_delete=NO ACTION)\\n\\n=== RELA\xC7\xD5ES NECESS\xC1RIAS (caminhos de JOIN)
+      ===\\norder_reviews JOIN orders ON order_reviews.order_id = orders.order_id\\norders
+      JOIN customers ON orders.customer_id = customers.customer_id\\norder_items JOIN
+      sellers ON order_items.seller_id = sellers.seller_id\\norder_items JOIN orders
+      ON order_items.order_id = orders.order_id\\norder_payments JOIN orders ON order_payments.order_id
+      = orders.order_id\\norder_items JOIN products ON order_items.product_id = products.product_id\\n\\n\\n-
+      Feedback do cr\xEDtico: A consulta est\xE1 somando `order_item_id` em vez de
+      contar o n\xFAmero de itens vendidos. O uso de `SUM(order_items.order_item_id)`
+      n\xE3o \xE9 adequado para contar itens, pois `order_item_id` \xE9 normalmente
+      \xFAnico por item e n\xE3o representa a quantidade total vendida. A consulta
+      deveria usar `COUNT(order_items.order_item_id)` para responder corretamente
+      \xE0 pergunta do usu\xE1rio.\\n- Tentativas realizadas: 1\\n- Status atual:
+      schema_obtido\\n- Erro anterior: Nenhum\\n\\nAVALIA\xC7\xC3O CR\xCDTICA:\\nVerifique
+      se a \\\"Pergunta do usu\xE1rio\\\" pode ser respondida com as tabelas e colunas
+      do Schema.\\nSe houver ambiguidade, conceitos n\xE3o mapeados no banco de dados,
+      ou se a inten\xE7\xE3o do usu\xE1rio n\xE3o estiver clara, voc\xEA DEVE pedir
+      mais informa\xE7\xF5es.\\n\\nResponda EXATAMENTE no formato JSON abaixo, sem
+      formata\xE7\xE3o markdown (```json):\\n{\\n    \\\"decisao\\\": \\\"escolha_uma_opcao\\\",\\n
+      \   \\\"pergunta_ao_usuario\\\": \\\"escreva a pergunta aqui se precisar de
+      ajuda, ou deixe vazio se n\xE3o precisar\\\"\\n}\\n\\nOp\xE7\xF5es v\xE1lidas
+      para 'decis\xE3o':\\n- \\\"pronto_codificacao\\\" \u2192 se temos schema, a
+      pergunta faz sentido e devemos gerar/regenerar SQL\\n- \\\"revisando_estrategia\\\"
+      \u2192 se o cr\xEDtico reprovou e devemos tentar uma abordagem diferente\\n-
+      \\\"necessita_ajuda\\\" \u2192 a pergunta n\xE3o \xE9 clara, n\xE3o faz sentido,
+      falta contexto ou n\xE3o h\xE1 dados no schema para responder.\\n\",\"role\":\"user\"}],\"model\":\"gpt-4o-mini\",\"stream\":false}"
+    headers:
+      Accept:
+      - a
+      Accept-Encoding:
+      - g
+      Connection:
+      - k
+      Content-Length:
+      - '4'
+      Content-Type:
+      - a
+      Cookie:
+      - _
+      Host:
+      - a
+      User-Agent:
+      - O
+      X-Stainless-Arch:
+      - x
+      X-Stainless-Async:
+      - f
+      X-Stainless-Lang:
+      - p
+      X-Stainless-OS:
+      - L
+      X-Stainless-Package-Version:
+      - '2'
+      X-Stainless-Raw-Response:
+      - t
+      X-Stainless-Runtime:
+      - C
+      X-Stainless-Runtime-Version:
+      - '3'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAA/6rmUlBQykxRslJQSs5ILEnOLcjRdclLNLMsDgIAAAD//4xSy27bMBC8+ysCnqWC
+        VmIovbaHJIece4gDYk2uZDYSSZCrIg/437OU7Eh5AYUAAprZWc4O98/D7ur2V+U2prq+ht3T8w3V
+        vy9FkRV+9xc1nVQ/tGcdkvVuonVEIMxd1/WlrOXPSm5GovcGuyxrA5UXvuyts2Ulq4tS1uX62Fzv
+        vdWYuOyOf8/OXsYz+3QGHxmWxQnpMSVokbFTEYPRdxkRkJJNBI5EMZPaO0I3Wn/ZugxthUFtE/gt
+        g1sRIld4pb2xjdWgM16cKgPGdnAECrwa0gDRHlX8ucPynojNkCDP6oauWxDgnCfIWY0T3h+Zw9tM
+        nW/Zwy59kIqGs0p7xdEmzpn9J/JBjOyBz/sxu+FdHHmYPpAi/4DjdWu5qaaGYn6zma7OjySxxW4p
+        qzfFFx2VQQLbpUX+giPbo5m182PBYKxfEKvF3J/tfNV7mt269n/az4TWGHgdVYhorH4/8lwWMe/0
+        d2VvOY+GRcL4j5dUkcWY38JgA0M3bZpIT4mwV/xgLcYQ7bRuTVDy3BgAqTWI1WH1CgAA//8DAD3b
+        vfl8AwAA
+    headers:
+      Access-Control-Expose-Headers:
+      - CF-Ray
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-Ray:
+      - <REDACTED>
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Sat, 06 Jun 2026 01:26:46 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      - CF-Ray
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - <REDACTED>
+      openai-processing-ms:
+      - '496'
+      openai-project:
+      - <REDACTED>
+      openai-version:
+      - '2020-10-01'
+      x-openai-proxy-wasm:
+      - v0.1
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '200000'
+      x-ratelimit-remaining-requests:
+      - <REDACTED>
+      x-ratelimit-remaining-tokens:
+      - <REDACTED>
+      x-ratelimit-reset-requests:
+      - 43.261s
+      x-ratelimit-reset-tokens:
+      - 312ms
+      x-request-id:
+      - <REDACTED>
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"Voc\xEA \xE9 um especialista em SQL para
+      bancos SQLite.\\n\\nSua tarefa: gerar UMA \xFAnica consulta SQL SELECT que responda
+      \xE0 pergunta do usu\xE1rio,\\nusando o schema do banco de dados fornecido abaixo.\\n\\nRegras:\\n-
+      Gere APENAS uma consulta SELECT (ou WITH/CTE seguido de SELECT).\\n- N\xC3O
+      use INSERT, UPDATE, DELETE, DROP, ALTER ou qualquer comando de escrita.\\n-
+      N\xC3O inclua explica\xE7\xF5es, apenas a SQL pura.\\n- Use nomes de tabelas
+      e colunas EXATAMENTE como aparecem no schema.\\n- Se a pergunta for amb\xEDgua,
+      fa\xE7a a interpreta\xE7\xE3o mais razo\xE1vel.\\n\\n=== SCHEMA DO BANCO ===\\n===
+      SCHEMA RELEVANTE (via RAG) ===\\n\\nTabela: products\\n- product_id: TEXT (PK)\\n-
+      product_category_name: TEXT\\n- product_name_length: REAL\\n- product_description_length:
+      REAL\\n- product_photos_qty: REAL\\n- product_weight_g: REAL\\n- product_length_cm:
+      REAL\\n- product_height_cm: REAL\\n- product_width_cm: REAL\\n\\nTabela: sellers\\n-
+      seller_id: TEXT (PK)\\n- seller_zip_code_prefix: INTEGER\\n- seller_city: TEXT\\n-
+      seller_state: TEXT\\n\\nTabela: customers\\n- customer_id: TEXT (PK)\\n- customer_unique_id:
+      TEXT\\n- customer_zip_code_prefix: INTEGER\\n- customer_city: TEXT\\n- customer_state:
+      TEXT\\n\\nTabela: geolocation\\n- geolocation_zip_code_prefix: INTEGER\\n- geolocation_lat:
+      REAL\\n- geolocation_lng: REAL\\n- geolocation_city: TEXT\\n- geolocation_state:
+      TEXT\\n\\nTabela: order_items\\n- order_id: TEXT (PK)\\n- order_item_id: INTEGER
+      (PK)\\n- product_id: TEXT\\n- seller_id: TEXT\\n- shipping_limit_date: TEXT\\n-
+      price: REAL\\n- freight_value: REAL\\n  Foreign keys:\\n  - seller_id -> sellers.seller_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\\n  - product_id -> products.product_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\\n  - order_id -> orders.order_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\\n\\nTabela: order_payments\\n- order_id:
+      TEXT (PK)\\n- payment_sequential: INTEGER (PK)\\n- payment_type: TEXT\\n- payment_installments:
+      INTEGER\\n- payment_value: REAL\\n  Foreign keys:\\n  - order_id -> orders.order_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\\n\\nTabela: orders\\n- order_id:
+      TEXT (PK)\\n- customer_id: TEXT\\n- order_status: TEXT\\n- order_purchase_timestamp:
+      TEXT\\n- order_approved_at: TEXT\\n- order_delivered_carrier_date: TEXT\\n-
+      order_delivered_customer_date: TEXT\\n- order_estimated_delivery_date: TEXT\\n
+      \ Foreign keys:\\n  - customer_id -> customers.customer_id (on_update=NO ACTION,
+      on_delete=NO ACTION)\\n\\nTabela: order_reviews\\n- review_id: TEXT (PK)\\n-
+      order_id: TEXT\\n- review_score: INTEGER\\n- review_comment_title: TEXT\\n-
+      review_comment_message: TEXT\\n- review_creation_date: TEXT\\n- review_answer_timestamp:
+      TEXT\\n  Foreign keys:\\n  - order_id -> orders.order_id (on_update=NO ACTION,
+      on_delete=NO ACTION)\\n\\n=== RELA\xC7\xD5ES NECESS\xC1RIAS (caminhos de JOIN)
+      ===\\norder_reviews JOIN orders ON order_reviews.order_id = orders.order_id\\norders
+      JOIN customers ON orders.customer_id = customers.customer_id\\norder_items JOIN
+      sellers ON order_items.seller_id = sellers.seller_id\\norder_items JOIN orders
+      ON order_items.order_id = orders.order_id\\norder_payments JOIN orders ON order_payments.order_id
+      = orders.order_id\\norder_items JOIN products ON order_items.product_id = products.product_id\\n\\n\\n===
+      PERGUNTA DO USU\xC1RIO ===\\nQuais s\xE3o as 5 categorias com a maior quantidade
+      total de itens vendidos?\\n\\n=== CONVERSA PR\xC9VIA (CONTEXTO ADICIONAL) ===\\nNenhuma\\n\\n===
+      HIST\xD3RICO DE TENTATIVAS ANTERIORES ===\\n--- Tentativa 1 ---\\nSQL gerada:\\nSELECT
+      products.product_category_name, SUM(order_items.order_item_id) AS total_items_sold\\nFROM
+      order_items\\nJOIN products ON order_items.product_id = products.product_id\\nGROUP
+      BY products.product_category_name\\nORDER BY total_items_sold DESC\\nLIMIT 5;\\nFeedback
+      do cr\xEDtico: A consulta est\xE1 somando `order_item_id` em vez de contar o
+      n\xFAmero de itens vendidos. O uso de `SUM(order_items.order_item_id)` n\xE3o
+      \xE9 adequado para contar itens, pois `order_item_id` \xE9 normalmente \xFAnico
+      por item e n\xE3o representa a quantidade total vendida. A consulta deveria
+      usar `COUNT(order_items.order_item_id)` para responder corretamente \xE0 pergunta
+      do usu\xE1rio.\\n\\nN\xC3O repita os mesmos erros. Gere uma SQL diferente e
+      corrigida.\\n\\nResponda APENAS com a consulta SQL, sem markdown, sem explica\xE7\xE3o.\",\"role\":\"user\"}],\"model\":\"gpt-4o-mini\",\"stream\":false}"
+    headers:
+      Accept:
+      - a
+      Accept-Encoding:
+      - g
+      Connection:
+      - k
+      Content-Length:
+      - '4'
+      Content-Type:
+      - a
+      Cookie:
+      - _
+      Host:
+      - a
+      User-Agent:
+      - O
+      X-Stainless-Arch:
+      - x
+      X-Stainless-Async:
+      - f
+      X-Stainless-Lang:
+      - p
+      X-Stainless-OS:
+      - L
+      X-Stainless-Package-Version:
+      - '2'
+      X-Stainless-Raw-Response:
+      - t
+      X-Stainless-Runtime:
+      - C
+      X-Stainless-Runtime-Version:
+      - '3'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAA/6rmUlBQykxRslJQSs5ILEnOLcjRdclLNHMqMgcAAAD//4xT247aMBB95yssP7US
+        oIBYyGrVhy6XimqXVMCuemFlGXsS3CZ2ZDtVacW/106AhN1W7UvkzJkzPuMz8zgdDj5/HIpJ7+fK
+        LvbhbTbOZzPc9gy1/QrMnlhdphwPrFCygpkGasFX7Y3CYBRc94NRCWSKQ+ppSW47A9XJhBSdftAf
+        dIJRpxce2TslGBiX9sX9IvSr/HqdksMPFw7ap0gGxtAEXOyU5IJapT6CqTHCWCotbtcgU9KCLKWv
+        pnfT8RrlWvGCWdM9Hghz2hOl90TSDNpoHD0s1q+U5qCJsJCZbn0mgr9Gb1fIKkvTCiVGpXwjZ8vo
+        HjVIG/k+mi/Ol6Fo0UTPdwuO3rxUJFzBd8vo4QO6/fQPvRsZLSfTpU98LgpNpqvxRt7N7+drdHXT
+        fBUNcWGod0YWadoAqJSuine29OPpiBzODqQqcTq25hkVx85ZsyNuEIybCvfaxqocl+jBfZ9Kp4sL
+        87ArlOWWWPUNyut6weBoNa4nrIavBkewarRBuz4hFxUJB0tFahrTghllO+A1tx4tWnChGkCr0fdL
+        OX+qXfUuZPI/5WuAMcjd8pBcAxfssuU6TYPfwL+lnd+5FIwN6O9upYgVoL0XHGJapNVeYLM3fpKd
+        YQnoXItqOeKcxCzcxsNRL2S4dWj9BgAA//8DAG0s08oqBAAA
+    headers:
+      Access-Control-Expose-Headers:
+      - CF-Ray
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-Ray:
+      - <REDACTED>
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Sat, 06 Jun 2026 01:26:47 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      - CF-Ray
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - <REDACTED>
+      openai-processing-ms:
+      - '855'
+      openai-project:
+      - <REDACTED>
+      openai-version:
+      - '2020-10-01'
+      x-openai-proxy-wasm:
+      - v0.1
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '200000'
+      x-ratelimit-remaining-requests:
+      - <REDACTED>
+      x-ratelimit-remaining-tokens:
+      - <REDACTED>
+      x-ratelimit-reset-requests:
+      - 42.05s
+      x-ratelimit-reset-tokens:
+      - 307ms
+      x-request-id:
+      - <REDACTED>
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"Voc\xEA \xE9 um revisor de qualidade para
+      consultas SQL geradas por IA.\\n\\nSua tarefa: avaliar se a consulta SQL e seus
+      resultados respondem adequadamente\\n\xE0 pergunta original do usu\xE1rio.\\n\\n===
+      PERGUNTA DO USU\xC1RIO ===\\nQuais s\xE3o as 5 categorias com a maior quantidade
+      total de itens vendidos?\\n\\n=== SCHEMA DO BANCO ===\\n=== SCHEMA SQLITE (INTROSPECCAO
+      REAL) ===\\n\\nTabela: customers\\n- customer_id: TEXT (PK)\\n- customer_unique_id:
+      TEXT\\n- customer_zip_code_prefix: INTEGER\\n- customer_city: TEXT\\n- customer_state:
+      TEXT\\n\\nTabela: geolocation\\n- geolocation_zip_code_prefix: INTEGER\\n- geolocation_lat:
+      REAL\\n- geolocation_lng: REAL\\n- geolocation_city: TEXT\\n- geolocation_state:
+      TEXT\\n\\nTabela: order_items\\n- order_id: TEXT (PK)\\n- order_item_id: INTEGER
+      (PK)\\n- product_id: TEXT\\n- seller_id: TEXT\\n- shipping_limit_date: TEXT\\n-
+      price: REAL\\n- freight_value: REAL\\n  Foreign keys:\\n  - seller_id -> sellers.seller_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\\n  - product_id -> products.product_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\\n  - order_id -> orders.order_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\\n\\nTabela: order_payments\\n- order_id:
+      TEXT (PK)\\n- payment_sequential: INTEGER (PK)\\n- payment_type: TEXT\\n- payment_installments:
+      INTEGER\\n- payment_value: REAL\\n  Foreign keys:\\n  - order_id -> orders.order_id
+      (on_update=NO ACTION, on_delete=NO ACTION)\\n\\nTabela: order_reviews\\n- review_id:
+      TEXT (PK)\\n- order_id: TEXT\\n- review_score: INTEGER\\n- review_comment_title:
+      TEXT\\n- review_comment_message: TEXT\\n- review_creation_date: TEXT\\n- review_answer_timestamp:
+      TEXT\\n  Foreign keys:\\n  - order_id -> orders.order_id (on_update=NO ACTION,
+      on_delete=NO ACTION)\\n\\nTabela: orders\\n- order_id: TEXT (PK)\\n- customer_id:
+      TEXT\\n- order_status: TEXT\\n- order_purchase_timestamp: TEXT\\n- order_approved_at:
+      TEXT\\n- order_delivered_carrier_date: TEXT\\n- order_delivered_customer_date:
+      TEXT\\n- order_estimated_delivery_date: TEXT\\n  Foreign keys:\\n  - customer_id
+      -> customers.customer_id (on_update=NO ACTION, on_delete=NO ACTION)\\n\\nTabela:
+      products\\n- product_id: TEXT (PK)\\n- product_category_name: TEXT\\n- product_name_length:
+      REAL\\n- product_description_length: REAL\\n- product_photos_qty: REAL\\n- product_weight_g:
+      REAL\\n- product_length_cm: REAL\\n- product_height_cm: REAL\\n- product_width_cm:
+      REAL\\n\\nTabela: sellers\\n- seller_id: TEXT (PK)\\n- seller_zip_code_prefix:
+      INTEGER\\n- seller_city: TEXT\\n- seller_state: TEXT\\n\\n\\n=== CONVERSA COM
+      O AGENTE (se houver) ===\\nNenhuma\\n\\n=== SQL GERADA ===\\nSELECT products.product_category_name,
+      COUNT(order_items.order_item_id) AS total_items_sold\\nFROM order_items\\nJOIN
+      products ON order_items.product_id = products.product_id\\nGROUP BY products.product_category_name\\nORDER
+      BY total_items_sold DESC\\nLIMIT 5;\\n\\n=== RESULTADO DA EXECU\xC7\xC3O ===\\nStatus:
+      exec_ok\\nTotal de linhas: 5\\nAmostra dos resultados (primeiras linhas):\\n[{'product_category_name':
+      'cama_mesa_banho', 'total_items_sold': 11115}, {'product_category_name': 'beleza_saude',
+      'total_items_sold': 9670}, {'product_category_name': 'esporte_lazer', 'total_items_sold':
+      8641}, {'product_category_name': 'moveis_decoracao', 'total_items_sold': 8334},
+      {'product_category_name': 'informatica_acessorios', 'total_items_sold': 7827}]\\n\\n===
+      ERROS (se houver) ===\\nNenhum\\n\\n=== TENTATIVAS ANTERIORES ===\\n--- Tentativa
+      1 ---\\nSQL: SELECT products.product_category_name, SUM(order_items.order_item_id)
+      AS total_items_sold\\nFROM order_items\\nJOIN products ON order_items.product_id
+      = products.product_id\\nGROUP BY products.product_category_name\\nORDER BY total_items_sold
+      DESC\\nLIMIT 5;\\nFeedback: A consulta est\xE1 somando `order_item_id` em vez
+      de contar o n\xFAmero de itens vendidos. O uso de `SUM(order_items.order_item_id)`
+      n\xE3o \xE9 adequado para contar itens, pois `order_item_id` \xE9 normalmente
+      \xFAnico por item e n\xE3o representa a quantidade total vendida. A consulta
+      deveria usar `COUNT(order_items.order_item_id)` para responder corretamente
+      \xE0 pergunta do usu\xE1rio.\\n\\n\\n=== EXEMPLOS DE AVALIA\xC7\xC3O ===\\n\\n--
+      EXEMPLO 1: REPROVADO (escopo incompleto) --\\nPergunta: \\\"Which airport has
+      the least number of flights?\\\"\\nSQL: SELECT SourceAirport FROM flights GROUP
+      BY SourceAirport ORDER BY COUNT(*) ASC LIMIT 1\\nResultado: [('AID',)]\\nVEREDITO:
+      REPROVADO\\nRaz\xE3o: A query conta apenas voos com partida (SourceAirport)
+      e ignora voos com chegada (DestAirport).\\nO escopo da pergunta \xE9 \\\"flights\\\"
+      em geral \u2014 a query responde a uma pergunta diferente.\\n\\n-- EXEMPLO 2:
+      REPROVADO (erro sem\xE2ntico: MIN vs MAX) --\\nPergunta: \\\"Which Asian countries
+      have a population larger than any country in Africa?\\\"\\nSQL: SELECT Name
+      FROM country WHERE Continent='Asia' AND Population > (SELECT MAX(Population)
+      FROM country WHERE Continent='Africa')\\nResultado: [] (vazio)\\nVEREDITO: REPROVADO\\nRaz\xE3o:
+      \\\"Larger than any country in Africa\\\" significa maior que pelo menos um
+      pa\xEDs africano (MIN),\\nn\xE3o maior que todos os pa\xEDses africanos (MAX).
+      A l\xF3gica est\xE1 semanticamente errada.\\n\\n-- EXEMPLO 3: REPROVADO (resultado
+      vazio suspeito) --\\nPergunta: \\\"Find the last name of students who live in
+      North Carolina and are not enrolled in any degree.\\\"\\nSQL: SELECT last_name
+      FROM Students WHERE state_province_county = 'North Carolina' AND ...\\nResultado:
+      [] (vazio)\\nVEREDITO: REPROVADO\\nRaz\xE3o: Resultado vazio quando a pergunta
+      espera dados reais \xE9 suspeito. Verifique se o filtro\\nde string corresponde
+      exatamente ao valor no banco (ex: 'NorthCarolina' vs 'North Carolina').\\n\\n--
+      EXEMPLO 4: REPROVADO (JOIN incorreto muda o que est\xE1 sendo contado) --\\nPergunta:
+      \\\"Find the name of makers that produced some cars in 1970.\\\"\\nSQL: SELECT
+      DISTINCT Maker FROM car_makers JOIN car_names ON car_makers.Id = car_names.MakeId
+      JOIN cars_data ON car_names.MakeId = cars_data.Id WHERE cars_data.Year = 1970\\nResultado:
+      [('chevrolet',), ('buick',)]\\nVEREDITO: REPROVADO\\nRaz\xE3o: O JOIN usa car_names.MakeId
+      para conectar a cars_data, mas cars_data.Id refere-se\\nao ID do carro, n\xE3o
+      do fabricante. O caminho correto seria via model_list. Os resultados\\nparecem
+      plaus\xEDveis mas derivam de uma jun\xE7\xE3o incorreta.\\n\\n-- EXEMPLO 5:
+      APROVADO (formato diferente, resposta correta) --\\nPergunta: \\\"On average,
+      when were the transcripts printed?\\\"\\nSQL: SELECT AVG(transcript_date) AS
+      average_transcript_date FROM Transcripts\\nResultado: [('1989.9333333333334',)]\\nVEREDITO:
+      APROVADO\\nRaz\xE3o: O resultado \xE9 um n\xFAmero que representa a m\xE9dia
+      das datas (formato num\xE9rico do SQLite).\\nEmbora n\xE3o seja uma data formatada,
+      responde corretamente \xE0 pergunta. Diferen\xE7a de\\nrepresenta\xE7\xE3o n\xE3o
+      \xE9 motivo de reprova\xE7\xE3o.\\n\\n-- EXEMPLO 6: APROVADO (query mais simples
+      que o gold, resultado equivalente) --\\nPergunta: \\\"Which model of car has
+      the minimum horsepower?\\\"\\nSQL: SELECT Model FROM car_names JOIN cars_data
+      ON car_names.MakeId = cars_data.Id WHERE Horsepower = (SELECT MIN(Horsepower)
+      FROM cars_data) LIMIT 1\\nResultado: [('triumph',)]\\nVEREDITO: APROVADO\\nRaz\xE3o:
+      A query retorna corretamente o modelo com menor pot\xEAncia. O LIMIT 1 garante
+      unicidade\\ne o resultado \xE9 semanticamente correto. Aprovar.\\n\\n=== CRIT\xC9RIOS
+      DE AVALIA\xC7\xC3O ===\\n\\nREPROVE quando houver:\\n- Escopo incompleto: query
+      cobre apenas parte do que a pergunta pede\\n- Erro sem\xE2ntico: l\xF3gica correta
+      na forma mas errada no significado (MIN vs MAX, ANY vs ALL)\\n- JOIN incorreto
+      que altera os dados sendo agregados ou filtrados\\n- Resultado vazio quando
+      a pergunta claramente espera dados\\n- Filtro com valor literal diferente do
+      que est\xE1 no banco\\n- M\xE9trica errada (SUM vs AVG, COUNT vs COUNT DISTINCT,
+      etc.)\\n- Erro de execu\xE7\xE3o SQL\\n\\nAPROVE quando:\\n- O resultado responde
+      \xE0 pergunta, mesmo com formato ou representa\xE7\xE3o diferente\\n- H\xE1
+      colunas extras que n\xE3o prejudicam a resposta\\n- A precis\xE3o num\xE9rica
+      difere mas o valor est\xE1 correto\\n- A query \xE9 mais simples que o esperado
+      mas semanticamente equivalente\\n\\nAvalie com rigor sem\xE2ntico. Resultados
+      que parecem plaus\xEDveis mas derivam de l\xF3gica\\nincorreta devem ser reprovados.
+      N\xE3o presuma que uma query bem-formada est\xE1 correta.\\n\\nResponda no formato:\\nVEREDITO:
+      APROVADO ou REPROVADO\\nFEEDBACK: <sua avalia\xE7\xE3o em 1-3 frases>\",\"role\":\"user\"}],\"model\":\"gpt-4o-mini\",\"stream\":false}"
+    headers:
+      Accept:
+      - a
+      Accept-Encoding:
+      - g
+      Connection:
+      - k
+      Content-Length:
+      - '8'
+      Content-Type:
+      - a
+      Cookie:
+      - _
+      Host:
+      - a
+      User-Agent:
+      - O
+      X-Stainless-Arch:
+      - x
+      X-Stainless-Async:
+      - f
+      X-Stainless-Lang:
+      - p
+      X-Stainless-OS:
+      - L
+      X-Stainless-Package-Version:
+      - '2'
+      X-Stainless-Raw-Response:
+      - t
+      X-Stainless-Runtime:
+      - C
+      X-Stainless-Runtime-Version:
+      - '3'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAA/41Ty24aMRTd8xVXXrUSoAERINmRQN8tbZpk00aDY18GtzO2Y3tQaMS/tL/RbX6s
+        1wNkSJtI3Yw899xzfB/Htw0ApiQ7AiYWPIjC5q2x5v2TN9eymM5vli/t6pU9l70LN8Lk/fGCNSPD
+        XH1DEXastjDEw6CM3sDCIQ8YVTuDYTJIDrvJsAIKIzGPtMyGVs+0CqVVq5t0e61k0OoMt+yFUQI9
+        pX2hX4Db6hvr1BJvKJw0d5ECvecZUmyXREFn8hhh3HvlA9eBNWtQGB1QV6VfTE4n49dn0yMYfTyd
+        XozGU4Cv+sVkMj4enbylKFCyL/PA4fOnd/TjHAZeEBsjQmED+u53gc5AMIHnIBEUqXtYopZKGg/W
+        OBA0i8w4xZtQBpWrH1xLA7OT6fmHs2fGSXQpsQrfrs+pks9ngMAzV9oqPQrNrDOyFCHdKq5STeXM
+        2jD14LCqNN5JVRqnt0dvDU2tAOtQKL+t/u4nWHRZGXsg7dKXd7+cMk3glOYppbqS+7p0OpoCOBRc
+        USHXJU1VSU79PtF4e3/mDuel53HvuszzPYBrTfTom2rbl1tkfb/f3GTU85X/i8rm5Bu/SMlmnjxH
+        u/TBWFaha/peVj4qH1iDkVBhQxrMd6yu6ya9w40gq/1bw/0dWHW4R+t0hs1HFFNJ5lC53/MiE1ws
+        UNbc2ri8lMrsAY29vv8t5zHtTe9KZ/8jXwNCoKWnmdKipRIPW67THMb3/VTa/ZyrgplHt6QHmwaF
+        Lu5C4pyTFzeP2a989DMtLENnndo8vblNO4f9+UG3z7sHrLFu/AHji7BliAQAAA==
+    headers:
+      Access-Control-Expose-Headers:
+      - CF-Ray
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-Ray:
+      - <REDACTED>
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Sat, 06 Jun 2026 01:26:49 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      - CF-Ray
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - <REDACTED>
+      openai-processing-ms:
+      - '812'
+      openai-project:
+      - <REDACTED>
+      openai-version:
+      - '2020-10-01'
+      x-openai-proxy-wasm:
+      - v0.1
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '200000'
+      x-ratelimit-remaining-requests:
+      - <REDACTED>
+      x-ratelimit-remaining-tokens:
+      - <REDACTED>
+      x-ratelimit-reset-requests:
+      - 57.616s
+      x-ratelimit-reset-tokens:
+      - 599ms
+      x-request-id:
+      - <REDACTED>
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"Voc\xEA \xE9 um assistente que decide se
+      os resultados de uma consulta SQL\\ndevem ser acompanhados de um gr\xE1fico
+      (visualiza\xE7\xE3o).\\n\\nAnalise a pergunta do usu\xE1rio e as caracter\xEDsticas
+      dos dados retornados.\\n\\n=== PERGUNTA DO USU\xC1RIO ===\\nQuais s\xE3o as
+      5 categorias com a maior quantidade total de itens vendidos?\\n\\n=== COLUNAS
+      DO RESULTADO ===\\nproduct_category_name, total_items_sold\\n\\n=== TOTAL DE
+      LINHAS ===\\n5\\n\\n=== AMOSTRA DOS DADOS ===\\n[{'product_category_name': 'cama_mesa_banho',
+      'total_items_sold': 11115}, {'product_category_name': 'beleza_saude', 'total_items_sold':
+      9670}, {'product_category_name': 'esporte_lazer', 'total_items_sold': 8641},
+      {'product_category_name': 'moveis_decoracao', 'total_items_sold': 8334}, {'product_category_name':
+      'informatica_acessorios', 'total_items_sold': 7827}]\\n\\nUm gr\xE1fico \xE9
+      \xFAtil quando:\\n- A pergunta envolve compara\xE7\xF5es entre categorias (ex:
+      vendas por regi\xE3o)\\n- H\xE1 dados temporais ou tend\xEAncias (ex: evolu\xE7\xE3o
+      ao longo dos meses)\\n- H\xE1 distribui\xE7\xF5es ou rankings (ex: top 10 produtos)\\n-
+      H\xE1 agrega\xE7\xF5es num\xE9ricas que se beneficiam de visualiza\xE7\xE3o\\n-
+      O resultado tem mais de 1 linha com pelo menos uma coluna num\xE9rica\\n\\nUm
+      gr\xE1fico N\xC3O \xE9 \xFAtil quando:\\n- O resultado \xE9 um \xFAnico valor
+      escalar (ex: total geral)\\n- A pergunta pede um dado espec\xEDfico pontual
+      (ex: nome de um cliente)\\n- O resultado tem apenas 1 linha\\n- N\xE3o h\xE1
+      colunas num\xE9ricas para plotar\\n\\nResponda APENAS com uma palavra: SIM ou
+      NAO\\n\",\"role\":\"user\"}],\"model\":\"gpt-4o-mini\",\"stream\":false}"
+    headers:
+      Accept:
+      - a
+      Accept-Encoding:
+      - g
+      Connection:
+      - k
+      Content-Length:
+      - '1'
+      Content-Type:
+      - a
+      Cookie:
+      - _
+      Host:
+      - a
+      User-Agent:
+      - O
+      X-Stainless-Arch:
+      - x
+      X-Stainless-Async:
+      - f
+      X-Stainless-Lang:
+      - p
+      X-Stainless-OS:
+      - L
+      X-Stainless-Package-Version:
+      - '2'
+      X-Stainless-Raw-Response:
+      - t
+      X-Stainless-Runtime:
+      - C
+      X-Stainless-Runtime-Version:
+      - '3'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAA/6rmUlBQykxRslJQSs5ILEnOLcjRdclLNHMt8gEAAAD//4xSy27CMBC88xXIZ1Il
+        ASnhXKlVD720J1qhyLE3wZDYrr3pU/x7bQdIaKnUiyXv7Ixn1qu2D2+dvH66TXYIO1xV6ublc0Vm
+        nqHKLTA8sq6YcjxAoWQPMwMUwasmWR5n8TJN4gC0ikPjabXGaKGiVkgRpXG6iOIsSvIDe6MEA+va
+        nt11Ov0Kp/cpOby7ctAKlRaspTW42rHJFY1qfIVQa4VFKpHMBpApiSCD9ce7+zFioOos9e5k1zQj
+        gEqpkPp0wdP6gOxPLhpVa6NK+4NKKpfObgo3DOsm4160qDQJ6N6d65C2OwtAnFCrsUC1g/DcPMt7
+        PTIMeUCTA4bOYDMmLWcX5AoOSEVjR+MijLIN8IE6zJZ2XKgRMBmF/m3mknYfXMj6P/IDwBhotz2F
+        NsAFOw88tBnwK/hX22nIwTCxYF7dThUowPiP4FDRrukXg9gPi9AW7rdqMNqIfjsqXeQc5jkrS5qS
+        yX7yDQAA//8DADKv/nsrAwAA
+    headers:
+      Access-Control-Expose-Headers:
+      - CF-Ray
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-Ray:
+      - <REDACTED>
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Sat, 06 Jun 2026 01:26:50 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      - CF-Ray
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - <REDACTED>
+      openai-processing-ms:
+      - '320'
+      openai-project:
+      - <REDACTED>
+      openai-version:
+      - '2020-10-01'
+      x-openai-proxy-wasm:
+      - v0.1
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '200000'
+      x-ratelimit-remaining-requests:
+      - <REDACTED>
+      x-ratelimit-remaining-tokens:
+      - <REDACTED>
+      x-ratelimit-reset-requests:
+      - 1m4.623s
+      x-ratelimit-reset-tokens:
+      - 109ms
+      x-request-id:
+      - <REDACTED>
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"content\":\"Voc\xEA \xE9 um especialista em visualiza\xE7\xE3o
+      de dados com Python e matplotlib.\\n\\nSua tarefa: gerar APENAS o bloco de c\xF3digo
+      Python que cria um gr\xE1fico matplotlib\\npara visualizar os dados descritos
+      abaixo.\\n\\n=== PERGUNTA DO USU\xC1RIO ===\\n\\n\\n=== SQL EXECUTADA ===\\nSELECT
+      products.product_category_name, COUNT(order_items.order_item_id) AS total_items_sold\\nFROM
+      order_items\\nJOIN products ON order_items.product_id = products.product_id\\nGROUP
+      BY products.product_category_name\\nORDER BY total_items_sold DESC\\nLIMIT 5;\\n\\n===
+      COLUNAS DO RESULTADO ===\\nproduct_category_name, total_items_sold\\n\\n===
+      AMOSTRA DOS DADOS (primeiras linhas do CSV) ===\\n[{'product_category_name':
+      'cama_mesa_banho', 'total_items_sold': 11115}, {'product_category_name': 'beleza_saude',
+      'total_items_sold': 9670}, {'product_category_name': 'esporte_lazer', 'total_items_sold':
+      8641}, {'product_category_name': 'moveis_decoracao', 'total_items_sold': 8334},
+      {'product_category_name': 'informatica_acessorios', 'total_items_sold': 7827}]\\n\\n===
+      TOTAL DE LINHAS ===\\n5\\n\\nRegras:\\n- O c\xF3digo ser\xE1 inserido dentro
+      de um script que j\xE1 importou pandas, matplotlib e j\xE1\\n  carregou o DataFrame
+      com `df = pd.read_csv(...)`.\\n- Voc\xEA N\xC3O deve importar nada nem carregar
+      dados. Apenas use a vari\xE1vel `df`.\\n- Use `plt` (j\xE1 importado como `import
+      matplotlib.pyplot as plt`).\\n- Escolha o tipo de gr\xE1fico mais adequado \xE0
+      pergunta e aos dados (barras, linhas, pizza, dispers\xE3o, etc.).\\n- Adicione
+      t\xEDtulo, labels nos eixos, e legenda quando relevante.\\n- Use cores visualmente
+      agrad\xE1veis.\\n- Se necess\xE1rio, rotacione labels do eixo X para legibilidade.\\n-
+      O gr\xE1fico ser\xE1 salvo automaticamente, voc\xEA N\xC3O deve chamar plt.savefig()
+      nem plt.show().\\n- Responda APENAS com o c\xF3digo Python puro, sem markdown,
+      sem explica\xE7\xF5es.\\n- Se os dados tiverem muitas categorias (>15), mostre
+      apenas o top 10-15 mais relevantes.\\n\\nN\xE3o fa\xE7a um gr\xE1fico basico
+      visualmente, fa\xE7a ele bonito, use cores agradaveis e que ajude o usuario
+      a entender os dados. Tenta fazer algo com cara profissional! Feito por um analista
+      apresentando para um grande cliente que julga o livro pela capa.\\n\",\"role\":\"user\"}],\"model\":\"gpt-4o-mini\",\"stream\":false}"
+    headers:
+      Accept:
+      - a
+      Accept-Encoding:
+      - g
+      Connection:
+      - k
+      Content-Length:
+      - '2'
+      Content-Type:
+      - a
+      Cookie:
+      - _
+      Host:
+      - a
+      User-Agent:
+      - O
+      X-Stainless-Arch:
+      - x
+      X-Stainless-Async:
+      - f
+      X-Stainless-Lang:
+      - p
+      X-Stainless-OS:
+      - L
+      X-Stainless-Package-Version:
+      - '2'
+      X-Stainless-Raw-Response:
+      - t
+      X-Stainless-Runtime:
+      - C
+      X-Stainless-Runtime-Version:
+      - '3'
+      x-stainless-retry-count:
+      - '0'
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAA/6rmUlBQykxRslJQSs5ILEnOLcjRdclLNHNLjgQAAAD//41U32+bMBB+719h0QeI
+        RCIgP0geeNi6RdrDtEntpklthBx8gFcHM9u0yab+7zsDKcnaSnsB+777Pt/5fHcdfP5W0h+Lj8Xq
+        ED9Gnz/82j48fnF8y5Dbn5CZI2uSSeSB4bLq4EwBNWBVw3gZxMEqCsMW2EkGwtKK2oxncrzjFR9H
+        QTQbB/E4XPbsUvIMNLrd4paQP+3Xxlkx2KM58I+WHWhNC0Db0QmNSgprcajWXBtaGccfwExWBqo2
+        dJaThLB8UgJl3nxEyCW5BgEZpkEJ1WROMsyikIrjZke5Jg9QMc6ovqtqYSY5LxoFHv40/w2JF0Y+
+        WYxGd9WWKo3S1geXHstv3VpJ1mQm7RUPaUV34G58YkEjDRUpN7DTqZaCWXsmhVTJrXs5u3q3ngeu
+        T9zLKFwt1tN2uV6vlkFnXV1F8ftuuZ7NptOFuxl1ARpuBHjujawxl6shFwbkq43HSE2+tylJjfwc
+        r6bNJFx0m0fgRWkSd2tj6jX3gm5BeO6rcmcis55x6Bk3Nkvr/AkL8MbBR87e8Oxeewop9lUls7lP
+        Spq4ygZ0xoiOp3SMl0ChOPPonuvEPSBT8Aq0OQhI3PEY91TUKBxM4t4dC5Z2Adsqnp4U+KSmjPGq
+        SKbH+riPJZbNffu6jDWh4EE2xhudPkQFeaOpbYaqEeIEoFXVp922wKZHnp4fvZAFPqet/ofq5NhM
+        ukyx9zQ2Ij5wbWTttOgTfjdtczVn/eKg0K42qZH30B43j1adnjP09ICGyyPaPdlnIA6X/iuCKQND
+        udAn/elkNCuBDdShmWnDuDwBLk7SfhnOa9pd6lih/5EfgCyDGsdVWitgPDtPeXBTYGfeW27P19wG
+        7GhQDzjEUsNBtbMGctqIbhI5+qCx11OsVwGqVrwbR3mdUhrFcZgF86lz8XTxF1OzzCicBQAA
+    headers:
+      Access-Control-Expose-Headers:
+      - CF-Ray
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-Ray:
+      - <REDACTED>
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Sat, 06 Jun 2026 01:26:54 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      - CF-Ray
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - <REDACTED>
+      openai-processing-ms:
+      - '2275'
+      openai-project:
+      - <REDACTED>
+      openai-version:
+      - '2020-10-01'
+      x-openai-proxy-wasm:
+      - v0.1
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '200000'
+      x-ratelimit-remaining-requests:
+      - <REDACTED>
+      x-ratelimit-remaining-tokens:
+      - <REDACTED>
+      x-ratelimit-reset-requests:
+      - 1m11.828s
+      x-ratelimit-reset-tokens:
+      - 159ms
+      x-request-id:
+      - <REDACTED>
+    status:
+      code: 200
+      message: OK
+version: 1

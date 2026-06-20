@@ -5,14 +5,21 @@ interactions:
       situa\u00e7\u00e3o atual e decidir a pr\u00f3xima a\u00e7\u00e3o.\n\nContexto
       atual:\n- Pergunta do usu\u00e1rio: \"Quantos pedidos existem no banco?\"\n-
       Schema dispon\u00edvel: Sim\n- Feedback do cr\u00edtico: Nenhum\n- Tentativas
-      realizadas: 0\n- Status atual: schema_obtido\n- Erro anterior: Nenhum\n\nDecida
-      a pr\u00f3xima a\u00e7\u00e3o respondendo com EXATAMENTE uma das op\u00e7\u00f5es
-      abaixo:\n- \"pronto_codificacao\" \u2192 se temos schema e devemos gerar/regenerar
-      SQL\n- \"revisando_estrategia\" \u2192 se o cr\u00edtico reprovou e devemos
-      tentar uma abordagem diferente\n- \"aprovado\" \u2192 se o resultado j\u00e1
-      foi aprovado pelo cr\u00edtico\n\nResponda APENAS com uma das op\u00e7\u00f5es
-      acima, sem explica\u00e7\u00e3o."}], "role": "user"}], "safetySettings": [],
-      "generationConfig": {"temperature": 0.7, "candidateCount": 1}}'
+      realizadas: 0\n- Status atual: schema_obtido\n- Erro anterior: Nenhum\n\nAVALIA\u00c7\u00c3O
+      CR\u00cdTICA:\nVerifique se a \"Pergunta do usu\u00e1rio\" pode ser respondida
+      com as tabelas e colunas do Schema.\nSe houver ambiguidade, conceitos n\u00e3o
+      mapeados no banco de dados, ou se a inten\u00e7\u00e3o do usu\u00e1rio n\u00e3o
+      estiver clara, voc\u00ea DEVE pedir mais informa\u00e7\u00f5es.\n\nResponda
+      EXATAMENTE no formato JSON abaixo, sem formata\u00e7\u00e3o markdown (```json):\n{\n    \"decisao\":
+      \"escolha_uma_opcao\",\n    \"pergunta_ao_usuario\": \"escreva a pergunta aqui
+      se precisar de ajuda, ou deixe vazio se n\u00e3o precisar\"\n}\n\nOp\u00e7\u00f5es
+      v\u00e1lidas para ''decis\u00e3o'':\n- \"pronto_codificacao\" \u2192 se temos
+      schema, a pergunta faz sentido e devemos gerar/regenerar SQL\n- \"revisando_estrategia\"
+      \u2192 se o cr\u00edtico reprovou e devemos tentar uma abordagem diferente\n-
+      \"necessita_ajuda\" \u2192 a pergunta n\u00e3o \u00e9 clara, n\u00e3o faz sentido,
+      falta contexto ou n\u00e3o h\u00e1 dados no schema para responder.\n"}], "role":
+      "user"}], "safetySettings": [], "generationConfig": {"temperature": 0.7, "candidateCount":
+      1}}'
     headers:
       Accept:
       - '*/*'
@@ -21,7 +28,7 @@ interactions:
       Connection:
       - keep-alive
       Content-Length:
-      - '996'
+      - '1551'
       Content-Type:
       - application/json
       Host:
@@ -35,12 +42,12 @@ interactions:
   response:
     body:
       string: !!binary |
-        H4sIAAAAAAAC/2WQ0U+DMBDG3/krSJ83o4i6+LoZs8TpVGKmxiwnHNAILaGHTgn/uy0MVrQPTXPf
-        17v7frXjuiwEEfEICBW7dF91xXXr9jaaFISCtNCXdLGAkg7e7tTWW1sId+YTK0rdQG5DGfGYhxCC
-        ZJaxGd5vk0P7UmZo/uYywqy3N72BxVxwlT4gKCmM7TG4W7NB5SLCnS4fO/2AtjWrFCS4QgIdFIY4
-        Zr+8oEB+oJjLqg16MvO7bhaYkeF8L5MkyEaKf+pN/vVVCz2VZzYwi6UOCRmnb5MkuNoEzAJBf9bq
-        UTgWMUaprJKUxit6vufsmXUYn7BUvOOVYK4JTr2js2mcgUrbiaxEVUihcBkZz/M2WMBL9XW7ml//
-        XCzXs8/3m/x+xpzG+QXmZT5XMwIAAA==
+        H4sIAAAAAAAC/2WRXUvDMBSG7/srSq436Sbb0Fv1YqJsapGJlXFoztqwNinJKUxL/7tJu26ZNlCS
+        97w5H0+aIAxZCpILDoSG3YafVgnDpvu7mJKEkmxgkKxYgaazt/8ab28thAd3iTWJdOeEcUyFAZVY
+        MWGVtmnVNlVc7EQKqdNHg7NCndWSYAtqW5satDjesku2zKvTnvZfo3N3WhXoSpeKYzHY28HAdkIK
+        k78iGCWd7S1erdkpKiTHg5WjYCjQpWa1gQyfkcByghMNN0hZUaz2KO9U3XG6nsz7bB7XC8P05hgn
+        RVBchqJoOvqX2dzbuqLwiXuPYceEQtC3myV+2MTMQ0F/GhtgBB4zRrmqs5wum5zMZ4vgiK0n+Y7a
+        iB5ZhqWFOJ5ezca7AkzelWQaTaWkwSV3ns1HvAJePj3WC/2zWK4jmKvyZc+CNvgFzNz0U3UCAAA=
     headers:
       Alt-Svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
@@ -49,11 +56,11 @@ interactions:
       Content-Type:
       - application/json; charset=UTF-8
       Date:
-      - Wed, 25 Mar 2026 14:42:45 GMT
+      - Thu, 02 Apr 2026 14:59:50 GMT
       Server:
       - scaffolding on HTTPServer2
       Server-Timing:
-      - gfet4t7; dur=1793
+      - gfet4t7; dur=8863
       Transfer-Encoding:
       - chunked
       Vary:
