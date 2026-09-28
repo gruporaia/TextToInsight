@@ -102,6 +102,14 @@ def roteador_planejador(estado: EstadoTextToInsight) -> Literal["esquema", "agen
         return "agente_codigo"
 
     if status == "revisando_estrategia":
+        contexto_rag = estado.get("contexto_rag_schema", "")
+        if "RAG desativado" in contexto_rag:
+            print(
+                "[ROTEADOR_PLANEJADOR] RAG desativado (schema já completo) "
+                "→ agente_codigo (direto)"
+            )
+            return "agente_codigo"
+
         if len(contexto) < 1500:
             print(
                 f"[ROTEADOR_PLANEJADOR] Schema pequeno ({len(contexto)} chars), "
