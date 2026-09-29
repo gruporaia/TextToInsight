@@ -74,7 +74,7 @@ class Graph:
         construtor_grafo.add_node("esquema", partial(nos_nodo_esquema, **engine_kwargs))
         construtor_grafo.add_node("retriever", partial(nos_nodo_retriever, use_rag=self.use_rag))
         construtor_grafo.add_node("exploration_selector", partial(nos_nodo_exploration_selector, llm=self.llm, exploration_selector_mode=self.use_exploration_selector))
-        construtor_grafo.add_node("data_exploration", partial(nos_nodo_data_exploration, use_data_exploration=self.use_data_exploration))
+        construtor_grafo.add_node("data_exploration", partial(nos_nodo_data_exploration, use_data_exploration=self.use_data_exploration, **engine_kwargs))
         construtor_grafo.add_node("agente_codigo", partial(nos_nodo_agente_codigo, llm=self.llm, use_cot=self.use_cot, **engine_kwargs))
         construtor_grafo.add_node("sandbox", partial(nos_nodo_sandbox, **engine_kwargs))
         construtor_grafo.add_node("salvar_csv", nos_nodo_salvar_csv)
@@ -86,7 +86,7 @@ class Graph:
         construtor_grafo.add_edge("espera_humana", "planejador")
         path = 'retriever'
         if enrich_rag:
-            construtor_grafo.add_node("enriquecimento_rag", partial(nos_nodo_enrich, llm=self.llm))
+            construtor_grafo.add_node("enriquecimento_rag", partial(nos_nodo_enrich, llm=self.llm, **engine_kwargs))
             construtor_grafo.add_edge("enriquecimento_rag", "retriever")
             path = 'enriquecimento_rag'
 

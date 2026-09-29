@@ -359,31 +359,45 @@ def executar_sql_via_engine(
 
     from sqlalchemy import text
 
+    dialeto = engine.dialect.name
+
     try:
         opcoes = {}
-        if engine.dialect.name == "postgresql":
+        if dialeto == "postgresql":
             opcoes["postgresql_readonly"] = True
 
         with engine.connect() as conn:
             conn = conn.execution_options(**opcoes) if opcoes else conn
+            dbapi_conn = None
 
-            # Aplica timeout e modo somente-leitura conforme o dialeto detectado.
-            if engine.dialect.name == "postgresql":
-                conn.execute(text(f"SET statement_timeout = {int(timeout_segundos * 1000)}"))
-            elif engine.dialect.name == "mysql":
-                conn.execute(text("SET SESSION TRANSACTION READ ONLY"))
-                conn.execute(text(f"SET SESSION max_execution_time = {int(timeout_segundos * 1000)}"))
-            elif engine.dialect.name == "sqlite":
-                dbapi_conn = getattr(conn.connection, "dbapi_connection", conn.connection)
-                inicio = time.time()
+            # A engine é do chamador e suas conexões voltam para o pool dele,
+            # então nenhum ajuste de sessão feito aqui pode sobreviver à chamada.
+            try:
+                if dialeto == "postgresql":
+                    # Roda dentro da transação aberta pelo autobegin, que é
+                    # desfeita (rollback) ao fechar: o SET não vaza para o pool.
+                    conn.execute(text(f"SET statement_timeout = {int(timeout_segundos * 1000)}"))
+                elif dialeto == "mysql":
+                    conn.execute(text("SET SESSION TRANSACTION READ ONLY"))
+                    conn.execute(text(f"SET SESSION max_execution_time = {int(timeout_segundos * 1000)}"))
+                elif dialeto == "sqlite":
+                    dbapi_conn = getattr(conn.connection, "dbapi_connection", conn.connection)
+                    inicio = time.time()
 
-                def _progress_handler():
-                    return 1 if time.time() - inicio > timeout_segundos else 0
+                    def _progress_handler():
+                        return 1 if time.time() - inicio > timeout_segundos else 0
 
-                dbapi_conn.set_progress_handler(_progress_handler, 1000)
+                    dbapi_conn.set_progress_handler(_progress_handler, 1000)
 
-            resultado = conn.execute(text(sql))
-            rows = [dict(linha) for linha in resultado.mappings().all()]
+                resultado = conn.execute(text(sql))
+                rows = [dict(linha) for linha in resultado.mappings().all()]
+            finally:
+                if dbapi_conn is not None:
+                    dbapi_conn.set_progress_handler(None, 0)
+                elif dialeto == "mysql":
+                    # SET SESSION não é transacional no MySQL: descarta a conexão
+                    # em vez de devolvê-la read-only/com timeout ao pool do chamador.
+                    conn.invalidate()
     except Exception as e:
         erro_msg = str(e)
         if "interrupted" in erro_msg.lower() or "timeout" in erro_msg.lower() or "canceling statement" in erro_msg.lower():
