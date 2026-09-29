@@ -150,12 +150,42 @@ def normalize_extracted_layout(target_dir: Path) -> None:
     Handles quirks in BIRD archive packaging:
     - Wrapper subfolders with varying case ('MINIDEV', 'minidev', 'dev').
     - Discrepancies in question filename ('mini_dev_sqlite.json' vs 'dev.json').
-    - Relocates nested databases and schema files directly into target_dir.
+    - Intermediate folders like dev_[date] (e.g. dev_20240627).
+    - Relocates nested databases and schema files, ensuring dev.json is visible
+      both in target_dir root and inside any intermediate subfolder.
     """
     if not target_dir.exists():
         return
 
-    # 1. Flatten wrapper directory if present (e.g. MINIDEV/ or minidev/ or dev/)
+    # 1. Check for internal dev_databases.zip archive (used in full dev set)
+    # Search root and intermediate subfolders (e.g. dev_20240627/dev_databases.zip)
+    db_zips: list[Path] = [target_dir / "dev_databases.zip"]
+    if target_dir.is_dir():
+        for sub in target_dir.iterdir():
+            if sub.is_dir() and not sub.name.startswith("."):
+                sub_zip = sub / "dev_databases.zip"
+                if sub_zip.exists() and sub_zip not in db_zips:
+                    db_zips.append(sub_zip)
+        for nested in target_dir.rglob("dev_databases.zip"):
+            if nested not in db_zips:
+                db_zips.append(nested)
+
+    for inner_zip in db_zips:
+        if inner_zip.exists() and inner_zip.is_file():
+            rel_name = inner_zip.relative_to(target_dir) if inner_zip.is_relative_to(target_dir) else inner_zip.name
+            print(f"  → Found nested archive: {rel_name}. Extracting databases...")
+            databases_dir = target_dir / "dev_databases"
+            databases_dir.mkdir(parents=True, exist_ok=True)
+            with zipfile.ZipFile(inner_zip, "r") as inner_archive:
+                names = inner_archive.namelist()
+                if any(n.startswith("dev_databases/") for n in names):
+                    inner_archive.extractall(target_dir)
+                else:
+                    inner_archive.extractall(databases_dir)
+            inner_zip.unlink()
+            print(f"  ✓ Databases extracted into: {databases_dir}")
+
+    # 2. Flatten generic wrapper directory if present (e.g. MINIDEV/ or minidev/ or dev/)
     for item in list(target_dir.iterdir()):
         if item.is_dir() and item.name.lower() in ("minidev", "dev"):
             print(f"  → Normalizing nested folder structure: {item.name}/...")
@@ -170,24 +200,59 @@ def normalize_extracted_layout(target_dir: Path) -> None:
                             shutil.move(str(sub_sub), str(dest_sub))
             shutil.rmtree(item, ignore_errors=True)
 
-    # 2. Check for internal dev_databases.zip archive (used in full dev set)
-    internal_db_zip = target_dir / "dev_databases.zip"
-    if internal_db_zip.exists():
-        print(f"  → Found nested archive: {internal_db_zip.name}. Extracting databases...")
-        databases_dir = target_dir / "dev_databases"
-        databases_dir.mkdir(parents=True, exist_ok=True)
-        with zipfile.ZipFile(internal_db_zip, "r") as inner_archive:
-            inner_archive.extractall(databases_dir)
-        internal_db_zip.unlink()
-        print(f"  ✓ Databases extracted into: {databases_dir}")
-
-    # 3. Standardize question file to dev.json
-    # In Mini-Dev, the SQLite question file is named 'mini_dev_sqlite.json'
-    mini_dev_sqlite = target_dir / "mini_dev_sqlite.json"
+    # 3. Standardize and synchronize dev.json across root and any intermediate folders (e.g. dev_[date])
     dev_json = target_dir / "dev.json"
-    if mini_dev_sqlite.exists() and not dev_json.exists():
-        shutil.copy2(mini_dev_sqlite, dev_json)
-        print(f"  ✓ Standardized {mini_dev_sqlite.name} -> {dev_json.name}")
+    mini_dev_sqlite = target_dir / "mini_dev_sqlite.json"
+
+    # If dev.json does not exist in target_dir root, locate it in any subfolder or standardize mini_dev_sqlite
+    if not dev_json.exists():
+        if mini_dev_sqlite.exists():
+            shutil.copy2(mini_dev_sqlite, dev_json)
+            print(f"  ✓ Standardized {mini_dev_sqlite.name} -> {dev_json.name}")
+        else:
+            found_sub_dev = None
+            for sub in sorted(target_dir.iterdir(), reverse=True):
+                if sub.is_dir() and not sub.name.startswith("."):
+                    for candidate_name in ("dev.json", "mini_dev_sqlite.json", "mini_dev.json", "minidev.json"):
+                        candidate = sub / candidate_name
+                        if candidate.is_file():
+                            found_sub_dev = candidate
+                            break
+                if found_sub_dev:
+                    break
+
+            if not found_sub_dev:
+                for match in sorted(target_dir.rglob("dev.json"), reverse=True):
+                    if match.is_file() and not any(part.startswith(".") for part in match.parts):
+                        found_sub_dev = match
+                        break
+
+            if found_sub_dev:
+                shutil.copy2(found_sub_dev, dev_json)
+                print(f"  ✓ Made dev.json visible in root: {found_sub_dev.relative_to(target_dir)} -> {dev_json.name}")
+
+    # Ensure dev.json is visible inside any intermediate subfolder (e.g. dev_[date], dev_20240627)
+    if dev_json.exists():
+        for sub in target_dir.iterdir():
+            if (
+                sub.is_dir()
+                and not sub.name.startswith(".")
+                and (sub.name.lower().startswith("dev") or sub.name.lower().startswith("minidev"))
+                and not sub.name.lower().startswith("dev_database")
+            ):
+                sub_dev_json = sub / "dev.json"
+                if not sub_dev_json.exists():
+                    shutil.copy2(dev_json, sub_dev_json)
+                    print(f"  ✓ Made dev.json visible inside folder: {sub.name}/dev.json")
+
+    # 4. Standardize companion files (dev_tables.json, dev.sql, dev_tied_append.json) to root if present in subfolder
+    for companion in ("dev_tables.json", "dev.sql", "dev_tied_append.json"):
+        if not (target_dir / companion).exists():
+            for sub in target_dir.iterdir():
+                if sub.is_dir() and (sub / companion).is_file():
+                    shutil.copy2(sub / companion, target_dir / companion)
+                    print(f"  ✓ Standardized companion file {companion} to root")
+                    break
 
 
 def extract_zip(zip_path: Path, target_dir: Path, clean_zip: bool = False) -> None:
@@ -232,21 +297,38 @@ def verify_setup(data_dir: Path) -> bool:
     normalize_extracted_layout(data_dir)
     print("\n Verifying BIRD dataset integrity...")
 
-    # 1. Check for dev.json or mini_dev questions
+    # 1. Check for dev.json or mini_dev questions in root and any subfolder
     dev_json_candidates = [
         data_dir / "dev.json",
         data_dir / "mini_dev_sqlite.json",
         data_dir / "mini_dev.json",
         data_dir / "minidev.json"
     ]
-    found_dev_json = next((p for p in dev_json_candidates if p.exists()), None)
+    if data_dir.is_dir():
+        for sub in sorted(data_dir.iterdir(), reverse=True):
+            if sub.is_dir() and not sub.name.startswith("."):
+                for name in ("dev.json", "mini_dev_sqlite.json", "mini_dev.json", "minidev.json"):
+                    dev_json_candidates.append(sub / name)
+
+    found_dev_json = next((p for p in dev_json_candidates if p.exists() and p.is_file()), None)
+
+    if not found_dev_json:
+        for match in sorted(data_dir.rglob("dev.json"), reverse=True):
+            if match.is_file() and not any(part.startswith(".") for part in match.parts):
+                found_dev_json = match
+                break
 
     if not found_dev_json:
         print(f"  ❌ Missing dev.json in {data_dir}")
         return False
 
+    # Ensure dev.json is visible in data_dir root if found in subfolder
+    if found_dev_json.parent != data_dir and not (data_dir / "dev.json").exists():
+        shutil.copy2(found_dev_json, data_dir / "dev.json")
+
     dev_size_kb = found_dev_json.stat().st_size / 1024
-    print(f"  ✓ Found question dataset: {found_dev_json.name} ({dev_size_kb:.1f} KB)")
+    rel_path = found_dev_json.relative_to(data_dir) if found_dev_json.is_relative_to(data_dir) else found_dev_json.name
+    print(f"  ✓ Found question dataset: {rel_path} ({dev_size_kb:.1f} KB)")
 
     # 2. Check for SQLite databases
     sqlite_files = list(data_dir.rglob("*.sqlite")) + list(data_dir.rglob("*.db"))

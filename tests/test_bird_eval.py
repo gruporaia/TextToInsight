@@ -434,3 +434,91 @@ def test_cli_orchestrator_dry_run_with_dir_output(mock_bird_env: Path, tmp_path:
     generated_csv = generated_csvs[0]
     assert generated_csv.with_suffix(".json").exists()
     assert generated_csv.with_suffix(".md").exists()
+
+
+# ==============================================================================
+# 6. Tests for Intermediate Folder Handling (dev_[date])
+# ==============================================================================
+
+def test_data_loader_dev_json_in_intermediate_folder(tmp_path: Path) -> None:
+    """Verifies that load_bird_dev_examples finds dev.json inside any intermediate folder (e.g. dev_20240627)."""
+    sub_dir = tmp_path / "dev_20240627"
+    sub_dir.mkdir(parents=True)
+
+    examples = [
+        {
+            "question_id": 101,
+            "db_id": "test_db",
+            "question": "Count rows",
+            "evidence": "",
+            "SQL": "SELECT count(*) FROM t",
+            "difficulty": "simple",
+        }
+    ]
+    dev_json_file = sub_dir / "dev.json"
+    dev_json_file.write_text(json.dumps(examples), encoding="utf-8")
+
+    # SQLite DB in intermediate folder
+    db_file = sub_dir / "dev_databases" / "test_db" / "test_db.sqlite"
+    db_file.parent.mkdir(parents=True)
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("CREATE TABLE t (id INT);")
+        conn.execute("INSERT INTO t VALUES (1);")
+
+    # load_bird_dev_examples should find dev.json in sub_dir even when pointing to tmp_path root
+    loaded = load_bird_dev_examples(tmp_path)
+    assert len(loaded) == 1
+    assert loaded[0]["question_id"] == 101
+
+    # Should also have made dev.json visible in root and subfolder
+    assert (tmp_path / "dev.json").exists()
+    assert dev_json_file.exists()
+
+    # get_database_path should find the nested sqlite file
+    resolved_db = get_database_path(tmp_path, "test_db")
+    assert resolved_db.exists()
+    assert resolved_db.name == "test_db.sqlite"
+
+
+def test_setup_bird_data_intermediate_folder(tmp_path: Path) -> None:
+    """Verifies normalize_extracted_layout and verify_setup handle dev_[date] layout."""
+    import zipfile
+    from scripts.setup_bird_data import normalize_extracted_layout, verify_setup
+
+    data_dir = tmp_path / "bird"
+    sub_dir = data_dir / "dev_20240627"
+    sub_dir.mkdir(parents=True)
+
+    # 1. Place dev.json in intermediate folder
+    examples = [
+        {
+            "question_id": 1,
+            "db_id": "school",
+            "question": "What is the count?",
+            "SQL": "SELECT 1",
+            "difficulty": "simple",
+        }
+    ]
+    (sub_dir / "dev.json").write_text(json.dumps(examples), encoding="utf-8")
+
+    # 2. Place dev_databases.zip in intermediate folder
+    db_zip_path = sub_dir / "dev_databases.zip"
+    inner_db_dir = tmp_path / "temp_db_build" / "dev_databases" / "school"
+    inner_db_dir.mkdir(parents=True)
+    dummy_db = inner_db_dir / "school.sqlite"
+    with sqlite3.connect(dummy_db) as conn:
+        conn.execute("CREATE TABLE t (x INT);")
+
+    with zipfile.ZipFile(db_zip_path, "w") as z:
+        z.write(dummy_db, arcname="dev_databases/school/school.sqlite")
+
+    # Run normalize and verify
+    assert verify_setup(data_dir) is True
+
+    # dev.json should now be visible in root AND in intermediate folder
+    assert (data_dir / "dev.json").exists()
+    assert (sub_dir / "dev.json").exists()
+
+    # Databases should be extracted
+    assert (data_dir / "dev_databases" / "school" / "school.sqlite").exists()
+

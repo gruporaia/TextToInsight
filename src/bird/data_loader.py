@@ -57,39 +57,81 @@ def load_bird_dev_examples(
     base_path = Path(data_dir)
     dialect_clean = dialect.lower().strip()
 
-    # 2. Select dialect-specific candidate filenames
-    if dialect_clean == "sqlite":
-        candidate_files = [
-            base_path / "dev.json",
-            base_path / "mini_dev_sqlite.json",
-            base_path / "MINIDEV" / "mini_dev_sqlite.json",
-        ]
-    elif dialect_clean == "mysql":
-        candidate_files = [
-            base_path / "mini_dev_mysql.json",
-            base_path / "MINIDEV" / "mini_dev_mysql.json",
-            base_path / "dev_mysql.json",
-        ]
-    elif dialect_clean in ("postgresql", "postgres"):
-        candidate_files = [
-            base_path / "mini_dev_postgresql.json",
-            base_path / "MINIDEV" / "mini_dev_postgresql.json",
-            base_path / "dev_postgresql.json",
-        ]
+    # If user provided a direct file path, use it directly
+    if base_path.is_file():
+        dataset_path: Path | None = base_path
     else:
-        raise ValueError(
-            f"Unsupported SQL dialect '{dialect}'. Supported dialects are: 'sqlite', 'mysql', 'postgresql'."
-        )
+        # 2. Select dialect-specific candidate filenames
+        if dialect_clean == "sqlite":
+            candidate_names = ["dev.json", "mini_dev_sqlite.json", "mini_dev.json", "minidev.json"]
+        elif dialect_clean == "mysql":
+            candidate_names = ["mini_dev_mysql.json", "dev_mysql.json"]
+        elif dialect_clean in ("postgresql", "postgres"):
+            candidate_names = ["mini_dev_postgresql.json", "dev_postgresql.json"]
+        else:
+            raise ValueError(
+                f"Unsupported SQL dialect '{dialect}'. Supported dialects are: 'sqlite', 'mysql', 'postgresql'."
+            )
 
-    # 3. Find the first candidate path that physically exists on disk.
-    # A generator expression with next() and None default avoids IndexError.
-    dataset_path = next((p for p in candidate_files if p.exists() and p.is_file()), None)
+        candidate_files = [base_path / name for name in candidate_names]
+        candidate_files.extend([base_path / "MINIDEV" / name for name in candidate_names])
+        candidate_files.extend([base_path / "minidev" / name for name in candidate_names])
+
+        # 3. Find inside any intermediate subfolder inside base_path (e.g. dev_20240627/dev.json)
+        subfolder_candidates: list[Path] = []
+        if base_path.is_dir():
+            for sub in sorted(base_path.iterdir(), reverse=True):
+                if sub.is_dir() and not sub.name.startswith("."):
+                    for name in candidate_names:
+                        candidate = sub / name
+                        if candidate.is_file():
+                            subfolder_candidates.append(candidate)
+
+            # Fallback to deeper recursive search if not found in immediate subdirectories
+            if not subfolder_candidates:
+                for name in candidate_names:
+                    matches = [
+                        p for p in base_path.rglob(name)
+                        if p.is_file() and not any(part.startswith(".") for part in p.parts)
+                    ]
+                    subfolder_candidates.extend(sorted(matches, reverse=True))
+
+        all_candidates = candidate_files + subfolder_candidates
+        dataset_path = next((p for p in all_candidates if p.exists() and p.is_file()), None)
+
+        # 4. Ensure dev.json is visible in root as well as any intermediate subfolder
+        if dataset_path and base_path.is_dir():
+            import shutil
+            # If found in a subfolder, make it visible in base_path root
+            if dataset_path.parent != base_path:
+                root_copy = base_path / dataset_path.name
+                if not root_copy.exists():
+                    try:
+                        shutil.copy2(dataset_path, root_copy)
+                    except Exception:
+                        pass
+            # If dev.json exists in root, ensure intermediate folders (e.g. dev_*) also have it visible
+            root_dev = base_path / "dev.json"
+            if root_dev.exists() and root_dev.is_file():
+                for sub in base_path.iterdir():
+                    if (
+                        sub.is_dir()
+                        and not sub.name.startswith(".")
+                        and (sub.name.lower().startswith("dev") or sub.name.lower().startswith("minidev"))
+                        and not sub.name.lower().startswith("dev_database")
+                    ):
+                        sub_dev = sub / "dev.json"
+                        if not sub_dev.exists():
+                            try:
+                                shutil.copy2(root_dev, sub_dev)
+                            except Exception:
+                                pass
 
     # If no candidate file exists, fail fast with actionable guidance for the developer
     if not dataset_path:
         raise FileNotFoundError(
             f"BIRD dataset question file for dialect '{dialect}' not found in '{data_dir}'. "
-            f"Expected one of {[p.name for p in candidate_files]}. "
+            f"Checked root and all subdirectories for {[base_path / n for n in candidate_names]}. "
             f"Please run 'python scripts/setup_bird_data.py' first."
         )
 
@@ -299,10 +341,34 @@ def get_database_path(data_dir: str | Path, db_id: str) -> Path:
         if path.exists() and path.is_file():
             return path.resolve()
 
+    # Check intermediate subfolders (e.g. dev_20240627/dev_databases/<clean_db_id>/...)
+    if base_dir.is_dir():
+        for sub in sorted(base_dir.iterdir(), reverse=True):
+            if sub.is_dir() and not sub.name.startswith("."):
+                sub_candidates = [
+                    sub / "dev_databases" / clean_db_id / f"{clean_db_id}.sqlite",
+                    sub / "dev_databases" / clean_db_id / f"{clean_db_id}.db",
+                    sub / "databases" / clean_db_id / f"{clean_db_id}.sqlite",
+                    sub / clean_db_id / f"{clean_db_id}.sqlite",
+                    sub / clean_db_id / f"{clean_db_id}.db",
+                ]
+                for p in sub_candidates:
+                    if p.exists() and p.is_file():
+                        return p.resolve()
+
+        # Fallback recursive search across any folder in base_dir
+        for ext in (".sqlite", ".db"):
+            matches = [
+                p for p in base_dir.rglob(f"{clean_db_id}{ext}")
+                if p.is_file() and not any(part.startswith(".") for part in p.parts)
+            ]
+            if matches:
+                return sorted(matches, reverse=True)[0].resolve()
+
     # If missing, raise explicit FileNotFoundError with checked locations
     raise FileNotFoundError(
         f"Database file not found for db_id '{db_id}'. "
-        f"Checked location: '{candidate_paths[0]}'. "
+        f"Checked location: '{candidate_paths[0]}' and subdirectories in '{base_dir}'. "
         f"Please ensure databases are extracted under '{base_dir / 'dev_databases'}'."
     )
 
