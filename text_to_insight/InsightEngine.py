@@ -34,7 +34,16 @@ class InsightEngine:
         db_dialeto: str = "",
         db_config: dict | None = None,
         db_url: str = "",
+        db_engine: Any = None,
     ):
+        """
+        `db_engine`, se informado, deve ser uma Engine do SQLAlchemy já
+        construída pelo chamador (que também é responsável por descartá-la
+        com `.dispose()` quando terminar). Quando presente, tem prioridade
+        sobre `db_dialeto`/`db_config`/`db_url`/`db_path`: a engine nunca é
+        copiada para o estado do grafo — evita credenciais em texto puro no
+        checkpoint do LangGraph — e o dialeto é lido diretamente dela.
+        """
         self._hitl_ativado = hitl
         # `show_output` controla se a engine imprime o resultado final no terminal.
         # Em cenários com CLI, normalmente deixamos False para evitar saída duplicada.
@@ -46,6 +55,7 @@ class InsightEngine:
         self._db_dialeto = db_dialeto
         self._db_config = db_config
         self._db_url = db_url
+        self._db_engine = db_engine
         self._model = model
         self._db_path = db_path
         self._use_cot = use_cot
@@ -63,6 +73,7 @@ class InsightEngine:
             use_exploration_selector=self._use_exploration_selector,
             use_rag=self._use_rag,
             enrich_rag=self._enrich_rag,
+            db_engine=self._db_engine,
         )
 
         print(f"[CONFIG] HITL: {'ATIVADO' if self._hitl_ativado else 'DESATIVADO'}")

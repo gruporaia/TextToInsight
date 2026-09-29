@@ -338,30 +338,26 @@ def _normalizar_db_url(db_url: str) -> str:
     return db_url
 
 
-def executar_sql_via_url(
-    db_url: str,
+def executar_sql_via_engine(
+    engine: Any,
     sql: str,
     limite_preview: int = 5,
     timeout_segundos: float = 15.0,
 ) -> dict[str, Any]:
     """
-    Executa SQL usando uma unica URL de conexao (SQLAlchemy detecta o
-    dialeto sozinho a partir do prefixo da URL: sqlite:///, postgresql://,
-    mysql+pymysql://, etc). Alternativa mais simples ao `executar_sql`
-    quando o estado traz `db_url` em vez de `db_dialeto`/`db_config`.
+    Executa SQL usando uma Engine SQLAlchemy ja construida pelo chamador
+    (o dialeto e lido de `engine.dialect.name`, sem precisar de
+    `db_dialeto`/`db_config`/`db_url` no estado do grafo).
+
+    Ao contrario de `executar_sql_via_url`, esta funcao NAO cria nem
+    descarta (`dispose`) a engine: o ciclo de vida da conexao e
+    responsabilidade de quem a construiu, nao desta biblioteca.
     """
     ok, erro_validacao = validar_sql_segura(sql)
     if not ok:
         return _erro_execucao(f"SQL invalida: {erro_validacao}")
 
-    db_url = _normalizar_db_url(db_url)
-
-    from sqlalchemy import create_engine, text
-
-    try:
-        engine = create_engine(db_url)
-    except Exception as e:
-        return _erro_execucao(f"URL de conexao invalida: {e}")
+    from sqlalchemy import text
 
     try:
         opcoes = {}
@@ -393,8 +389,6 @@ def executar_sql_via_url(
         if "interrupted" in erro_msg.lower() or "timeout" in erro_msg.lower() or "canceling statement" in erro_msg.lower():
             return _erro_execucao(f"Query abortada por timeout (> {timeout_segundos}s).")
         return _erro_execucao(f"Falha ao executar SQL: {erro_msg}")
-    finally:
-        engine.dispose()
 
     total = len(rows)
     return {
@@ -408,3 +402,34 @@ def executar_sql_via_url(
             f"| preview={min(total, limite_preview)}"
         ),
     }
+
+
+def executar_sql_via_url(
+    db_url: str,
+    sql: str,
+    limite_preview: int = 5,
+    timeout_segundos: float = 15.0,
+) -> dict[str, Any]:
+    """
+    Executa SQL usando uma unica URL de conexao (SQLAlchemy detecta o
+    dialeto sozinho a partir do prefixo da URL: sqlite:///, postgresql://,
+    mysql+pymysql://, etc). Alternativa mais simples ao `executar_sql`
+    quando o estado traz `db_url` em vez de `db_dialeto`/`db_config`.
+
+    Cria e descarta a engine internamente. Se o chamador ja possui uma
+    Engine (e quer controlar seu ciclo de vida/pool), use
+    `executar_sql_via_engine` em vez desta funcao.
+    """
+    db_url = _normalizar_db_url(db_url)
+
+    from sqlalchemy import create_engine
+
+    try:
+        engine = create_engine(db_url)
+    except Exception as e:
+        return _erro_execucao(f"URL de conexao invalida: {e}")
+
+    try:
+        return executar_sql_via_engine(engine, sql, limite_preview, timeout_segundos)
+    finally:
+        engine.dispose()

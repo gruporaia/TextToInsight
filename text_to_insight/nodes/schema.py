@@ -12,6 +12,7 @@ Suporta dois modos de introspecção:
 2. PRAGMA SQLite nativo (fallback garantido para SQLite)
 """
 from pathlib import Path
+from typing import Any
 import re
 import sqlite3
 import subprocess
@@ -789,15 +790,17 @@ def _inferir_fks_virtuais(schema_canonico: str) -> str:
 # Nó do grafo
 # ---------------------------------------------------------------------------
 
-def nos_nodo_esquema(estado: EstadoTextToInsight) -> dict:
+def nos_nodo_esquema(estado: EstadoTextToInsight, engine: Any = None) -> dict:
     """
     Nó Schema: busca metadados do banco de dados e popula contexto_schema.
 
     Fluxo:
-    1. Valida db_path.
-    2. Verifica cache enriquecido, se existir, retorna direto (pula enrich).
-    3. Tenta Schema Crawler se schemacrawler_bin estiver configurado.
-    4. Fallback para PRAGMA SQLite nativo (apenas SQLite).
+    1. Se uma Engine SQLAlchemy foi injetada pelo chamador (`engine`), usa ela
+       diretamente — o dialeto vem de `engine.dialect.name`, sem tocar em
+       db_path/db_url/db_config do estado.
+    2. Caso contrário, cai no fluxo legado por credenciais: valida db_path,
+       verifica cache enriquecido, tenta Schema Crawler e por fim PRAGMA
+       SQLite/information_schema nativo.
 
     O formato de saída é sempre compatível com enrich_schema.py e
     SchemaGraphRAG, independentemente da fonte de introspecção.
@@ -813,6 +816,25 @@ def nos_nodo_esquema(estado: EstadoTextToInsight) -> dict:
         status (str)
         tem_descricao (bool)
     """
+    if engine is not None:
+        try:
+            contexto = _formatar_schema_sqlalchemy(engine)
+        except Exception as e:
+            msg = f"Falha ao ler schema via engine: {e}"
+            print(f"[SCHEMA] Erro: {msg}")
+            return {"contexto_schema": "", "erro_execucao": msg, "status": "exec_erro"}
+
+        if estado.get("inferir_fks_virtuais", False):
+            print("[SCHEMA] Inferindo FKs virtuais.")
+            contexto = _inferir_fks_virtuais(contexto)
+
+        return {
+            "contexto_schema": contexto,
+            "erro_execucao": "",
+            "status": "schema_obtido",
+            "tem_descricao": False,
+        }
+
     db_url = estado.get("db_url", "").strip()
     if db_url:
         from sqlalchemy import create_engine

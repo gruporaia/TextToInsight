@@ -188,6 +188,86 @@ def test_executor_sql_com_erro():
 
 
 # ============================================================
+# Conexão "caller-owned" via Engine SQLAlchemy
+#
+# Estes testes cobrem o caminho em que o chamador constrói e possui a
+# Engine (em vez de db_path/db_dialeto/db_config/db_url no estado do
+# grafo). Usamos uma Engine SQLite apontando pro mesmo fixture DB só
+# para não depender de um Postgres/MySQL real nos testes — o código
+# exercitado (executar_sql_via_engine, _formatar_schema_sqlalchemy,
+# _resolver_info_dialeto) é o mesmo independente do dialeto.
+# ============================================================
+
+def _engine_sqlite_fixture():
+    from sqlalchemy import create_engine
+
+    return create_engine(f"sqlite:///{DB_PATH}")
+
+
+def test_schema_via_engine():
+    """Nó de schema usa a Engine injetada em vez de db_path/db_config do estado."""
+    from text_to_insight.nodes.schema import nos_nodo_esquema
+
+    engine = _engine_sqlite_fixture()
+    try:
+        resultado = nos_nodo_esquema({}, engine=engine)
+    finally:
+        engine.dispose()
+
+    assert resultado["status"] == "schema_obtido"
+    assert "Tabela:" in resultado["contexto_schema"]
+
+
+def test_executor_via_engine():
+    """Executor roda a SQL via Engine injetada, sem precisar de db_path/db_dialeto."""
+    from text_to_insight.nodes.sandbox import nos_nodo_sandbox
+
+    engine = _engine_sqlite_fixture()
+    try:
+        estado = {"sql_gerada": "SELECT COUNT(*) as total FROM orders"}
+        resultado = nos_nodo_sandbox(estado, engine=engine)
+    finally:
+        engine.dispose()
+
+    assert resultado["status"] == "exec_ok"
+    assert resultado["total_linhas_resultado"] == 1
+
+
+def test_executor_via_engine_nao_vaza_credenciais_no_estado():
+    """
+    Ao usar `engine`, nada de credencial/URL precisa (nem deve) estar no
+    estado — é exatamente o ponto de injetar a conexão fora do state que
+    o LangGraph faz checkpoint.
+    """
+    from text_to_insight.nodes.sandbox import nos_nodo_sandbox
+
+    engine = _engine_sqlite_fixture()
+    try:
+        estado = {"sql_gerada": "SELECT COUNT(*) as total FROM orders"}
+        resultado = nos_nodo_sandbox(estado, engine=engine)
+    finally:
+        engine.dispose()
+
+    assert "db_config" not in estado
+    assert "db_url" not in estado
+    assert resultado["status"] == "exec_ok"
+
+
+def test_resolver_dialeto_via_engine():
+    """Dialeto do prompt é lido de engine.dialect.name, não de db_dialeto/db_url."""
+    from text_to_insight.nodes.code_agent.code_agent import _resolver_info_dialeto
+
+    engine = _engine_sqlite_fixture()
+    try:
+        nome, nota = _resolver_info_dialeto({}, engine=engine)
+    finally:
+        engine.dispose()
+
+    assert nome == "SQLite"
+    assert "SQLite" in nota
+
+
+# ============================================================
 # Routers
 # ============================================================
 

@@ -182,13 +182,25 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
             "user": args.db_user,
             "password": args.db_password,
         }
+
+    # Se --db-url foi informado, o CLI constrói e é dono da Engine SQLAlchemy
+    # (inclusive do dispose() no final) e a repassa pronta para a InsightEngine,
+    # em vez de deixar a credencial/URL crua viajar dentro do estado do grafo.
+    db_engine = None
+    if args.db_url:
+        from sqlalchemy import create_engine
+
+        from text_to_insight.nodes.code_agent.code_sql import _normalizar_db_url
+
+        db_engine = create_engine(_normalizar_db_url(args.db_url))
+
     engine = InsightEngine(
         api_key=api_key,
         model=args.model,
         db_path=args.db_path,
         db_dialeto=args.db_dialeto,
         db_config=db_config,
-        db_url=args.db_url or "",
+        db_engine=db_engine,
         hitl=hitl_ativado,
         enrich_rag=enrich_rag_ativado,
         inferir_fks_virtuais=inferir_fks_ativado,
@@ -201,20 +213,25 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
 
     # show_output=False para evitar prints duplicados no console, já que exibir_resultado_console é chamado manualmente.
 
-    callback = _coletar_resposta_humana if hitl_ativado else None
-    resultado = engine.run(thread_id=args.thread_id, query=pergunta, on_human_prompt=callback)
+    try:
+        callback = _coletar_resposta_humana if hitl_ativado else None
+        resultado = engine.run(thread_id=args.thread_id, query=pergunta, on_human_prompt=callback)
 
-    # Fallback (plano B) para clientes que prefiram retomar manualmente sem callback.
-    while resultado.get("status") == "AWAITING_USER":
-        resposta = _coletar_resposta_humana(resultado.get("message", "Pode confirmar o prosseguimento?"))
-        resultado = engine.resume(
-            thread_id=args.thread_id,
-            user_response=resposta,
-            on_human_prompt=callback,
-        )
+        # Fallback (plano B) para clientes que prefiram retomar manualmente sem callback.
+        while resultado.get("status") == "AWAITING_USER":
+            resposta = _coletar_resposta_humana(resultado.get("message", "Pode confirmar o prosseguimento?"))
+            resultado = engine.resume(
+                thread_id=args.thread_id,
+                user_response=resposta,
+                on_human_prompt=callback,
+            )
 
-    exibir_resultado_console(resultado)
-    return resultado
+        exibir_resultado_console(resultado)
+        return resultado
+    finally:
+        # Quem criou a engine (o CLI, neste caso) é quem a descarta.
+        if db_engine is not None:
+            db_engine.dispose()
 
 
 if __name__ == "__main__":
