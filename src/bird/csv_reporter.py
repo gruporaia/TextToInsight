@@ -20,6 +20,50 @@ from pathlib import Path
 from typing import Any
 
 
+def format_result_rows_markdown_table(
+    results: list[tuple[Any, ...]] | list[dict[str, Any]] | None,
+    column_names: list[str] | None = None,
+    max_rows: int = 10,
+) -> str:
+    """
+    Renders up to max_rows of database result rows as a clean GitHub-flavored Markdown table.
+    Supports tuples, lists, or dictionary rows. Appends an overflow note if len > max_rows.
+    """
+    if results is None:
+        return "*(unavailable)*"
+    if len(results) == 0:
+        return "*(0 rows returned / empty set)*"
+
+    sample = results[:max_rows]
+    lines: list[str] = []
+
+    # Case 1: rows are dictionaries
+    if isinstance(sample[0], dict):
+        cols = list(sample[0].keys())
+        lines.append("| " + " | ".join(cols) + " |")
+        lines.append("| " + " | ".join(["---"] * len(cols)) + " |")
+        for r in sample:
+            vals = [str(r.get(c, "")).replace("\n", " ").replace("|", "\\|") for c in cols]
+            lines.append("| " + " | ".join(vals) + " |")
+    # Case 2: rows are tuples or lists
+    else:
+        num_cols = len(sample[0]) if isinstance(sample[0], (tuple, list)) else 1
+        cols = column_names if (column_names and len(column_names) == num_cols) else [f"col_{i+1}" for i in range(num_cols)]
+        lines.append("| " + " | ".join(cols) + " |")
+        lines.append("| " + " | ".join(["---"] * len(cols)) + " |")
+        for r in sample:
+            if isinstance(r, (tuple, list)):
+                vals = [str(v).replace("\n", " ").replace("|", "\\|") for v in r]
+            else:
+                vals = [str(r).replace("\n", " ").replace("|", "\\|")]
+            lines.append("| " + " | ".join(vals) + " |")
+
+    if len(results) > max_rows:
+        lines.append(f"\n*... and {len(results) - max_rows} more row(s) (total: {len(results)})*")
+
+    return "\n".join(lines)
+
+
 class BirdCSVReporter:
     """
     Manages CSV persistence, summary metrics aggregation, and BIRD-compatible JSON exports.
@@ -55,7 +99,7 @@ class BirdCSVReporter:
         Args:
             filepath: Destination path for the CSV report file.
             predict_json_path: Optional destination path for official predict_dev.json.
-                               Defaults to the same stem as filepath with a .json extension.
+                                Defaults to the same stem as filepath with a .json extension.
         """
         self.filepath = Path(filepath)
         self.filepath.parent.mkdir(parents=True, exist_ok=True)
@@ -69,8 +113,36 @@ class BirdCSVReporter:
 
         # In-memory storage for rows processed during the active session
         self.rows: list[dict[str, Any]] = []
+        self.failures: list[dict[str, Any]] = []
+        self.self_corrections: list[dict[str, Any]] = []
 
         self._init_csv()
+
+    def add_failure_case(self, case: dict[str, Any]) -> None:
+        """Records a failure case for inclusion in the detailed markdown report."""
+        self.failures.append(case)
+
+    def add_self_correction_case(self, case: dict[str, Any]) -> None:
+        """Records a self-correction case for inclusion in the detailed markdown report."""
+        self.self_corrections.append(case)
+
+    def rewrite_ordered_csv(self) -> None:
+        """
+        Re-writes the CSV file with all accumulated rows sorted by (question_id, attempt_number).
+        Guarantees contiguous inspection ordering.
+        """
+        if not self.rows:
+            return
+        sorted_rows = sorted(
+            self.rows,
+            key=lambda r: (int(r.get("question_id", 0)), int(r.get("attempt_number", 1))),
+        )
+        self.rows = sorted_rows
+        with open(self.filepath, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=self.HEADERS)
+            writer.writeheader()
+            writer.writerows(sorted_rows)
+            f.flush()
 
     def _init_csv(self) -> None:
         """
@@ -383,6 +455,7 @@ class BirdCSVReporter:
         self,
         summary: dict[str, Any],
         config_info: dict[str, Any] | None = None,
+        detailed_cases: dict[str, list[dict[str, Any]]] | None = None,
     ) -> str:
         """
         Formats a clean, publication-ready Markdown report of evaluation results.
@@ -391,6 +464,9 @@ class BirdCSVReporter:
             summary: Dictionary returned by generate_summary().
             config_info: Optional dictionary containing evaluation run configuration
                          (e.g., model, dialect, rag_enabled, use_evidence, sample_size, seed).
+            detailed_cases: Optional dictionary containing 'failures' and 'self_corrections'
+                            cases with query attempts and data row samples.
+                            Defaults to self.failures and self.self_corrections if None.
 
         Returns:
             Rendered Markdown text string.
@@ -434,7 +510,8 @@ class BirdCSVReporter:
         tok = summary.get("tokens", {})
         lat = summary.get("latency", {})
 
-        report = f"""# BIRD Evaluation Report
+        report_sections = [
+            f"""# BIRD Evaluation Report
 
 ## 1. Test Configuration
 | Parameter | Value |
@@ -469,18 +546,134 @@ class BirdCSVReporter:
 | **Total Tokens** | {tok.get('total_input', 0):,} | {tok.get('total_output', 0):,} | **{tok.get('total_all', 0):,}** |
 | **Average Tokens per Question** | {tok.get('avg_input_per_question', 0.0):,.1f} | {tok.get('avg_output_per_question', 0.0):,.1f} | **{tok.get('avg_total_per_question', 0.0):,.1f}** |
 | **Average Latency per Question** | - | - | **{lat.get('avg_time_ms_per_question', 0.0):,.1f} ms** |
-| **Average Latency per Attempt** | - | - | **{lat.get('avg_time_ms_per_attempt', 0.0):,.1f} ms** |
+| **Average Latency per Attempt** | - | - | **{lat.get('avg_time_ms_per_attempt', 0.0):,.1f} ms** |"""
+        ]
 
----
-*Report generated automatically by `BirdCSVReporter` (TextToInsight).*
-"""
-        return report
+        # Resolve detailed inspection cases
+        cases = detailed_cases if detailed_cases is not None else {}
+        self_corrections = cases.get("self_corrections", self.self_corrections)
+        failures = cases.get("failures", self.failures)
+
+        # Section 5: Successful Self-Correction Cases
+        if self_corrections:
+            sc_blocks = [
+                "---",
+                "",
+                "## 5. Successful Self-Correction Cases",
+                "",
+                "Questions that failed on the initial attempt (sandbox execution error or result mismatch) and were successfully recovered by the agent:",
+                "",
+            ]
+            for sc in self_corrections:
+                qid = sc.get("question_id", "N/A")
+                db = sc.get("db_id", "N/A")
+                diff = str(sc.get("difficulty", "N/A")).capitalize()
+                question = sc.get("question", "")
+                evidence = sc.get("evidence", "")
+                gold_sql = sc.get("gold_sql", "")
+                final_sql = sc.get("final_sql", sc.get("agent_sql", ""))
+                attempts = sc.get("attempts", [])
+                gold_results = sc.get("gold_results")
+                gold_cols = sc.get("gold_columns")
+
+                sc_blocks.append(f"### Question {qid} (`{db}` - {diff})")
+                sc_blocks.append("")
+                sc_blocks.append(f"**Question:** {question}")
+                if evidence:
+                    sc_blocks.append(f"> **Evidence / Hint:** {evidence}")
+                sc_blocks.append("")
+                sc_blocks.append("**Gold SQL:**")
+                sc_blocks.append(f"```sql\n{gold_sql}\n```")
+                sc_blocks.append("")
+                sc_blocks.append("#### Attempt Progression:")
+                for att_idx, att in enumerate(attempts, 1):
+                    att_sql = att.get("sql", "").strip() or "(empty)"
+                    att_err = att.get("erro", "").strip()
+                    is_final = (att_idx == len(attempts))
+                    status_badge = "✅ **Success (EX Match)**" if is_final else ("❌ **Error:** `" + att_err + "`" if att_err else "⚠️ **Subsequent iteration**")
+                    sc_blocks.append(f"**Attempt {att_idx}** ({status_badge}):")
+                    sc_blocks.append(f"```sql\n{att_sql}\n```")
+                    sc_blocks.append("")
+
+                sc_blocks.append("**Verified Result Sample (Gold/Final - top 10 rows):**")
+                sc_blocks.append(format_result_rows_markdown_table(gold_results, column_names=gold_cols, max_rows=10))
+                sc_blocks.append("")
+                sc_blocks.append("---")
+                sc_blocks.append("")
+            report_sections.append("\n".join(sc_blocks))
+
+        # Section 6: Detailed Failure Analysis (Execution Mismatches & Errors)
+        if failures:
+            fail_blocks = [
+                "---",
+                "",
+                "## 6. Detailed Failure Analysis (Execution Mismatches & Errors)",
+                "",
+                "Detailed diagnostics for questions where the Text-to-Insight result differed from ground truth or encountered execution errors:",
+                "",
+            ]
+            for f_case in failures:
+                qid = f_case.get("question_id", "N/A")
+                db = f_case.get("db_id", "N/A")
+                diff = str(f_case.get("difficulty", "N/A")).capitalize()
+                question = f_case.get("question", "")
+                evidence = f_case.get("evidence", "")
+                gold_sql = f_case.get("gold_sql", "")
+                agent_sql = f_case.get("agent_sql", "")
+                agent_err = f_case.get("error", "")
+                attempts = f_case.get("attempts", [])
+                gold_results = f_case.get("gold_results")
+                gold_cols = f_case.get("gold_columns")
+                agent_results = f_case.get("agent_results")
+                agent_cols = f_case.get("agent_columns")
+
+                fail_blocks.append(f"### Question {qid} (`{db}` - {diff})")
+                fail_blocks.append("")
+                fail_blocks.append(f"**Question:** {question}")
+                if evidence:
+                    fail_blocks.append(f"> **Evidence / Hint:** {evidence}")
+                fail_blocks.append("")
+                fail_blocks.append("**Gold SQL:**")
+                fail_blocks.append(f"```sql\n{gold_sql}\n```")
+                fail_blocks.append("")
+                fail_blocks.append("**Gold Result** (top 10 rows):")
+                fail_blocks.append(format_result_rows_markdown_table(gold_results, column_names=gold_cols, max_rows=10))
+                fail_blocks.append("")
+
+                if attempts and len(attempts) > 1:
+                    fail_blocks.append("#### Attempt History:")
+                    for att_idx, att in enumerate(attempts, 1):
+                        att_sql = att.get("sql", "").strip() or "(empty)"
+                        att_err = att.get("erro", "").strip()
+                        badge = f"❌ Error: `{att_err}`" if att_err else "Executed"
+                        fail_blocks.append(f"**Attempt {att_idx}** ({badge}):")
+                        fail_blocks.append(f"```sql\n{att_sql}\n```")
+                        fail_blocks.append("")
+
+                fail_blocks.append("**Agent Candidate SQL (Final):**")
+                fail_blocks.append(f"```sql\n{agent_sql or '(no query generated)'}\n```")
+                fail_blocks.append("")
+
+                if agent_err:
+                    fail_blocks.append(f"❌ **SQLite Execution Error:** `{agent_err}`")
+                else:
+                    fail_blocks.append("**Agent Result (Final)** (top 10 rows):")
+                    fail_blocks.append(format_result_rows_markdown_table(agent_results, column_names=agent_cols, max_rows=10))
+
+                fail_blocks.append("")
+                fail_blocks.append("---")
+                fail_blocks.append("")
+            report_sections.append("\n".join(fail_blocks))
+
+        report_sections.append("---\n*Report generated automatically by `BirdCSVReporter` (TextToInsight).*")
+        return "\n\n".join(report_sections)
 
     def save_markdown_report(
         self,
         summary: dict[str, Any],
         config_info: dict[str, Any] | None = None,
         filepath: str | Path | None = None,
+        detailed_cases: dict[str, list[dict[str, Any]]] | None = None,
     ) -> Path:
         """
         Renders and writes the Markdown evaluation report to disk.
@@ -490,6 +683,8 @@ class BirdCSVReporter:
             config_info: Optional configuration metadata dictionary.
             filepath: Destination path for the Markdown report.
                       Defaults to self.filepath.with_suffix(".md").
+            detailed_cases: Optional dictionary containing 'failures' and 'self_corrections'
+                            cases with query attempts and data row samples.
 
         Returns:
             Path object of the written file.
@@ -497,7 +692,11 @@ class BirdCSVReporter:
         target_path = Path(filepath) if filepath else self.filepath.with_suffix(".md")
         target_path.parent.mkdir(parents=True, exist_ok=True)
 
-        content = self.format_markdown_report(summary, config_info=config_info)
+        content = self.format_markdown_report(
+            summary,
+            config_info=config_info,
+            detailed_cases=detailed_cases,
+        )
         target_path.write_text(content, encoding="utf-8")
         return target_path
 

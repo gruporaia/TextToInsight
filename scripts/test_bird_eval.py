@@ -168,7 +168,7 @@ def simulate_agent_run(
 ) -> dict[str, Any]:
     """
     Simulates an agent response for dry-run testing.
-    Alternates between correct and slightly varied queries to test metrics calculation.
+    Alternates between correct, self-correcting, and slightly varied queries to test metrics calculation.
     """
     gold_sql = example.get("SQL", "")
     qid = example.get("question_id", 0)
@@ -177,23 +177,74 @@ def simulate_agent_run(
     prompt_tokens = 600 + (qid % 200)
     completion_tokens = 60 + (qid % 30)
 
-    # Simulate 80% success rate in dry-run
-    if qid % 5 != 0:
-        simulated_sql = gold_sql
-        status = "aprovado"
-    else:
-        simulated_sql = f"{gold_sql} LIMIT 1" if "LIMIT" not in gold_sql.upper() else gold_sql.replace("LIMIT 1", "")
-        status = "exec_ok"
+    # Simulate self-correction scenario (attempt 1 failed syntax, attempt 2 fixed)
+    if qid % 4 == 0:
+        return {
+            "sql_gerada": gold_sql,
+            "status": "aprovado",
+            "erro_execucao": "",
+            "tentativas_loop": 2,
+            "tokens_input": prompt_tokens * 2,
+            "tokens_output": completion_tokens * 2,
+            "tokens_total": (prompt_tokens + completion_tokens) * 2,
+            "historico_tentativas": [
+                {
+                    "sql": "SELECT * FROM non_existent_table WHERE id = 1",
+                    "erro": "no such table: non_existent_table",
+                    "prompt": "Simulated initial prompt",
+                    "contexto": "Simulated schema",
+                    "raciocinio": "Simulated initial reasoning",
+                },
+                {
+                    "sql": gold_sql,
+                    "erro": "",
+                    "prompt": "Simulated retry prompt",
+                    "contexto": "Simulated schema",
+                    "raciocinio": "Simulated corrected reasoning",
+                },
+            ],
+        }
 
+    # Simulate failure in dry-run
+    if qid % 5 == 0:
+        simulated_sql = f"{gold_sql} LIMIT 1" if "LIMIT" not in gold_sql.upper() else gold_sql.replace("LIMIT 1", "")
+        return {
+            "sql_gerada": simulated_sql,
+            "status": "exec_ok",
+            "erro_execucao": "",
+            "tentativas_loop": 1,
+            "tokens_input": prompt_tokens,
+            "tokens_output": completion_tokens,
+            "tokens_total": prompt_tokens + completion_tokens,
+            "historico_tentativas": [
+                {
+                    "sql": simulated_sql,
+                    "erro": "",
+                    "prompt": "Simulated prompt",
+                    "contexto": "Simulated schema",
+                    "raciocinio": "Simulated reasoning",
+                }
+            ],
+        }
+
+    # Default: 1 attempt success
     return {
-        "sql_gerada": simulated_sql,
-        "status": status,
+        "sql_gerada": gold_sql,
+        "status": "aprovado",
         "erro_execucao": "",
-        "tentativas_loop": attempt_number,
+        "tentativas_loop": 1,
         "tokens_input": prompt_tokens,
         "tokens_output": completion_tokens,
         "tokens_total": prompt_tokens + completion_tokens,
-        "historico_tentativas": [],
+        "historico_tentativas": [
+            {
+                "sql": gold_sql,
+                "erro": "",
+                "prompt": "Simulated prompt",
+                "contexto": "Simulated schema",
+                "raciocinio": "Simulated reasoning",
+            }
+        ],
     }
 
 
@@ -285,6 +336,8 @@ def main() -> None:
 
     # 6. Evaluation Loop
     start_total_time = time.perf_counter()
+    failures: list[dict[str, Any]] = []
+    self_corrections: list[dict[str, Any]] = []
 
     for idx, ex in enumerate(examples, 1):
         q_id = ex["question_id"]
@@ -304,6 +357,7 @@ def main() -> None:
             continue
 
         results_gold = gold_exec["results"]
+        gold_columns = gold_exec.get("column_names") or []
 
         # 6.2 Prepare formatted prompt question
         prompt_query = prepare_prompt_question(
@@ -375,20 +429,66 @@ def main() -> None:
         if not agent_exec_error:
             agent_exec_error = str(agent_result.get("erro_execucao") or "").strip()
         historico_tent = agent_result.get("historico_tentativas") or []
-        attempt_number = int(agent_result.get("tentativas_loop") or 1)
+        total_attempts = max(len(historico_tent), int(agent_result.get("tentativas_loop") or 1))
 
         tokens_in = int(agent_result.get("tokens_input") or 0)
         tokens_out = int(agent_result.get("tokens_output") or 0)
         tokens_tot = int(agent_result.get("tokens_total") or (tokens_in + tokens_out))
 
-        # 6.4 Execute candidate agent SQL on the database
+        # 6.4 Handle intermediate attempts (if agent iterated multiple times)
+        if len(historico_tent) > 1:
+            for att_idx, att in enumerate(historico_tent[:-1]):
+                att_num = att_idx + 1
+                inter_sql = str(att.get("sql") or "").strip()
+                inter_err = str(att.get("erro") or "").strip()
+                inter_match = False
+                inter_status = "exec_erro" if inter_err else "exec_ok"
+
+                # As decided: if intermediate attempt had no syntax error in sandbox, execute to check Pass@1 EX match
+                if not inter_err and inter_sql:
+                    inter_exec = executor.execute_query(db_id=db_id, sql=inter_sql)
+                    if inter_exec["success"]:
+                        inter_match = compare_bird_results(
+                            results_gold=results_gold,
+                            results_agent=inter_exec["results"],
+                            gold_sql=gold_sql,
+                        )
+                    else:
+                        inter_err = inter_exec["error"] or "Query execution error"
+                        inter_status = "exec_erro"
+
+                inter_sim = sql_similarity_score(gold_sql, inter_sql) if inter_sql else 0.0
+
+                inter_row = build_bird_comparison_row(
+                    question_id=q_id,
+                    attempt_number=att_num,
+                    db_id=db_id,
+                    difficulty=difficulty,
+                    question=raw_question,
+                    evidence=evidence,
+                    gold_sql=gold_sql,
+                    agent_sql=inter_sql,
+                    time_ms=0.0,
+                    execution_status=inter_status,
+                    similarity_score=inter_sim,
+                    execution_match=inter_match,
+                    error=inter_err,
+                    tokens_input=0,
+                    tokens_output=0,
+                    tokens_total=0,
+                )
+                reporter.append_row(inter_row)
+
+        # 6.5 Execute final candidate agent SQL on the database
         results_agent = None
+        agent_columns = []
         match_success = False
 
         if agent_sql and not agent_exec_error:
             agent_db_exec = executor.execute_query(db_id=db_id, sql=agent_sql)
             if agent_db_exec["success"]:
                 results_agent = agent_db_exec["results"]
+                agent_columns = agent_db_exec.get("column_names") or []
                 match_success = compare_bird_results(
                     results_gold=results_gold,
                     results_agent=results_agent,
@@ -397,13 +497,14 @@ def main() -> None:
             else:
                 agent_exec_error = agent_db_exec["error"] or "Query execution error"
 
-        # 6.5 Calculate SQL similarity ratio
+        # 6.6 Calculate SQL similarity ratio for final attempt
         sim_score = sql_similarity_score(gold_sql, agent_sql) if agent_sql else 0.0
 
-        # 6.6 Build structured comparison row and append to CSV
-        row = build_bird_comparison_row(
+        # 6.7 Append final attempt comparison row
+        final_attempt_num = total_attempts
+        final_row = build_bird_comparison_row(
             question_id=q_id,
-            attempt_number=attempt_number,
+            attempt_number=final_attempt_num,
             db_id=db_id,
             difficulty=difficulty,
             question=raw_question,
@@ -419,13 +520,47 @@ def main() -> None:
             tokens_output=tokens_out,
             tokens_total=tokens_tot,
         )
-        reporter.append_row(row)
+        reporter.append_row(final_row)
+
+        # 6.8 Collect detailed diagnostic cases for Markdown report
+        if match_success and len(historico_tent) > 1:
+            self_corrections.append({
+                "question_id": q_id,
+                "db_id": db_id,
+                "difficulty": difficulty,
+                "question": raw_question,
+                "evidence": evidence,
+                "gold_sql": gold_sql,
+                "final_sql": agent_sql,
+                "attempts": historico_tent,
+                "gold_results": results_gold,
+                "gold_columns": gold_columns,
+                "agent_results": results_agent,
+                "agent_columns": agent_columns,
+            })
+        elif not match_success:
+            failures.append({
+                "question_id": q_id,
+                "db_id": db_id,
+                "difficulty": difficulty,
+                "question": raw_question,
+                "evidence": evidence,
+                "gold_sql": gold_sql,
+                "agent_sql": agent_sql,
+                "error": agent_exec_error,
+                "attempts": historico_tent if historico_tent else [{"sql": agent_sql, "erro": agent_exec_error}],
+                "gold_results": results_gold,
+                "gold_columns": gold_columns,
+                "agent_results": results_agent,
+                "agent_columns": agent_columns,
+            })
 
         # Print per-question feedback in console
         match_icon = "✅" if match_success else "❌"
         status_icon = "🟢" if agent_status in ("exec_ok", "aprovado") and not agent_exec_error else "🔴"
+        attempts_badge = f"({total_attempts} att)" if total_attempts > 1 else ""
         print(
-            f"     Result: {match_icon} EX Match | {status_icon} Sandbox: {agent_status.upper()} | "
+            f"     Result: {match_icon} EX Match {attempts_badge}| {status_icon} Sandbox: {agent_status.upper()} | "
             f"Sim: {sim_score:.2f} | Time: {agent_time_ms:.0f}ms | Tokens: {tokens_tot:,}"
         )
         if not match_success and agent_exec_error:
@@ -439,13 +574,20 @@ def main() -> None:
     print("EVALUATION SUMMARY & REPORT GENERATION")
     print("=" * 80)
 
+    # Ensure CSV rows are cleanly sorted by (question_id, attempt_number)
+    reporter.rewrite_ordered_csv()
+
     summary = reporter.generate_summary()
 
     # Export canonical BIRD predict_dev.json
     predict_json_path = reporter.export_predictions_from_rows()
     print(f"✓ Official BIRD predictions exported to: {predict_json_path}")
 
-    # Generate and save Markdown report
+    # Generate and save Markdown report with failure & self-correction diagnostics
+    detailed_cases = {
+        "failures": failures,
+        "self_corrections": self_corrections,
+    }
     config_info = {
         "timestamp": timestamp,
         "model": args.model + (" (Dry-run)" if args.dry_run else ""),
@@ -457,12 +599,16 @@ def main() -> None:
         "db_filter": args.db_filter,
         "difficulty_filter": args.difficulty,
     }
-    md_path = reporter.save_markdown_report(summary, config_info=config_info)
+    md_path = reporter.save_markdown_report(
+        summary,
+        config_info=config_info,
+        detailed_cases=detailed_cases,
+    )
     print(f"✓ Markdown report saved to: {md_path}")
     print(f"✓ Detailed CSV log saved to: {csv_path}")
 
     # Display Executive Summary in Terminal
-    print("\n" + reporter.format_markdown_report(summary, config_info=config_info))
+    print("\n" + reporter.format_markdown_report(summary, config_info=config_info, detailed_cases=detailed_cases))
     print(f"Total evaluation runtime: {total_elapsed:.1f} seconds.\n")
 
 

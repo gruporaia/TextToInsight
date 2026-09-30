@@ -26,6 +26,7 @@ from src.bird import (
     BirdQueryExecutor,
     build_bird_comparison_row,
     compare_bird_results,
+    format_result_rows_markdown_table,
     get_database_path,
     get_database_uri,
     get_difficulty_distribution,
@@ -383,6 +384,130 @@ def test_csv_reporter_and_predict_json(tmp_path: Path) -> None:
     md_path = reporter.save_markdown_report(summary, config_info={"model": "gpt-4o-mini"})
     assert md_path.exists()
     assert "Execution Accuracy (EX Final)" in md_path.read_text(encoding="utf-8")
+
+
+def test_format_result_rows_markdown_table() -> None:
+    """Verifies that result row datasets are formatted as markdown tables with proper truncation."""
+    # 1. Empty and None cases
+    assert "unavailable" in format_result_rows_markdown_table(None)
+    assert "0 rows returned" in format_result_rows_markdown_table([])
+
+    # 2. Tuple rows with column names
+    rows = [("Alice", 15), ("Bob", 16)]
+    table = format_result_rows_markdown_table(rows, column_names=["Name", "Age"], max_rows=10)
+    assert "| Name | Age |" in table
+    assert "| Alice | 15 |" in table
+    assert "| Bob | 16 |" in table
+
+    # 3. Truncation when exceeding max_rows
+    large_rows = [(i, f"Val_{i}") for i in range(15)]
+    trunc_table = format_result_rows_markdown_table(large_rows, max_rows=10)
+    assert "| col_1 | col_2 |" in trunc_table
+    assert "... and 5 more row(s) (total: 15)" in trunc_table
+
+    # 4. Dict rows
+    dict_rows = [{"city": "San Francisco", "count": 42}]
+    dict_table = format_result_rows_markdown_table(dict_rows, max_rows=10)
+    assert "| city | count |" in dict_table
+    assert "| San Francisco | 42 |" in dict_table
+
+
+def test_csv_reporter_rewrite_ordered_csv(tmp_path: Path) -> None:
+    """Verifies that rewrite_ordered_csv sorts rows strictly by (question_id, attempt_number)."""
+    csv_file = tmp_path / "ordered_eval.csv"
+    reporter = BirdCSVReporter(filepath=csv_file)
+
+    # Append rows in deliberately out-of-order sequence
+    row_q2_att1 = build_bird_comparison_row(
+        question_id=2, attempt_number=1, db_id="db", difficulty="simple",
+        question="Q2", evidence="", gold_sql="SELECT 2", agent_sql="SELECT 2",
+        time_ms=10.0,
+    )
+    row_q1_att2 = build_bird_comparison_row(
+        question_id=1, attempt_number=2, db_id="db", difficulty="simple",
+        question="Q1", evidence="", gold_sql="SELECT 1", agent_sql="SELECT 1",
+        time_ms=10.0,
+    )
+    row_q1_att1 = build_bird_comparison_row(
+        question_id=1, attempt_number=1, db_id="db", difficulty="simple",
+        question="Q1", evidence="", gold_sql="SELECT 1", agent_sql="SELECT 0",
+        time_ms=10.0,
+    )
+
+    reporter.append_row(row_q2_att1)
+    reporter.append_row(row_q1_att2)
+    reporter.append_row(row_q1_att1)
+
+    # Sort and rewrite
+    reporter.rewrite_ordered_csv()
+
+    # Read back and verify strict order
+    with open(csv_file, "r", encoding="utf-8") as f:
+        reader = list(f.readlines())
+    # line 0 is header, 1 is (1,1), 2 is (1,2), 3 is (2,1)
+    assert len(reader) == 4
+    assert reader[1].startswith("1,1,")
+    assert reader[2].startswith("1,2,")
+    assert reader[3].startswith("2,1,")
+
+
+def test_markdown_report_detailed_inspection(tmp_path: Path) -> None:
+    """Verifies that detailed failure cases and self-corrections are rendered into the Markdown report."""
+    csv_file = tmp_path / "report_detailed.csv"
+    reporter = BirdCSVReporter(filepath=csv_file)
+    summary = reporter.generate_summary()
+
+    detailed_cases = {
+        "self_corrections": [
+            {
+                "question_id": 10,
+                "db_id": "school",
+                "difficulty": "challenging",
+                "question": "What is the highest score?",
+                "evidence": "highest means max score",
+                "gold_sql": "SELECT max(score) FROM tests",
+                "final_sql": "SELECT max(score) FROM tests",
+                "attempts": [
+                    {"sql": "SELECT score FROM tests", "erro": "wrong aggregate"},
+                    {"sql": "SELECT max(score) FROM tests", "erro": ""},
+                ],
+                "gold_results": [(100,)],
+                "gold_columns": ["max_score"],
+            }
+        ],
+        "failures": [
+            {
+                "question_id": 20,
+                "db_id": "store",
+                "difficulty": "simple",
+                "question": "List all item names",
+                "evidence": "",
+                "gold_sql": "SELECT name FROM items",
+                "agent_sql": "SELECT name FROM items LIMIT 1",
+                "error": "",
+                "attempts": [{"sql": "SELECT name FROM items LIMIT 1", "erro": ""}],
+                "gold_results": [("Book",), ("Pen",), ("Notebook",)],
+                "gold_columns": ["name"],
+                "agent_results": [("Book",)],
+                "agent_columns": ["name"],
+            }
+        ],
+    }
+
+    md_path = reporter.save_markdown_report(summary, detailed_cases=detailed_cases)
+    content = md_path.read_text(encoding="utf-8")
+
+    # Assert sections are present
+    assert "## 5. Successful Self-Correction Cases" in content
+    assert "Question 10 (`school` - Challenging)" in content
+    assert "SELECT max(score) FROM tests" in content
+    assert "| max_score |" in content
+
+    assert "## 6. Detailed Failure Analysis (Execution Mismatches & Errors)" in content
+    assert "Question 20 (`store` - Simple)" in content
+    assert "| Book |" in content
+    assert "| Pen |" in content
+    assert "| Notebook |" in content
 
 
 # ==============================================================================

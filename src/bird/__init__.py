@@ -22,7 +22,10 @@ from src.bird.metrics import (
     normalize_value,
     sql_similarity_score,
 )
-from src.bird.csv_reporter import BirdCSVReporter
+from src.bird.csv_reporter import (
+    BirdCSVReporter,
+    format_result_rows_markdown_table,
+)
 
 __all__ = [
     "load_bird_dev_examples",
@@ -39,6 +42,7 @@ __all__ = [
     "sql_similarity_score",
     "build_bird_comparison_row",
     "BirdCSVReporter",
+    "format_result_rows_markdown_table",
 ]
 
 
