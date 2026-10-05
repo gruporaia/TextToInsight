@@ -191,10 +191,10 @@ def test_executor_sql_com_erro():
 # Conexão "caller-owned" via Engine SQLAlchemy
 #
 # Estes testes cobrem o caminho em que o chamador constrói e possui a
-# Engine (em vez de db_path/db_dialeto/db_config/db_url no estado do
-# grafo). Usamos uma Engine SQLite apontando pro mesmo fixture DB só
-# para não depender de um Postgres/MySQL real nos testes — o código
-# exercitado (executar_sql_via_engine, _formatar_schema_sqlalchemy,
+# Engine (em vez de db_path/db_url no estado do grafo). Usamos uma
+# Engine SQLite apontando pro mesmo fixture DB só para não depender de
+# um Postgres/MySQL real nos testes — o código exercitado
+# (executar_sql_via_engine, _formatar_schema_sqlalchemy,
 # _resolver_info_dialeto) é o mesmo independente do dialeto.
 # ============================================================
 
@@ -205,7 +205,7 @@ def _engine_sqlite_fixture():
 
 
 def test_schema_via_engine():
-    """Nó de schema usa a Engine injetada em vez de db_path/db_config do estado."""
+    """Nó de schema usa a Engine injetada em vez de db_path/db_url do estado."""
     from text_to_insight.nodes.schema import nos_nodo_esquema
 
     engine = _engine_sqlite_fixture()
@@ -219,7 +219,7 @@ def test_schema_via_engine():
 
 
 def test_executor_via_engine():
-    """Executor roda a SQL via Engine injetada, sem precisar de db_path/db_dialeto."""
+    """Executor roda a SQL via Engine injetada, sem precisar de db_path/db_url."""
     from text_to_insight.nodes.sandbox import nos_nodo_sandbox
 
     engine = _engine_sqlite_fixture()
@@ -310,7 +310,7 @@ def test_enrich_com_engine_nao_grava_cache_do_db_path(tmp_path):
 
 
 def test_resolver_dialeto_via_engine():
-    """Dialeto do prompt é lido de engine.dialect.name, não de db_dialeto/db_url."""
+    """Dialeto do prompt é lido de engine.dialect.name, não de db_url."""
     from text_to_insight.nodes.code_agent.code_agent import _resolver_info_dialeto
 
     engine = _engine_sqlite_fixture()
