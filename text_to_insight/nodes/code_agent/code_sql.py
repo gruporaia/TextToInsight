@@ -186,6 +186,21 @@ def _normalizar_db_url(db_url: str) -> str:
         return "mysql+pymysql://" + db_url[len("mysql://"):]
     return db_url
 
+def _criar_engine_de_url(db_url: str, timeout_segundos=15.0):
+    """ Cria uma engine com timeout de conexão pra evitar problema de 
+    runtime com URL"""
+    from sqlalchemy import create_engine
+    from sqlalchemy.engine import make_url
+    url =_normalizar_db_url(db_url=db_url)
+    dialeto = make_url(db_url).get_backend_name()
+    segundos = max(1, int(timeout_segundos))
+    connect_args = {}
+    if dialeto == "postgresql":
+        connect_args = {"connect_timeout": segundos}
+    elif dialeto == "mysql":
+        connect_args = {"connect_timeout": segundos, "read_timeout": segundos}
+    return create_engine(url, connect_args=connect_args)
+
 
 def executar_sql_via_engine(
     engine: Any,
@@ -282,12 +297,8 @@ def executar_sql_via_url(
     Engine (e quer controlar seu ciclo de vida/pool), use
     `executar_sql_via_engine` em vez desta funcao.
     """
-    db_url = _normalizar_db_url(db_url)
-
-    from sqlalchemy import create_engine
-
     try:
-        engine = create_engine(db_url)
+        engine = _criar_engine_de_url(db_url, timeout_segundos)
     except Exception as e:
         return _erro_execucao(f"URL de conexao invalida: {e}")
 

@@ -188,12 +188,9 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
     # em vez de deixar a credencial/URL crua viajar dentro do estado do grafo.
     db_engine = None
     if args.db_url:
-        from sqlalchemy import create_engine
+        from text_to_insight.nodes.code_agent.code_sql import _criar_engine_de_url
 
-        from text_to_insight.nodes.code_agent.code_sql import _normalizar_db_url
-
-        db_engine = create_engine(_normalizar_db_url(args.db_url))
-
+        db_engine = _criar_engine_de_url(db_url=args.db_url)
     engine = InsightEngine(
         api_key=api_key,
         model=args.model,

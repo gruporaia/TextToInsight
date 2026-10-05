@@ -837,12 +837,10 @@ def nos_nodo_esquema(estado: EstadoTextToInsight, engine: Any = None) -> dict:
 
     db_url = estado.get("db_url", "").strip()
     if db_url:
-        from sqlalchemy import create_engine
-
-        from .code_agent.code_sql import _normalizar_db_url
+        from .code_agent.code_sql import _criar_engine_de_url
 
         try:
-            engine = create_engine(_normalizar_db_url(db_url))
+            engine = _criar_engine_de_url(db_url)
             try:
                 contexto = _formatar_schema_sqlalchemy(engine)
             finally:
