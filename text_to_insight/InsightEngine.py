@@ -31,8 +31,6 @@ class InsightEngine:
         enrich_rag: bool = False,
         inferir_fks_virtuais: bool = False,
         usar_schemacrawler: bool = True,
-        db_dialeto: str = "",
-        db_config: dict | None = None,
         db_url: str = "",
         db_engine: Any = None,
     ):
@@ -40,7 +38,7 @@ class InsightEngine:
         `db_engine`, se informado, deve ser uma Engine do SQLAlchemy já
         construída pelo chamador (que também é responsável por descartá-la
         com `.dispose()` quando terminar). Quando presente, tem prioridade
-        sobre `db_dialeto`/`db_config`/`db_url`/`db_path`: a engine nunca é
+        sobre `db_url`/`db_path`: a engine nunca é
         copiada para o estado do grafo — evita credenciais em texto puro no
         checkpoint do LangGraph — e o dialeto é lido diretamente dela.
         """
@@ -52,8 +50,6 @@ class InsightEngine:
         self._enrich_rag = enrich_rag
         self._inferir_fks_virtuais = inferir_fks_virtuais
         self._usar_schemacrawler = usar_schemacrawler
-        self._db_dialeto = db_dialeto
-        self._db_config = db_config
         self._db_url = db_url
         self._db_engine = db_engine
         self._model = model
@@ -164,7 +160,7 @@ class InsightEngine:
         elif query:
             estado_execucao = construir_estado_inicial(
                 query, self._db_path, self._inferir_fks_virtuais, self._usar_schemacrawler,
-                db_dialeto=self._db_dialeto, db_config=self._db_config, db_url=self._db_url,
+                db_url=self._db_url,
             )
             pergunta_exibicao = query
         # Caso 3: a thread já está pausada, mas ainda sem resposta do usuário.

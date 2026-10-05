@@ -211,7 +211,7 @@ def executar_sql_via_engine(
     """
     Executa SQL usando uma Engine SQLAlchemy ja construida pelo chamador
     (o dialeto e lido de `engine.dialect.name`, sem precisar de
-    `db_dialeto`/`db_config`/`db_url` no estado do grafo).
+    `db_url` no estado do grafo).
 
     Ao contrario de `executar_sql_via_url`, esta funcao NAO cria nem
     descarta (`dispose`) a engine: o ciclo de vida da conexao e

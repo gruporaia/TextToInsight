@@ -58,54 +58,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Caminho para o banco SQLite.",
     )
     parser.add_argument(
-        "--db-dialeto",
-        choices=["sqlite", "postgresql", "mysql"],
-        default="",
-        help=(
-            "Dialeto do banco: sqlite, postgresql ou mysql. Se omitido, e detectado "
-            "automaticamente pela extensao de --db-path (.duckdb, .sqlite, etc), "
-            "com sqlite como fallback."
-        ),
-    )
-    parser.add_argument(
-        "--db-host",
-        default=None,
-        help="Host do banco (obrigatório se --db-dialeto != sqlite).",
-    )
-    parser.add_argument(
-        "--db-port",
-        type=int,
-        default=None,
-        help="Porta do banco (padrão: 5432 para postgresql, 3306 para mysql).",
-    )
-    parser.add_argument(
-        "--db-name",
-        default=None,
-        help="Nome do banco de dados remoto.",
-    )
-    parser.add_argument(
-        "--db-user",
-        default=None,
-        help="Usuário do banco remoto.",
-    )
-    parser.add_argument(
-        "--db-password",
-        default=os.getenv("DB_PASSWORD"),
-        help=(
-            "Senha do banco remoto. EVITE usar esta flag diretamente: qualquer "
-            "argumento de linha de comando fica visivel no historico do shell e "
-            "na lista de processos do sistema. Prefira definir a variavel de "
-            "ambiente DB_PASSWORD (ex: no .env)."
-        ),
-    )
-    parser.add_argument(
         "--db-url",
         default=os.getenv("DATABASE_URL"),
         help=(
             "URL unica de conexao (ex: postgresql://usuario:senha@host:5432/banco). "
-            "Se informado, o dialeto e detectado automaticamente pelo SQLAlchemy e as "
-            "demais flags --db-dialeto/--db-host/--db-port/--db-name/--db-user/--db-password "
-            "sao ignoradas. Tambem pode vir da variavel de ambiente DATABASE_URL."
+            "Se informado, o dialeto e detectado automaticamente pelo SQLAlchemy. "
+            "Tambem pode vir da variavel de ambiente DATABASE_URL."
         ),
     )
     parser.add_argument(
@@ -173,15 +131,6 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
             f"Variável de ambiente '{args.api_key_env}' não encontrada. "
             "Configure a chave da API antes de executar."
         )
-    db_config = None
-    if args.db_dialeto in ("postgresql", "mysql"):
-        db_config = {
-            "host": args.db_host,
-            "port": args.db_port,
-            "database": args.db_name,
-            "user": args.db_user,
-            "password": args.db_password,
-        }
 
     # Se --db-url foi informado, o CLI constrói e é dono da Engine SQLAlchemy
     # (inclusive do dispose() no final) e a repassa pronta para a InsightEngine,
@@ -195,8 +144,6 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         api_key=api_key,
         model=args.model,
         db_path=args.db_path,
-        db_dialeto=args.db_dialeto,
-        db_config=db_config,
         db_engine=db_engine,
         hitl=hitl_ativado,
         enrich_rag=enrich_rag_ativado,

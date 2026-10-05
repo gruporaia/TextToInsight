@@ -46,9 +46,8 @@ def _resolver_info_dialeto(estado: EstadoTextToInsight, engine=None) -> tuple[st
     Ordem de resolução:
     1. `engine.dialect.name`, se uma Engine SQLAlchemy foi injetada pelo
        chamador (caso mais confiável: vem direto da conexão, sem adivinhar).
-    2. `db_dialeto`, se informado explicitamente no estado.
-    3. `db_url`, cujo dialeto é lido do prefixo da URL (sem conectar).
-    4. 'sqlite' como default, preservando o comportamento anterior quando
+    2. `db_url`, cujo dialeto é lido do prefixo da URL (sem conectar).
+    3. 'sqlite' como default, preservando o comportamento anterior quando
        nada é informado (compatibilidade retroativa).
     """
     if engine is not None:
@@ -57,17 +56,15 @@ def _resolver_info_dialeto(estado: EstadoTextToInsight, engine=None) -> tuple[st
         nota = _NOTA_DIALETO.get(dialeto, _NOTA_DIALETO["sqlite"])
         return nome, nota
 
-    dialeto = (estado.get("db_dialeto") or "").strip().lower()
+    dialeto = ""
+    db_url = (estado.get("db_url") or "").strip()
+    if db_url:
+        try:
+            from sqlalchemy.engine import make_url
 
-    if not dialeto:
-        db_url = (estado.get("db_url") or "").strip()
-        if db_url:
-            try:
-                from sqlalchemy.engine import make_url
-
-                dialeto = make_url(db_url).get_backend_name()
-            except Exception:
-                dialeto = ""
+            dialeto = make_url(db_url).get_backend_name()
+        except Exception:
+            dialeto = ""
 
     dialeto = dialeto or "sqlite"
     nome = _NOME_DIALETO.get(dialeto, _NOME_DIALETO["sqlite"])
@@ -177,7 +174,7 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativ
 
     `engine`, se informado, é a Engine SQLAlchemy injetada pelo chamador —
     usada apenas para resolver o dialeto (via `engine.dialect.name`) e ajustar
-    a sintaxe do prompt, sem depender de `db_dialeto`/`db_url` no estado.
+    a sintaxe do prompt, sem depender de `db_url` no estado.
     """
     pergunta = (
         estado.get("pergunta_atual", "")

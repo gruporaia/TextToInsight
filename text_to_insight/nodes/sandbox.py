@@ -16,8 +16,7 @@ def nos_nodo_sandbox(estado: EstadoTextToInsight, engine: Any = None) -> dict:
     Nó Executor: executa a SQL gerada contra o banco real (SQLite, PostgreSQL ou MySQL).
 
     Se uma Engine SQLAlchemy foi injetada pelo chamador (`engine`), executa
-    diretamente nela via `executar_sql_via_engine` — nada de db_path/db_config/
-    db_dialeto/db_url precisa estar no estado (nem, portanto, no checkpoint do
+    diretamente nela via `executar_sql_via_engine` — nada de db_path/db_url precisa estar no estado (nem, portanto, no checkpoint do
     grafo). Agora, a lógica utiliza uma engine, se ela existir. Caso não exista, verifica 
     se existe url. Novamente, se não existir, roda SQlite por padrão com db_path.
     """
