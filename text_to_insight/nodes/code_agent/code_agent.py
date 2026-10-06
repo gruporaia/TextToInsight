@@ -11,7 +11,63 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from ...state import EstadoTextToInsight
 from ...utils import extrair_tokens
 
-PROMPT_TEMPLATE_COT = """Você é um especialista em SQL para bancos SQLite.
+# Nome de exibição e observações de sintaxe por dialeto, injetados no prompt do
+# LLM para que a SQL gerada use a sintaxe correta do banco alvo (não apenas SQLite).
+_NOME_DIALETO = {
+    "sqlite": "SQLite",
+    "postgresql": "PostgreSQL",
+    "mysql": "MySQL",
+}
+
+_NOTA_DIALETO = {
+    "sqlite": (
+        "Sintaxe SQLite: use || para concatenar strings, strftime() para "
+        "datas/horas, e LIMIT/OFFSET para paginação. Identificadores não "
+        "precisam de aspas."
+    ),
+    "postgresql": (
+        "Sintaxe PostgreSQL: use || para concatenar strings, EXTRACT()/"
+        "TO_CHAR() para datas/horas, e LIMIT/OFFSET para paginação. "
+        "Identificadores com maiúsculas ou caracteres especiais exigem "
+        "aspas duplas (ex: \"NomeColuna\"); NÃO use crases (`)."
+    ),
+    "mysql": (
+        "Sintaxe MySQL: use CONCAT() para concatenar strings (NÃO use ||), "
+        "DATE_FORMAT()/EXTRACT() para datas/horas, e LIMIT/OFFSET para "
+        "paginação. Identificadores podem usar crases (`nome_coluna`); "
+        "NÃO use aspas duplas para identificadores."
+    ),
+}
+
+
+def _resolver_info_dialeto(estado: EstadoTextToInsight) -> tuple[str, str]:
+    """Resolve (nome_exibicao, nota_sintaxe) do dialeto configurado no estado.
+
+    Ordem de resolução:
+    1. `db_dialeto`, se informado explicitamente.
+    2. `db_url`, cujo dialeto é lido do prefixo da URL (sem conectar).
+    3. 'sqlite' como default, preservando o comportamento anterior quando
+       nada é informado (compatibilidade retroativa).
+    """
+    dialeto = (estado.get("db_dialeto") or "").strip().lower()
+
+    if not dialeto:
+        db_url = (estado.get("db_url") or "").strip()
+        if db_url:
+            try:
+                from sqlalchemy.engine import make_url
+
+                dialeto = make_url(db_url).get_backend_name()
+            except Exception:
+                dialeto = ""
+
+    dialeto = dialeto or "sqlite"
+    nome = _NOME_DIALETO.get(dialeto, _NOME_DIALETO["sqlite"])
+    nota = _NOTA_DIALETO.get(dialeto, _NOTA_DIALETO["sqlite"])
+    return nome, nota
+
+
+PROMPT_TEMPLATE_COT = """Você é um especialista em SQL para bancos {dialeto}.
 
 Sua tarefa: gerar UMA única consulta SQL SELECT que responda à pergunta do usuário,
 usando o schema do banco de dados fornecido abaixo.
@@ -23,6 +79,7 @@ Regras:
 - Use nomes de tabelas e colunas EXATAMENTE como aparecem no schema.
 - Se a pergunta for ambígua, faça a interpretação mais razoável.
 - Use as estatísticas de dados (DATA EXPLORATION) para entender distribuições, formatos e valores reais das colunas.
+- {nota_dialeto}
 
 === SCHEMA DO BANCO ===
 {schema}
@@ -47,7 +104,7 @@ Seu raciocínio lógico detalhado aqui.
 Sua consulta SQL aqui
 ```"""
 
-PROMPT_TEMPLATE_NO_COT = """Você é um especialista em SQL para bancos SQLite.
+PROMPT_TEMPLATE_NO_COT = """Você é um especialista em SQL para bancos {dialeto}.
 
 Sua tarefa: gerar UMA única consulta SQL SELECT que responda à pergunta do usuário,
 usando o schema do banco de dados fornecido abaixo.
@@ -59,6 +116,7 @@ Regras:
 - Use nomes de tabelas e colunas EXATAMENTE como aparecem no schema.
 - Se a pergunta for ambígua, faça a interpretação mais razoável.
 - Use as estatísticas de dados (DATA EXPLORATION) para entender distribuições, formatos e valores reais das colunas e raciocinar sobre a natureza do D.
+- {nota_dialeto}
 
 === SCHEMA DO BANCO ===
 {schema}
@@ -124,10 +182,13 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativ
     print(f"[AGENTE_CODIGO] Gerando SQL (tentativa {tentativas + 1})...")
 
     historico_section = _formatar_historico_tentativas(historico)
+    dialeto_nome, nota_dialeto = _resolver_info_dialeto(estado)
 
     template = PROMPT_TEMPLATE_COT if use_cot else PROMPT_TEMPLATE_NO_COT
 
     prompt = template.format(
+        dialeto=dialeto_nome,
+        nota_dialeto=nota_dialeto,
         schema=schema_rag if schema_rag else schema,
         data_exploration=data_exploration if data_exploration else "Não disponível.",
         pergunta=pergunta,

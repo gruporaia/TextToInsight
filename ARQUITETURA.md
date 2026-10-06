@@ -38,13 +38,13 @@ Planejador -> Espera Humana (interrupt_before) -> Planejador
 
 ## Camadas
 
-### 1) Orquestracao do grafo
+### 1) Orquestração do grafo
 
 Arquivo: `text_to_insight/graph.py`
 
 Responsavel por:
 
-- criar os nos;
+- criar os nós;
 - definir arestas fixas e condicionais;
 - compilar com `MemorySaver`;
 - interromper antes de `espera_humana` para suportar HITL.
@@ -56,13 +56,13 @@ Arquivo: `text_to_insight/runtime.py`
 Responsavel por:
 
 - construir estado inicial;
-- executar loop de stream ate fim/pausa;
+- executar loop de stream até fim/pausa;
 - tratar bloqueio HITL quando `hitl=False`;
 - registrar resposta humana na thread;
 - persistir metricas em CSV;
-- exibir resultado final em formato padrao.
+- exibir resultado final em formato padrão.
 
-Funcoes principais:
+Funções principais:
 
 - `_montar_saida_resultado_terminal(resultado)`: template reutilizavel que transforma linhas brutas da query em texto formatado para o terminal, usando `tabulate` para renderizar a tabela. Suporta fallback para amostra quando resultado completo nao estiver disponivel.
 - `salvar_resultado_csv(resultado, pasta)`: exporta o resultado completo em CSV com timestamp em `results/`.
@@ -120,7 +120,7 @@ Arquivos:
 
 ### Executor (`text_to_insight/nodes/sandbox.py`)
 
-- valida SQL e executa via `code_sql.py` em SQLite isolado
+- valida SQL e executa via `code_sql.py`
 - devolve preview + total de linhas completas
 - em caso de erro de sintaxe/execucao, define `status: exec_erro` e captura `erro_execucao`
 

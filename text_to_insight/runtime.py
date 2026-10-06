@@ -41,7 +41,15 @@ Retorne apenas:
 """
 
 
-def construir_estado_inicial(pergunta: str, db_path: str, inferir_fks_virtuais: bool = False, usar_schemacrawler: bool = True) -> dict[str, Any]:
+def construir_estado_inicial(
+    pergunta: str,
+    db_path: str,
+    inferir_fks_virtuais: bool = False,
+    usar_schemacrawler: bool = True,
+    db_dialeto: str = "",
+    db_config: dict[str, Any] | None = None,
+    db_url: str = "",
+) -> dict[str, Any]:
     """Cria o estado inicial padrão para uma execução do grafo."""
     return {
         "pergunta_original": pergunta,
@@ -55,6 +63,9 @@ def construir_estado_inicial(pergunta: str, db_path: str, inferir_fks_virtuais: 
         "status": "iniciado",
         "tentativas_loop": 0,
         "db_path": db_path,
+        "db_dialeto": db_dialeto,
+        "db_url": db_url,
+        "db_config": db_config,
         "espera_humana": False,
         "linhas_resultado_completo": [],
         "historico_tentativas": [],
@@ -63,6 +74,31 @@ def construir_estado_inicial(pergunta: str, db_path: str, inferir_fks_virtuais: 
         "inferir_fks_virtuais": inferir_fks_virtuais,
         "usar_schemacrawler": usar_schemacrawler,
     }
+
+
+_URL_SENHA_REGEX = re.compile(r"(://[^:/@\s]+:)[^@\s]+(@)")
+
+
+def _redigir_credenciais(estado: dict[str, Any]) -> dict[str, Any]:
+    """
+    Devolve uma copia rasa do estado com senha de `db_config` e `db_url`
+    mascaradas. Usar sempre antes de devolver o estado final ao chamador
+    (biblioteca) ou de persisti-lo fora do checkpointer do grafo — o estado
+    bruto guarda a senha em texto puro, e nao deve vazar pra fora do grafo.
+    """
+    estado_seguro = dict(estado)
+
+    db_config = estado_seguro.get("db_config")
+    if isinstance(db_config, dict) and db_config.get("password"):
+        db_config_seguro = dict(db_config)
+        db_config_seguro["password"] = "***"
+        estado_seguro["db_config"] = db_config_seguro
+
+    db_url = estado_seguro.get("db_url")
+    if db_url:
+        estado_seguro["db_url"] = _URL_SENHA_REGEX.sub(r"\1***\2", db_url)
+
+    return estado_seguro
 
 
 def _montar_saida_resultado_terminal(resultado: dict[str, Any]) -> str:
@@ -395,7 +431,7 @@ def _resultado_aguardando_usuario(snapshot_values: dict[str, Any], thread_id: st
 
 
 def _resultado_hitl_bloqueado(snapshot_values: dict[str, Any]) -> dict[str, Any]:
-    resultado_final = dict(snapshot_values)
+    resultado_final = _redigir_credenciais(snapshot_values)
     resultado_final.update(
         {
             "status": HITL_BLOCKED_STATUS,
@@ -473,7 +509,7 @@ def executar_fluxo(
         snapshot = grafo_app.get_state(config)
 
         if not snapshot.next:
-            resultado_final = snapshot.values
+            resultado_final = _redigir_credenciais(snapshot.values)
             salvar_metricas_csv(resultado_final, time.perf_counter() - lat_inicio)
             return resultado_final
 

@@ -36,6 +36,9 @@ dependencies = [
     "networkx>=3.0",
     "chromadb>=1.5.9",
     "tabulate>=0.10.0",
+    "psycopg2-binary>=2.9.0",
+    "pymysql>=1.1.0",
+    "sqlalchemy>=2.0.0",
 ]
 
 [project.scripts]

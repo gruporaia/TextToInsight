@@ -16,7 +16,25 @@ class InsightEngine:
     - `resume(...)` continua uma consulta que ficou pausada em HITL.
     """
 
-    def __init__(self, api_key: str, model: str, db_path: str, hitl: bool = False, show_output: bool = False, enable_graphs: bool = True, use_cot: bool = True, use_data_exploration: bool = True, use_exploration_selector: str = "off", use_rag: bool = True, enrich_rag: bool = False, inferir_fks_virtuais: bool = False, usar_schemacrawler: bool = True):
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        db_path: str,
+        hitl: bool = False,
+        show_output: bool = False,
+        enable_graphs: bool = True,
+        use_cot: bool = True,
+        use_data_exploration: bool = True,
+        use_exploration_selector: str = "off",
+        use_rag: bool = True,
+        enrich_rag: bool = False,
+        inferir_fks_virtuais: bool = False,
+        usar_schemacrawler: bool = True,
+        db_dialeto: str = "",
+        db_config: dict | None = None,
+        db_url: str = "",
+    ):
         self._hitl_ativado = hitl
         # `show_output` controla se a engine imprime o resultado final no terminal.
         # Em cenários com CLI, normalmente deixamos False para evitar saída duplicada.
@@ -25,6 +43,9 @@ class InsightEngine:
         self._enrich_rag = enrich_rag
         self._inferir_fks_virtuais = inferir_fks_virtuais
         self._usar_schemacrawler = usar_schemacrawler
+        self._db_dialeto = db_dialeto
+        self._db_config = db_config
+        self._db_url = db_url
         self._model = model
         self._db_path = db_path
         self._use_cot = use_cot
@@ -41,7 +62,7 @@ class InsightEngine:
             use_data_exploration=self._use_data_exploration,
             use_exploration_selector=self._use_exploration_selector,
             use_rag=self._use_rag,
-            enrich_rag=self._enrich_rag
+            enrich_rag=self._enrich_rag,
         )
 
         print(f"[CONFIG] HITL: {'ATIVADO' if self._hitl_ativado else 'DESATIVADO'}")
@@ -130,7 +151,10 @@ class InsightEngine:
             )
         # Caso 2: chamada nova (primeira execução para essa pergunta).
         elif query:
-            estado_execucao = construir_estado_inicial(query, self._db_path, self._inferir_fks_virtuais, self._usar_schemacrawler)
+            estado_execucao = construir_estado_inicial(
+                query, self._db_path, self._inferir_fks_virtuais, self._usar_schemacrawler,
+                db_dialeto=self._db_dialeto, db_config=self._db_config, db_url=self._db_url,
+            )
             pergunta_exibicao = query
         # Caso 3: a thread já está pausada, mas ainda sem resposta do usuário.
         elif snapshot.next:
