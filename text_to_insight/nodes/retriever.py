@@ -37,7 +37,11 @@ def nos_nodo_retriever(estado: EstadoTextToInsight, use_rag: bool = True) -> dic
 
     if not use_rag:
         print("[RETRIEVER] RAG desativado. Passando o schema completo.")
-        return {"contexto_rag_schema": f"=== SCHEMA COMPLETO (RAG desativado) ===\n\n{schema_full}"}
+        return {
+            "contexto_rag_schema": f"=== SCHEMA COMPLETO (RAG desativado) ===\n\n{schema_full}",
+            "status": "schema_obtido",
+            "tentativas_revisao_retriever": tentativas_revisao + 1,
+        }
 
     print(f"[RETRIEVER] schema completo: {len(schema_full)} chars (~{len(schema_full)//4} tokens)")
     

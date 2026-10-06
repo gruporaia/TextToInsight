@@ -4,26 +4,31 @@
 
 O sistema combina:
 
-- um grafo LangGraph com 9 nos (inclui salvamento de CSV e geracao de graficos);
+- um grafo LangGraph com 8 nos base (alem dos nos opcionais de RAG e exploracao, inclui salvamento de CSV e geracao de graficos);
 - uma camada de runtime compartilhada (`text_to_insight/runtime.py`);
 - duas interfaces de entrada: biblioteca (`InsightEngine`) e CLI (`main.py` -> `text_to_insight/cli.py`).
-- um modulo de benchmark para Spider 1.0 e Spider 2.0 Lite (`scripts/` + `src/spider/`).
+- um modulo de benchmark para Spider 1.0, Spider 2.0 Lite e BIRD (`scripts/` + `src/spider/` + `src/bird/`).
 
 Fluxo principal:
 
 ```text
 START
   -> Planejador
-  -> Schema (quando necessario)
+  -> Schema / Retriever (quando necessario)
   -> Agente de Codigo
-  -> Executor
-  -> Critico
+  -> Executor (Sandbox)
   -> Salvar CSV
   -> Roteador Grafico
   -> Gerador Grafico (quando aplicavel)
   -> Resposta
 END
 ```
+
+Loop de auto-correcao em caso de erro SQL no Sandbox:
+```text
+Executor (Sandbox) --[exec_erro e tentativas < 3]--> Planejador -> Agente de Codigo
+```
+
 
 Fluxo alternativo HITL:
 
@@ -116,16 +121,12 @@ Arquivos:
 ### Executor (`text_to_insight/nodes/sandbox.py`)
 
 - valida SQL e executa via `code_sql.py`
-- devolve preview + total de linhas
-
-### Crítico (`textto_insight/nodes/critic.py`)
-
-- valida se resultado responde a pergunta
-- reprova automaticamente em erro de execucao
+- devolve preview + total de linhas completas
+- em caso de erro de sintaxe/execucao, define `status: exec_erro` e captura `erro_execucao`
 
 ### Resposta (`text_to_insight/nodes/response.py`)
 
-- gera resposta natural final quando status aprovado
+- gera resposta natural final ao usuario a partir do resultado obtido e define status aprovado
 
 ### Salvar CSV (`text_to_insight/nodes/csv_saver.py`)
 
@@ -140,10 +141,12 @@ Arquivos:
 
 Arquivo: `text_to_insight/routers/edges.py`
 
-- `roteador_sandbox`: controla retry apos execucao
-- `roteador_planejador`: decide schema, codificacao, HITL ou fim
+- `roteador_sandbox`: inspeciona o resultado do executor:
+  - se `exec_ok`: prossegue para `salvar_csv` (ou `resposta`);
+  - se `exec_erro` e `tentativas < 3`: roteia de volta para o `planejador` com o erro para correcao pelo agente de codigo;
+  - se `tentativas >= 3`: encerra o ciclo enviando para `salvar_csv` / `resposta`.
+- `roteador_planejador`: decide entre schema/retriever, codificacao, HITL ou fim
 - `roteador_grafico`: decide entre gerar grafico ou ir direto para resposta
-- `roteador_critico` (interno em `graph.py`): aprovado -> salvar_csv (ou resposta); senao -> planejador
 
 ## Estado compartilhado
 
@@ -157,17 +160,19 @@ Campos obrigatorios:
 
 Campos principais do fluxo:
 
-- `contexto_schema`, `sql_gerada`, `linhas_resultado_preview`, `linhas_resultado_completo`, `total_linhas_resultado`
-- `erro_execucao`, `saida_terminal`, `feedback_critico`, `resposta_natural`
-- `status`, `tentativas_loop`, `historico_conversa`, `espera_humana`, `pergunta_ao_usuario`
+- `contexto_schema`, `contexto_rag_schema`, `sql_gerada`, `linhas_resultado_preview`, `linhas_resultado_completo`, `total_linhas_resultado`
+- `erro_execucao`, `saida_terminal`, `resposta_natural`
+- `status`, `tentativas_loop`, `historico_conversa`, `espera_humana`, `pergunta_ao_usuario`, `historico_tentativas`
 - `caminho_csv_resultado`, `grafico_gerado`, `caminho_grafico`
 - telemetria: `tokens_input`, `tokens_output`, `tokens_total`
 
-## Benchmark Spider
+## Benchmarks
 
+- BIRD Benchmark: `scripts/test_bird_eval.py` + `src/bird/` (loader, executor read-only, metrics, csv_reporter, BENCHMARK.md)
 - Spider 1.0: `scripts/test_spider_eval.py`
 - Spider 2.0 Lite: `scripts/test_spider2_eval.py`
-- Componentes: `src/spider/` (loader, executor, metrics, csv_reporter, analise_empirica)
+- Componentes Spider: `src/spider/` (loader, executor, metrics, csv_reporter, analise_empirica, BENCHMARK.md)
+
 
 ## HITL e perguntas
 
