@@ -31,7 +31,7 @@ def nos_nodo_retriever(estado: EstadoTextToInsight, use_rag: bool = True) -> dic
     if schema_full and schema_size < 5000: 
         print(f"[RETRIEVER] contexto_schema contém {schema_size} chars, mantendo original")
         return {
-            "contexto_rag_schema": f"=== SCHEMA COMPLETO ===\n\n{schema_full}",
+            "contexto_rag_schema": schema_full,
             "status": "schema_obtido",
             "tentativas_revisao_retriever": tentativas_revisao + 1,
         }

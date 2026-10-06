@@ -316,7 +316,6 @@ def test_no_retriever_reduz_contexto_schema():
 
     out = nos_nodo_retriever(estado)
     assert "contexto_rag_schema" in out
-    #isso aqui pode quebrar, como nosso GraphRAG encontra relações, pode ser sim que seja maior que o original
     assert len(out["contexto_rag_schema"]) <= tam_original
     assert "orders" in out["contexto_rag_schema"].lower()
 
