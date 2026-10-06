@@ -647,3 +647,18 @@ def test_setup_bird_data_intermediate_folder(tmp_path: Path) -> None:
     # Databases should be extracted
     assert (data_dir / "dev_databases" / "school" / "school.sqlite").exists()
 
+
+def test_setup_bird_data_parse_arguments(monkeypatch) -> None:
+    """Verifies CLI flag parsing for setup_bird_data.py including --mini and --full."""
+    from scripts.setup_bird_data import parse_arguments
+
+    monkeypatch.setattr("sys.argv", ["setup_bird_data.py", "--mini"])
+    args = parse_arguments()
+    assert args.mini is True
+    assert args.full is False
+
+    monkeypatch.setattr("sys.argv", ["setup_bird_data.py", "--full"])
+    args = parse_arguments()
+    assert args.full is True
+    assert args.mini is False
+

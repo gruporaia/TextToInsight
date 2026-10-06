@@ -360,6 +360,11 @@ def parse_arguments() -> argparse.Namespace:
         help=f"Target directory for storing dataset files (default: {DEFAULT_DATA_DIR})"
     )
     parser.add_argument(
+        "--mini",
+        action="store_true",
+        help="Download the compact Mini-Dev dataset (default mode, 500 questions).",
+    )
+    parser.add_argument(
         "--full",
         action="store_true",
         help="Download the complete official Dev set (1.534 questions / 11 databases) instead of Mini-Dev."

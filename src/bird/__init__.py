@@ -44,7 +44,3 @@ __all__ = [
     "BirdCSVReporter",
     "format_result_rows_markdown_table",
 ]
-
-
-
-

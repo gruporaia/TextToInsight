@@ -9,7 +9,7 @@ Integrates:
 - src.bird.query_executor: Safe SQLite execution with math functions and timeouts.
 - src.bird.metrics: Execution Accuracy (EX), SQL similarity, canonical row formatting.
 - src.bird.csv_reporter: CSV persistence, Markdown report generation, and BIRD predict_dev.json export.
-- text_to_insight.InsightEngine: The TextToInsight multi-agent graph (Planner + Code Agent + Critic).
+- text_to_insight.InsightEngine: The TextToInsight multi-agent graph (Planner + Code Agent + Executor/Sandbox).
 
 Usage:
     # Quick smoke test with 2 questions without API key (dry-run):
