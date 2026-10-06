@@ -10,20 +10,11 @@ from ..state import EstadoTextToInsight
 from ..retriever.engine import SchemaGraphRAG
 
 
-def _formatar_contexto_rag(retrieved, relations) -> str:
+def _formatar_contexto_rag(retrieved, relations=None) -> str:
     tabelas_txt = "\n\n".join(retrieved["documents"][0])
-    rels_formatadas = []
-    for origem, destino, col_origem, col_destino in relations:
-        join_str = f"{origem} JOIN {destino} ON {origem}.{col_origem} = {destino}.{col_destino}"
-        rels_formatadas.append(join_str)
-        
-    rels_txt = "\n".join(rels_formatadas) if rels_formatadas else "(sem relações - tabelas isoladas)"
-    
     return (
         "=== SCHEMA RELEVANTE (via RAG) ===\n\n"
-        f"{tabelas_txt}\n\n"
-        "=== RELAÇÕES NECESSÁRIAS (caminhos de JOIN) ===\n"
-        f"{rels_txt}\n"
+        f"{tabelas_txt}\n"
     )
 
 

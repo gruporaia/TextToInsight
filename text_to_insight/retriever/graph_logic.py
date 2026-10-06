@@ -9,7 +9,7 @@ from .RAG_example import SCHEMA
 class SchemaGraph:
 #o objetivo aqui seria conectar as tabelas pelas FK, não pensei ainda exatamente como fazer, vou pensar
     def __init__(self, schema: str = None):
-        self.graph = nx.Graph()
+        self.graph = nx.MultiGraph()
         self.table_schemas = {}
         if schema:
             self._add_schema(schema)
