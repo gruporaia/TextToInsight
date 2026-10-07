@@ -10,20 +10,11 @@ from ..state import EstadoTextToInsight
 from ..retriever.engine import SchemaGraphRAG
 
 
-def _formatar_contexto_rag(retrieved, relations) -> str:
+def _formatar_contexto_rag(retrieved, relations=None) -> str:
     tabelas_txt = "\n\n".join(retrieved["documents"][0])
-    rels_formatadas = []
-    for origem, destino, col_origem, col_destino in relations:
-        join_str = f"{origem} JOIN {destino} ON {origem}.{col_origem} = {destino}.{col_destino}"
-        rels_formatadas.append(join_str)
-        
-    rels_txt = "\n".join(rels_formatadas) if rels_formatadas else "(sem relações - tabelas isoladas)"
-    
     return (
         "=== SCHEMA RELEVANTE (via RAG) ===\n\n"
-        f"{tabelas_txt}\n\n"
-        "=== RELAÇÕES NECESSÁRIAS (caminhos de JOIN) ===\n"
-        f"{rels_txt}\n"
+        f"{tabelas_txt}\n"
     )
 
 
@@ -37,21 +28,26 @@ def nos_nodo_retriever(estado: EstadoTextToInsight, use_rag: bool = True) -> dic
     schema_size = len(schema_full)
     tentativas_revisao = estado.get("tentativas_revisao_retriever", 0)
 
-    if not schema_full or not pergunta or schema_size < 1500: 
-        print(f"[RETRIEVER] contexto_schema contém {schema_size} chars, mantendo original")
+    if not schema_full:
+        print("[RETRIEVER] contexto_schema vazio, não há nada a recuperar")
         return {
+            "contexto_rag_schema": "",
+            "status": "schema_vazio",
+            "tentativas_revisao_retriever": tentativas_revisao + 1,
+        }
+
+    if not use_rag or schema_size > 5000:
+        print("[RETRIEVER] RAG desativado. Passando o schema completo.")
+        return {
+            "contexto_rag_schema": schema_full,
             "status": "schema_obtido",
             "tentativas_revisao_retriever": tentativas_revisao + 1,
         }
 
-    if not use_rag:
-        print("[RETRIEVER] RAG desativado. Passando o schema completo.")
-        return {"contexto_rag_schema": f"=== SCHEMA COMPLETO (RAG desativado) ===\n\n{schema_full}"}
-
     print(f"[RETRIEVER] schema completo: {len(schema_full)} chars (~{len(schema_full)//4} tokens)")
     
     tentativas = estado.get("tentativas_loop", 0)
-    top_k_dinamico = 5  # Fixo em 5, sem expansão automática
+    top_k_dinamico = 8  + (tentativas * 4) # aumenta o top_k a cada tentativa de loop, para tentar recuperar mais tabelas se necessário
     
     rag = SchemaGraphRAG(schema={"contexto_schema": schema_full})
     print(f"[RETRIEVER] Recuperando top_k={top_k_dinamico} tabelas (loop atual: {tentativas})...")

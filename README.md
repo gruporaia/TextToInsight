@@ -8,11 +8,13 @@ O namespace oficial do pacote e `text_to_insight`.
 
 O runtime padrao garante:
 
-- fluxo completo do grafo (planejador -> schema -> agente de codigo -> executor -> critico -> salvar CSV -> roteador grafico -> gerador grafico (quando aplicavel) -> resposta);
+- fluxo completo do grafo (planejador -> schema -> agente de codigo -> executor -> salvar CSV -> roteador grafico -> gerador grafico (quando aplicavel) -> resposta);
+- loop de auto-correcao em caso de erro no executor (executor -> planejador -> agente de codigo);
 - HITL ligado e desligado;
 - retomada por `thread_id`;
 - persistencia de metricas em `data/metricas_execucao.csv`;
 - geracao opcional de graficos quando a visualizacao for relevante.
+
 
 ## Contrato HITL (perguntas)
 

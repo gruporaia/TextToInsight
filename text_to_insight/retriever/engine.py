@@ -38,7 +38,7 @@ class SchemaGraphRAG:
 
         tabelas_faltando = tabelas_relacionadas - set(retrieved_tables['ids'][0])
         for t in tabelas_faltando:
-            schema = self.schema_graph.table_schemas.get(t)
+            schema = self.schema_graph.table_schemas.get(t) or self.schema_graph.table_schemas.get(t.lower())
             if schema:
                 retrieved_tables['ids'][0].append(t)
                 retrieved_tables['documents'][0].append(schema)

@@ -374,7 +374,6 @@ def test_no_retriever_reduz_contexto_schema():
 
     out = nos_nodo_retriever(estado)
     assert "contexto_rag_schema" in out
-    #isso aqui pode quebrar, como nosso GraphRAG encontra relações, pode ser sim que seja maior que o original
     assert len(out["contexto_rag_schema"]) <= tam_original
     assert "orders" in out["contexto_rag_schema"].lower()
 
@@ -487,6 +486,17 @@ def test_roteador_planejador_fallback_agente_codigo():
     estado = {
         "contexto_schema": "Tabela: a\n- id: INT\n",
         "status": "status_inexistente"
+    }
+    assert roteador_planejador(estado) == "agente_codigo"
+
+def test_roteador_planejador_revisao_com_rag_desativado():
+    from text_to_insight.routers.edges import roteador_planejador
+    schema_grande = "A" * 2000
+    estado = {
+        "contexto_schema": schema_grande,
+        "contexto_rag_schema": f"=== SCHEMA COMPLETO (RAG desativado) ===\n\n{schema_grande}",
+        "status": "revisando_estrategia",
+        "tentativas_revisao_retriever": 0
     }
     assert roteador_planejador(estado) == "agente_codigo"
 
