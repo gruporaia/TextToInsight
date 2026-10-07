@@ -181,157 +181,6 @@ def _erro_execucao(msg: str) -> dict[str, Any]:
     }
 
 
-def _campos_obrigatorios_faltando(db_config: dict[str, Any], campos: tuple[str, ...]) -> str:
-    faltando = [c for c in campos if not db_config.get(c)]
-    if faltando:
-        return f"db_config incompleto, faltam: {', '.join(faltando)}"
-    return ""
-
-
-def executar_sql_postgres(
-    db_config: dict[str, Any],
-    sql: str,
-    limite_preview: int = 5,
-    timeout_segundos: float = 15.0,
-) -> dict[str, Any]:
-    """
-    Executa SQL validada em PostgreSQL (read-only, via transacao somente leitura)
-    e retorna resultado estruturado no mesmo formato de `executar_sql_sqlite`.
-
-    db_config esperado: {"host", "port" (opcional, default 5432), "database", "user", "password"}.
-    """
-    ok, erro_validacao = validar_sql_segura(sql)
-    if not ok:
-        return _erro_execucao(f"SQL invalida: {erro_validacao}")
-
-    faltando = _campos_obrigatorios_faltando(db_config, ("host", "database", "user", "password"))
-    if faltando:
-        return _erro_execucao(faltando)
-
-    import psycopg2
-    import psycopg2.extras
-
-    try:
-        conn = psycopg2.connect(
-            host=db_config["host"],
-            port=db_config.get("port", 5432),
-            dbname=db_config["database"],
-            user=db_config["user"],
-            password=db_config["password"],
-            connect_timeout=int(timeout_segundos),
-        )
-        try:
-            conn.set_session(readonly=True, autocommit=True)
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                cur.execute(f"SET statement_timeout = {int(timeout_segundos * 1000)}")
-                cur.execute(sql)
-                rows = [dict(r) for r in cur.fetchall()]
-        finally:
-            conn.close()
-    except psycopg2.errors.QueryCanceled:
-        return _erro_execucao(f"Query abortada por timeout (> {timeout_segundos}s).")
-    except Exception as e:
-        return _erro_execucao(f"Falha ao executar SQL: {e}")
-
-    total = len(rows)
-    return {
-        "ok": True,
-        "erro_execucao": "",
-        "linhas_resultado_preview": rows[:limite_preview],
-        "linhas_resultado_completo": rows,
-        "total_linhas_resultado": total,
-        "saida_terminal": (
-            f"[SANDBOX] Execucao OK | linhas_total={total} "
-            f"| preview={min(total, limite_preview)}"
-        ),
-    }
-
-
-def executar_sql_mysql(
-    db_config: dict[str, Any],
-    sql: str,
-    limite_preview: int = 5,
-    timeout_segundos: float = 15.0,
-) -> dict[str, Any]:
-    """
-    Executa SQL validada em MySQL (conexao read-only) e retorna resultado
-    estruturado no mesmo formato de `executar_sql_sqlite`.
-
-    db_config esperado: {"host", "port" (opcional, default 3306), "database", "user", "password"}.
-    """
-    ok, erro_validacao = validar_sql_segura(sql)
-    if not ok:
-        return _erro_execucao(f"SQL invalida: {erro_validacao}")
-
-    faltando = _campos_obrigatorios_faltando(db_config, ("host", "database", "user", "password"))
-    if faltando:
-        return _erro_execucao(faltando)
-
-    import pymysql
-    import pymysql.cursors
-
-    try:
-        conn = pymysql.connect(
-            host=db_config["host"],
-            port=db_config.get("port", 3306),
-            database=db_config["database"],
-            user=db_config["user"],
-            password=db_config["password"],
-            connect_timeout=int(timeout_segundos),
-            read_timeout=int(timeout_segundos),
-            cursorclass=pymysql.cursors.DictCursor,
-        )
-        try:
-            with conn.cursor() as cur:
-                cur.execute("SET SESSION TRANSACTION READ ONLY")
-                cur.execute(f"SET SESSION max_execution_time = {int(timeout_segundos * 1000)}")
-                cur.execute(sql)
-                rows = list(cur.fetchall())
-        finally:
-            conn.close()
-    except pymysql.err.OperationalError as e:
-        erro_msg = str(e)
-        if "1317" in erro_msg or "max_execution_time" in erro_msg.lower():
-            return _erro_execucao(f"Query abortada por timeout (> {timeout_segundos}s).")
-        return _erro_execucao(f"Falha ao executar SQL: {erro_msg}")
-    except Exception as e:
-        return _erro_execucao(f"Falha ao executar SQL: {e}")
-
-    total = len(rows)
-    return {
-        "ok": True,
-        "erro_execucao": "",
-        "linhas_resultado_preview": rows[:limite_preview],
-        "linhas_resultado_completo": rows,
-        "total_linhas_resultado": total,
-        "saida_terminal": (
-            f"[SANDBOX] Execucao OK | linhas_total={total} "
-            f"| preview={min(total, limite_preview)}"
-        ),
-    }
-
-
-def executar_sql(
-    dialeto: str,
-    sql: str,
-    db_path: str = "",
-    db_config: dict[str, Any] | None = None,
-    limite_preview: int = 5,
-    timeout_segundos: float = 15.0,
-) -> dict[str, Any]:
-    """
-    Dispatcher unico do executor: roteia para o backend correto conforme `dialeto`.
-
-    - "sqlite" (padrao): usa `db_path` (arquivo local).
-    - "postgresql" / "mysql": usa `db_config` (host/port/database/user/password).
-    """
-    if dialeto == "postgresql":
-        return executar_sql_postgres(db_config or {}, sql, limite_preview, timeout_segundos)
-    if dialeto == "mysql":
-        return executar_sql_mysql(db_config or {}, sql, limite_preview, timeout_segundos)
-    return executar_sql_sqlite(db_path, sql, limite_preview, timeout_segundos)
-
-
 def _normalizar_db_url(db_url: str) -> str:
     """
     Garante que "postgresql://" e "mysql://" sem driver explicito usem os
@@ -345,64 +194,87 @@ def _normalizar_db_url(db_url: str) -> str:
         return "mysql+pymysql://" + db_url[len("mysql://"):]
     return db_url
 
+def _criar_engine_de_url(db_url: str, timeout_segundos=15.0):
+    """ Cria uma engine com timeout de conexão pra evitar problema de 
+    runtime com URL"""
+    from sqlalchemy import create_engine
+    from sqlalchemy.engine import make_url
+    url =_normalizar_db_url(db_url=db_url)
+    dialeto = make_url(db_url).get_backend_name()
+    segundos = max(1, int(timeout_segundos))
+    connect_args = {}
+    if dialeto == "postgresql":
+        connect_args = {"connect_timeout": segundos}
+    elif dialeto == "mysql":
+        connect_args = {"connect_timeout": segundos, "read_timeout": segundos}
+    return create_engine(url, connect_args=connect_args)
 
-def executar_sql_via_url(
-    db_url: str,
+
+def executar_sql_via_engine(
+    engine: Any,
     sql: str,
     limite_preview: int = 5,
     timeout_segundos: float = 15.0,
 ) -> dict[str, Any]:
     """
-    Executa SQL usando uma unica URL de conexao (SQLAlchemy detecta o
-    dialeto sozinho a partir do prefixo da URL: sqlite:///, postgresql://,
-    mysql+pymysql://, etc). Alternativa mais simples ao `executar_sql`
-    quando o estado traz `db_url` em vez de `db_dialeto`/`db_config`.
+    Executa SQL usando uma Engine SQLAlchemy ja construida pelo chamador
+    (o dialeto e lido de `engine.dialect.name`, sem precisar de
+    `db_url` no estado do grafo).
+
+    Ao contrario de `executar_sql_via_url`, esta funcao NAO cria nem
+    descarta (`dispose`) a engine: o ciclo de vida da conexao e
+    responsabilidade de quem a construiu, nao desta biblioteca.
     """
     ok, erro_validacao = validar_sql_segura(sql)
     if not ok:
         return _erro_execucao(f"SQL invalida: {erro_validacao}")
 
-    db_url = _normalizar_db_url(db_url)
+    from sqlalchemy import text
 
-    from sqlalchemy import create_engine, text
-
-    try:
-        engine = create_engine(db_url)
-    except Exception as e:
-        return _erro_execucao(f"URL de conexao invalida: {e}")
+    dialeto = engine.dialect.name
 
     try:
         opcoes = {}
-        if engine.dialect.name == "postgresql":
+        if dialeto == "postgresql":
             opcoes["postgresql_readonly"] = True
 
         with engine.connect() as conn:
             conn = conn.execution_options(**opcoes) if opcoes else conn
+            dbapi_conn = None
 
-            # Aplica timeout e modo somente-leitura conforme o dialeto detectado.
-            if engine.dialect.name == "postgresql":
-                conn.execute(text(f"SET statement_timeout = {int(timeout_segundos * 1000)}"))
-            elif engine.dialect.name == "mysql":
-                conn.execute(text("SET SESSION TRANSACTION READ ONLY"))
-                conn.execute(text(f"SET SESSION max_execution_time = {int(timeout_segundos * 1000)}"))
-            elif engine.dialect.name == "sqlite":
-                dbapi_conn = getattr(conn.connection, "dbapi_connection", conn.connection)
-                inicio = time.time()
+            # A engine é do chamador e suas conexões voltam para o pool dele,
+            # então nenhum ajuste de sessão feito aqui pode sobreviver à chamada.
+            try:
+                if dialeto == "postgresql":
+                    # Roda dentro da transação aberta pelo autobegin, que é
+                    # desfeita (rollback) ao fechar: o SET não vaza para o pool.
+                    conn.execute(text(f"SET statement_timeout = {int(timeout_segundos * 1000)}"))
+                elif dialeto == "mysql":
+                    conn.execute(text("SET SESSION TRANSACTION READ ONLY"))
+                    conn.execute(text(f"SET SESSION max_execution_time = {int(timeout_segundos * 1000)}"))
+                elif dialeto == "sqlite":
+                    dbapi_conn = getattr(conn.connection, "dbapi_connection", conn.connection)
+                    inicio = time.time()
 
-                def _progress_handler():
-                    return 1 if time.time() - inicio > timeout_segundos else 0
+                    def _progress_handler():
+                        return 1 if time.time() - inicio > timeout_segundos else 0
 
-                dbapi_conn.set_progress_handler(_progress_handler, 1000)
+                    dbapi_conn.set_progress_handler(_progress_handler, 1000)
 
-            resultado = conn.execute(text(sql))
-            rows = [dict(linha) for linha in resultado.mappings().all()]
+                resultado = conn.execute(text(sql))
+                rows = [dict(linha) for linha in resultado.mappings().all()]
+            finally:
+                if dbapi_conn is not None:
+                    dbapi_conn.set_progress_handler(None, 0)
+                elif dialeto == "mysql":
+                    # SET SESSION não é transacional no MySQL: descarta a conexão
+                    # em vez de devolvê-la read-only/com timeout ao pool do chamador.
+                    conn.invalidate()
     except Exception as e:
         erro_msg = str(e)
         if "interrupted" in erro_msg.lower() or "timeout" in erro_msg.lower() or "canceling statement" in erro_msg.lower():
             return _erro_execucao(f"Query abortada por timeout (> {timeout_segundos}s).")
         return _erro_execucao(f"Falha ao executar SQL: {erro_msg}")
-    finally:
-        engine.dispose()
 
     total = len(rows)
     return {
@@ -416,3 +288,29 @@ def executar_sql_via_url(
             f"| preview={min(total, limite_preview)}"
         ),
     }
+
+
+def executar_sql_via_url(
+    db_url: str,
+    sql: str,
+    limite_preview: int = 5,
+    timeout_segundos: float = 15.0,
+) -> dict[str, Any]:
+    """
+    Executa SQL usando uma unica URL de conexao (SQLAlchemy detecta o
+    dialeto sozinho a partir do prefixo da URL: sqlite:///, postgresql://,
+    mysql+pymysql://, etc).
+
+    Cria e descarta a engine internamente. Se o chamador ja possui uma
+    Engine (e quer controlar seu ciclo de vida/pool), use
+    `executar_sql_via_engine` em vez desta funcao.
+    """
+    try:
+        engine = _criar_engine_de_url(db_url, timeout_segundos)
+    except Exception as e:
+        return _erro_execucao(f"URL de conexao invalida: {e}")
+
+    try:
+        return executar_sql_via_engine(engine, sql, limite_preview, timeout_segundos)
+    finally:
+        engine.dispose()

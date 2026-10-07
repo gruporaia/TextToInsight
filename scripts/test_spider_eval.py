@@ -21,6 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from dotenv import load_dotenv
+from sqlalchemy import create_engine
 
 # Importar InsightEngine do pacote text_to_insight
 from text_to_insight import InsightEngine
@@ -465,6 +466,8 @@ def main():
 
     # Cache de InsightEngine por db_id para evitar recompilação do grafo
     engine_cache: dict[str, InsightEngine] = {}
+    # Uma Engine SQLAlchemy (read-only) por banco; o script é dono dela e a descarta no fim.
+    db_engines = {}
 
     for idx, ex in enumerate(exemplos, 1):
         pergunta = ex.get("question", "")
@@ -488,10 +491,12 @@ def main():
         db_path = str(executor.get_db_path(db_id))
         if db_id not in engine_cache:
             try:
+                db_engines[db_id] = create_engine(f"sqlite:///file:{Path(db_path).resolve()}?mode=ro&uri=true")
                 engine_cache[db_id] = InsightEngine(
                     api_key=api_key,
                     model=model,
                     db_path=db_path,
+                    db_engine=db_engines[db_id],
                     hitl=False,
                     show_output=False,
                     enable_graphs=args.with_graphs,
@@ -667,6 +672,9 @@ def main():
 
         ex_id += 1
         time.sleep(1)  # Delay entre perguntas
+
+    for db_engine in db_engines.values():
+        db_engine.dispose()
 
     # 7. Gerar resumo
     print("\n" + "=" * 100)

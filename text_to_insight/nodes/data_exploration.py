@@ -391,19 +391,27 @@ def explore_tables(
 
     conn = sqlite3.connect(f"file:{caminho}?mode=ro", uri=True)
     try:
-        results: dict[str, TableExplorationResult] = {}
-        for table_name in table_names:
-            try:
-                cols_to_explore = None
-                if colunas_para_explorar and table_name in colunas_para_explorar:
-                    cols_to_explore = colunas_para_explorar[table_name]
-                results[table_name] = explore_table(conn, table_name, cols_to_explore)
-            except Exception as e:
-                print(f"[DATA_EXPLORATION] Erro ao explorar tabela '{table_name}': {e}")
-                continue
-        return results
+        return _explorar_tabelas(conn, table_names, colunas_para_explorar)
     finally:
         conn.close()
+
+
+def _explorar_tabelas(
+    conn: Any,
+    table_names: list[str],
+    colunas_para_explorar: dict[str, list[str]] | None,
+) -> dict[str, TableExplorationResult]:
+    results: dict[str, TableExplorationResult] = {}
+    for table_name in table_names:
+        try:
+            cols_to_explore = None
+            if colunas_para_explorar and table_name in colunas_para_explorar:
+                cols_to_explore = colunas_para_explorar[table_name]
+            results[table_name] = explore_table(conn, table_name, cols_to_explore)
+        except Exception as e:
+            print(f"[DATA_EXPLORATION] Erro ao explorar tabela '{table_name}': {e}")
+            continue
+    return results
 
 
 # ---------------------------------------------------------------------------
@@ -504,6 +512,7 @@ def _backend_suporta_exploracao(estado: EstadoTextToInsight, db_path: str) -> bo
 def nos_nodo_data_exploration(
     estado: EstadoTextToInsight,
     use_data_exploration: bool = True,
+    engine: Any = None,
 ) -> dict:
     """
     Nó Data Exploration: calcula estatísticas por coluna para as tabelas
@@ -511,15 +520,23 @@ def nos_nodo_data_exploration(
 
     Roda após o retriever e antes do planejador, injetando as estatísticas
     no campo `contexto_data_exploration` do estado.
+
+    Com `engine` injetada, explora o banco dela (e nunca o `db_path` do estado).
+    As estatísticas usam SQL específico do SQLite (PRAGMA), então para outros
+    dialetos a exploração é pulada.
     """
     if not use_data_exploration:
         print("[DATA_EXPLORATION] Data exploration desativada via toggle.")
         return {"contexto_data_exploration": ""}
 
+    if engine is not None and engine.dialect.name != "sqlite":
+        print(f"[DATA_EXPLORATION] Exploração só suporta SQLite (engine: {engine.dialect.name}) — pulando.")
+        return {"contexto_data_exploration": ""}
+
     contexto_rag = estado.get("contexto_rag_schema", "")
     db_path = estado.get("db_path", "").strip()
 
-    if not contexto_rag or not db_path:
+    if not contexto_rag or (engine is None and not db_path):
         print("[DATA_EXPLORATION] Sem contexto RAG ou db_path — pulando exploração.")
         return {}
 
@@ -540,7 +557,14 @@ def nos_nodo_data_exploration(
     print(f"[DATA_EXPLORATION] Explorando {len(table_names)} tabela(s): {table_names}")
 
     colunas_para_explorar = estado.get("colunas_para_explorar", None)
-    exploration_results = explore_tables(db_path, table_names, colunas_para_explorar)
+    if engine is not None:
+        conn = engine.raw_connection()
+        try:
+            exploration_results = _explorar_tabelas(conn, table_names, colunas_para_explorar)
+        finally:
+            conn.close()
+    else:
+        exploration_results = explore_tables(db_path, table_names, colunas_para_explorar)
 
     # Formatar para injeção no prompt
     exploration_text = format_exploration_for_prompt(exploration_results)

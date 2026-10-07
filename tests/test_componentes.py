@@ -246,6 +246,142 @@ def test_executor_sql_com_erro():
 
 
 # ============================================================
+# Conexão "caller-owned" via Engine SQLAlchemy
+#
+# Estes testes cobrem o caminho em que o chamador constrói e possui a
+# Engine (em vez de db_path/db_url no estado do grafo). Usamos uma
+# Engine SQLite apontando pro mesmo fixture DB só para não depender de
+# um Postgres/MySQL real nos testes — o código exercitado
+# (executar_sql_via_engine, _formatar_schema_sqlalchemy,
+# _resolver_info_dialeto) é o mesmo independente do dialeto.
+# ============================================================
+
+def _engine_sqlite_fixture():
+    from sqlalchemy import create_engine
+
+    return create_engine(f"sqlite:///{DB_PATH}")
+
+
+def test_schema_via_engine():
+    """Nó de schema usa a Engine injetada em vez de db_path/db_url do estado."""
+    from text_to_insight.nodes.schema import nos_nodo_esquema
+
+    engine = _engine_sqlite_fixture()
+    try:
+        resultado = nos_nodo_esquema({}, engine=engine)
+    finally:
+        engine.dispose()
+
+    assert resultado["status"] == "schema_obtido"
+    assert "Tabela:" in resultado["contexto_schema"]
+
+
+def test_executor_via_engine():
+    """Executor roda a SQL via Engine injetada, sem precisar de db_path/db_url."""
+    from text_to_insight.nodes.sandbox import nos_nodo_sandbox
+
+    engine = _engine_sqlite_fixture()
+    try:
+        estado = {"sql_gerada": "SELECT COUNT(*) as total FROM orders"}
+        resultado = nos_nodo_sandbox(estado, engine=engine)
+    finally:
+        engine.dispose()
+
+    assert resultado["status"] == "exec_ok"
+    assert resultado["total_linhas_resultado"] == 1
+
+
+def test_executor_via_engine_nao_deixa_timeout_na_conexao_do_pool():
+    """
+    A conexão volta para o pool do chamador: o progress handler de timeout
+    não pode continuar instalado e abortar queries posteriores do chamador.
+    """
+    import time
+    from sqlalchemy import text
+    from text_to_insight.nodes.code_agent.code_sql import executar_sql_via_engine
+
+    engine = _engine_sqlite_fixture()
+    try:
+        assert executar_sql_via_engine(engine, "SELECT 1 AS x", timeout_segundos=0.1)["ok"]
+        time.sleep(0.3)
+        with engine.connect() as conn:
+            total = conn.execute(text(
+                "SELECT COUNT(*) FROM order_items oi JOIN orders o ON o.order_id = oi.order_id"
+            )).scalar()
+    finally:
+        engine.dispose()
+
+    assert total > 0
+
+
+def test_data_exploration_via_engine_ignora_db_path():
+    """Com engine injetada, a exploração usa o banco da engine, não o db_path do estado."""
+    from text_to_insight.nodes.data_exploration import nos_nodo_data_exploration
+
+    engine = _engine_sqlite_fixture()
+    try:
+        estado = {
+            "contexto_rag_schema": "Tabela: orders\n- order_id: TEXT",
+            "db_path": "/nao/existe.db",
+            "colunas_para_explorar": {"orders": ["order_status"]},
+        }
+        resultado = nos_nodo_data_exploration(estado, engine=engine)
+    finally:
+        engine.dispose()
+
+    assert "order_status" in resultado["contexto_data_exploration"]
+
+
+def test_data_exploration_engine_nao_sqlite_pula():
+    """Exploração é SQLite-only: com engine de outro dialeto, pula sem tocar no db_path."""
+    from sqlalchemy import create_engine
+    from text_to_insight.nodes.data_exploration import nos_nodo_data_exploration
+
+    engine = create_engine("postgresql+psycopg2://u:p@localhost:1/nao_conecta")
+    estado = {"contexto_rag_schema": "Tabela: orders", "db_path": DB_PATH}
+    resultado = nos_nodo_data_exploration(estado, engine=engine)
+
+    assert resultado == {"contexto_data_exploration": ""}
+
+
+def test_enrich_com_engine_nao_grava_cache_do_db_path(tmp_path):
+    """Schema vindo da engine não pode sobrescrever o cache do SQLite local."""
+    from types import SimpleNamespace
+    from text_to_insight.nodes.enrich_schema import nos_nodo_enrich
+
+    class _FakeLLM:
+        def bind(self, **_):
+            return self
+
+        def batch(self, prompts, config=None):
+            return [SimpleNamespace(content="{}") for _ in prompts]
+
+    db_path = tmp_path / "local.db"
+    estado = {"db_path": str(db_path), "contexto_schema": "Tabela: t\n- a: INT"}
+    engine = _engine_sqlite_fixture()
+    try:
+        nos_nodo_enrich(estado, _FakeLLM(), engine=engine)
+    finally:
+        engine.dispose()
+
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_resolver_dialeto_via_engine():
+    """Dialeto do prompt é lido de engine.dialect.name, não de db_url."""
+    from text_to_insight.nodes.code_agent.code_agent import _resolver_info_dialeto
+
+    engine = _engine_sqlite_fixture()
+    try:
+        nome, nota = _resolver_info_dialeto({}, engine=engine)
+    finally:
+        engine.dispose()
+
+    assert nome == "SQLite"
+    assert "SQLite" in nota
+
+
+# ============================================================
 # Routers
 # ============================================================
 
