@@ -134,6 +134,9 @@ def roteador_planejador(estado: EstadoTextToInsight) -> Literal["esquema", "agen
     return "agente_codigo"
 
 def roteador_schema(estado: EstadoTextToInsight) -> Literal["retriever", "enriquecimento_rag"]:
+    if estado.get("status", "") == "exec_erro":
+        print("[ROTEADOR_SCHEMA] Erro de execução → fim")
+        return "fim"
     tem_descricao = estado.get("tem_descricao", False)
     return "retriever" if tem_descricao else "enriquecimento_rag"
 
