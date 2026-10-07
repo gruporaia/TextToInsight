@@ -26,6 +26,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from dotenv import load_dotenv
+from sqlalchemy import create_engine
 
 # Importar InsightEngine do pacote text_to_insight
 from text_to_insight import InsightEngine
@@ -469,6 +470,8 @@ def main():
     all_rows = []
     failures = []
     engine_cache = {}
+    # Uma Engine SQLAlchemy (read-only) por banco; o script é dono dela e a descarta no fim.
+    db_engines = {}
 
     for idx, ex in enumerate(exemplos, 1):
         instance_id = ex.get("instance_id")
@@ -523,10 +526,12 @@ def main():
             
         if db_id not in engine_cache:
             try:
+                db_engines[db_id] = create_engine(f"sqlite:///file:{Path(db_path).resolve()}?mode=ro&uri=true")
                 engine_cache[db_id] = InsightEngine(
                     api_key=api_key,
                     model=model,
                     db_path=db_path,
+                    db_engine=db_engines[db_id],
                     hitl=False,
                     show_output=False,
                     enable_graphs=args.with_graphs,
@@ -677,6 +682,9 @@ def main():
         all_rows.append(row)
 
         print(f"     ✓ Concluído após {tentativas} tentativa(s)")
+
+    for db_engine in db_engines.values():
+        db_engine.dispose()
 
     print("\n" + "=" * 100)
     print("📊 RESUMO FINAL SPIDER 2 LITE")
