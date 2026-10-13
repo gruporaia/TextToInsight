@@ -168,15 +168,32 @@ class BirdQueryExecutor:
         Enables SQLite to seamlessly evaluate complex formulas common in BIRD gold queries.
         """
         # Trigonometric and basic geometry functions
+        def _safe_trig(fn, x):
+            if x is None:
+                return None
+            try:
+                val = float(x)
+                return fn(val)
+            except (ValueError, TypeError, OverflowError):
+                return None
+
         conn.create_function("PI", 0, lambda: math.pi)
-        conn.create_function("SIN", 1, lambda x: math.sin(float(x)) if x is not None else None)
-        conn.create_function("COS", 1, lambda x: math.cos(float(x)) if x is not None else None)
-        conn.create_function("TAN", 1, lambda x: math.tan(float(x)) if x is not None else None)
-        conn.create_function("ASIN", 1, lambda x: math.asin(float(x)) if x is not None and -1 <= float(x) <= 1 else None)
-        conn.create_function("ACOS", 1, lambda x: math.acos(float(x)) if x is not None and -1 <= float(x) <= 1 else None)
-        conn.create_function("ATAN", 1, lambda x: math.atan(float(x)) if x is not None else None)
-        conn.create_function("RADIANS", 1, lambda x: math.radians(float(x)) if x is not None else None)
-        conn.create_function("DEGREES", 1, lambda x: math.degrees(float(x)) if x is not None else None)
+        conn.create_function("SIN", 1, lambda x: _safe_trig(math.sin, x))
+        conn.create_function("COS", 1, lambda x: _safe_trig(math.cos, x))
+        conn.create_function("TAN", 1, lambda x: _safe_trig(math.tan, x))
+        conn.create_function(
+            "ASIN",
+            1,
+            lambda x: _safe_trig(math.asin, x) if (x is not None and _safe_trig(lambda v: -1 <= v <= 1, x)) else None,
+        )
+        conn.create_function(
+            "ACOS",
+            1,
+            lambda x: _safe_trig(math.acos, x) if (x is not None and _safe_trig(lambda v: -1 <= v <= 1, x)) else None,
+        )
+        conn.create_function("ATAN", 1, lambda x: _safe_trig(math.atan, x))
+        conn.create_function("RADIANS", 1, lambda x: _safe_trig(math.radians, x))
+        conn.create_function("DEGREES", 1, lambda x: _safe_trig(math.degrees, x))
 
         # Power, root, and exponential functions
         conn.create_function("SQRT", 1, _safe_sqrt)
@@ -197,9 +214,24 @@ class BirdQueryExecutor:
         conn.create_function("ROUND", 2, _safe_round)
 
         # Arithmetic helpers
-        conn.create_function("ABS", 1, lambda x: abs(float(x)) if x is not None else None)
+        def _safe_abs(x):
+            try:
+                return abs(float(x)) if x is not None else None
+            except (ValueError, TypeError):
+                return None
+
+        def _safe_sign(x):
+            try:
+                if x is None:
+                    return None
+                val = float(x)
+                return 1 if val > 0 else (-1 if val < 0 else 0)
+            except (ValueError, TypeError):
+                return None
+
+        conn.create_function("ABS", 1, _safe_abs)
         conn.create_function("MOD", 2, _safe_mod)
-        conn.create_function("SIGN", 1, lambda x: (1 if float(x) > 0 else (-1 if float(x) < 0 else 0)) if x is not None else None)
+        conn.create_function("SIGN", 1, _safe_sign)
 
     def _verify_read_only_intent(self, sql: str) -> None:
         """
@@ -208,7 +240,11 @@ class BirdQueryExecutor:
         Raises:
             PermissionError: If any mutation keyword (DROP, DELETE, UPDATE, INSERT) is found.
         """
-        match = MUTATION_PATTERN.search(sql)
+        # Strip string literals and comments to prevent false positives (e.g. WHERE status = 'DELETE')
+        clean_sql = re.sub(r"'(?:''|[^'])*'", "", sql)
+        clean_sql = re.sub(r'"(?:""|[^"])*"', "", clean_sql)
+        clean_sql = re.sub(r"--.*", "", clean_sql)
+        match = MUTATION_PATTERN.search(clean_sql)
         if match:
             forbidden_word = match.group(0).upper()
             raise PermissionError(

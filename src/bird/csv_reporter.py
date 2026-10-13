@@ -48,6 +48,8 @@ def format_result_rows_markdown_table(
     # Case 2: rows are tuples or lists
     else:
         num_cols = len(sample[0]) if isinstance(sample[0], (tuple, list)) else 1
+        if num_cols == 0:
+            return "*(0 columns returned)*"
         cols = column_names if (column_names and len(column_names) == num_cols) else [f"col_{i+1}" for i in range(num_cols)]
         lines.append("| " + " | ".join(cols) + " |")
         lines.append("| " + " | ".join(["---"] * len(cols)) + " |")
@@ -237,6 +239,7 @@ class BirdCSVReporter:
 
         predictions: dict[str, str] = {}
         for q_id, attempts in grouped_by_question.items():
+            attempts = sorted(attempts, key=lambda a: int(a.get("attempt_number", 1)))
             final_attempt = attempts[-1]
             sql = str(final_attempt.get("agent_sql") or "").strip()
             db_id = str(final_attempt.get("db_id") or "").strip()
@@ -339,6 +342,7 @@ class BirdCSVReporter:
         }
 
         for q_id, attempts in grouped.items():
+            attempts = sorted(attempts, key=lambda a: int(a.get("attempt_number", 1)))
             first_attempt = attempts[0]
             final_attempt = attempts[-1]
 
@@ -587,8 +591,8 @@ class BirdCSVReporter:
                 sc_blocks.append("")
                 sc_blocks.append("#### Attempt Progression:")
                 for att_idx, att in enumerate(attempts, 1):
-                    att_sql = att.get("sql", "").strip() or "(empty)"
-                    att_err = att.get("erro", "").strip()
+                    att_sql = (att.get("sql") or att.get("agent_sql") or "").strip() or "(empty)"
+                    att_err = (att.get("erro") or att.get("error") or "").strip()
                     is_final = (att_idx == len(attempts))
                     status_badge = "✅ **Success (EX Match)**" if is_final else ("❌ **Error:** `" + att_err + "`" if att_err else "⚠️ **Subsequent iteration**")
                     sc_blocks.append(f"**Attempt {att_idx}** ({status_badge}):")
@@ -643,8 +647,8 @@ class BirdCSVReporter:
                 if attempts and len(attempts) > 1:
                     fail_blocks.append("#### Attempt History:")
                     for att_idx, att in enumerate(attempts, 1):
-                        att_sql = att.get("sql", "").strip() or "(empty)"
-                        att_err = att.get("erro", "").strip()
+                        att_sql = (att.get("sql") or att.get("agent_sql") or "").strip() or "(empty)"
+                        att_err = (att.get("erro") or att.get("error") or "").strip()
                         badge = f"❌ Error: `{att_err}`" if att_err else "Executed"
                         fail_blocks.append(f"**Attempt {att_idx}** ({badge}):")
                         fail_blocks.append(f"```sql\n{att_sql}\n```")

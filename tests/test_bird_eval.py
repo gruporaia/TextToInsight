@@ -244,6 +244,12 @@ def test_query_executor_execution_and_math(mock_bird_env: Path) -> None:
     assert domain_res["success"] is True
     assert domain_res["results"] == [(None, None)]
 
+    # Safe handling of non-numeric data in trig and helper UDFs (evaluates to NULL, never aborts query)
+    invalid_math_query = "SELECT SIN('not_a_number'), ABS('invalid'), SIGN('xyz')"
+    invalid_math_res = executor.execute_query("school", invalid_math_query)
+    assert invalid_math_res["success"] is True
+    assert invalid_math_res["results"] == [(None, None, None)]
+
 
 def test_query_executor_read_only(mock_bird_env: Path) -> None:
     """Guarantees that mutation commands are blocked by regex pre-check and SQLite ro mode."""
@@ -257,6 +263,11 @@ def test_query_executor_read_only(mock_bird_env: Path) -> None:
     insert_res = executor.execute_query("school", "INSERT INTO students (id, name, age, grade_level) VALUES (99, 'Eve', 16, 10)")
     assert insert_res["success"] is False
     assert "Destructive operation 'INSERT' is prohibited" in insert_res["error"]
+
+    # Legitimate SELECT with mutation keyword inside string literal must NOT be blocked
+    literal_res = executor.execute_query("school", "SELECT name FROM students WHERE name = 'DELETE'")
+    assert literal_res["success"] is True
+    assert literal_res["error"] is None
 
 
 
@@ -381,9 +392,33 @@ def test_csv_reporter_and_predict_json(tmp_path: Path) -> None:
     assert preds["1"] == "SELECT count(*) FROM students\t----- ----- -----\tschool"
 
     # Markdown report verification
-    md_path = reporter.save_markdown_report(summary, config_info={"model": "gpt-4o-mini"})
+    detailed_cases = {
+        "self_corrections": [
+            {
+                "question_id": 1,
+                "db_id": "school",
+                "difficulty": "simple",
+                "question": "Count students",
+                "evidence": "",
+                "gold_sql": "SELECT count(*) FROM students",
+                "attempts": [
+                    {"agent_sql": "SELECT count(id) FROM students", "error": "Syntax error"},
+                    {"agent_sql": "SELECT count(*) FROM students", "error": ""},
+                ],
+                "gold_results": [(4,)],
+                "gold_columns": ["count(*)"],
+            }
+        ]
+    }
+    md_path = reporter.save_markdown_report(
+        summary, config_info={"model": "gpt-4o-mini"}, detailed_cases=detailed_cases
+    )
     assert md_path.exists()
-    assert "Execution Accuracy (EX Final)" in md_path.read_text(encoding="utf-8")
+    md_content = md_path.read_text(encoding="utf-8")
+    assert "Execution Accuracy (EX Final)" in md_content
+    # Must correctly extract SQL and error even when keys are agent_sql / error (never '(empty)')
+    assert "SELECT count(id) FROM students" in md_content
+    assert "Syntax error" in md_content
 
 
 def test_format_result_rows_markdown_table() -> None:
@@ -391,6 +426,7 @@ def test_format_result_rows_markdown_table() -> None:
     # 1. Empty and None cases
     assert "unavailable" in format_result_rows_markdown_table(None)
     assert "0 rows returned" in format_result_rows_markdown_table([])
+    assert "0 columns returned" in format_result_rows_markdown_table([()])
 
     # 2. Tuple rows with column names
     rows = [("Alice", 15), ("Bob", 16)]
