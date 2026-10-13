@@ -84,7 +84,8 @@ python main.py --hitl off --model gpt-4o-mini --api-key-env OPENAI_API_KEY "Quan
 python main.py --hitl off --infer-fks on --use-schemacrawler off "Qual a soma dos resultados?"
 ```
 
-O resultado é exibido no terminal em formato tabular sob o bloco `RESULTADO:`, junto com SQL gerada, feedback do crítico e resposta natural.
+O resultado é exibido no terminal em formato tabular sob o bloco `RESULTADO:`, junto com SQL gerada, status de execução e resposta natural.
+
 
 ### Geração de gráficos
 
@@ -259,6 +260,29 @@ python scripts/test_spider2_eval.py --sample-size 10 --seed 42 \
 ```
 
 Opções úteis: `--db-filter`, `--question-filter`, `--model`, `--with-graphs`, `--report-dir`.
+
+### Benchmark BIRD (Big Bench for Large-scale Database Grounded Text-to-SQL Evaluation)
+
+Requer o dataset BIRD em `data/bird/` (baixe e extraia via `python scripts/setup_bird_data.py --mini`).
+
+```bash
+# 1) Testes unitários do harness BIRD (< 1s, sem consumo de API)
+pytest tests/test_bird_eval.py -v
+
+# 2) Smoke test rápido sem custo de LLM (dry-run)
+python scripts/test_bird_eval.py --sample-size 3 --dry-run
+
+# 3) Avaliação real com modelo configurado no .env
+python scripts/test_bird_eval.py --sample-size 20 --seed 42 --rag on
+
+# 4) Experimento de ablação: SchemaGraphRAG (Steiner Tree)
+python scripts/test_bird_eval.py --sample-size 50 --seed 123 --rag on --output reports/bird/rag_on.csv
+python scripts/test_bird_eval.py --sample-size 50 --seed 123 --rag off --output reports/bird/rag_off.csv
+```
+
+Opções úteis: `--db-filter`, `--difficulty` (`simple`, `moderate`, `challenging`), `--stratify`, `--use-evidence` (`on`/`off`), `--dry-run`, `--output`.
+Consulte o manual operacional completo em `src/bird/BENCHMARK.md`.
+
 
 ## CI hibrida
 
