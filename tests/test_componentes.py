@@ -306,18 +306,34 @@ def test_schema_graph_rag_retrieve_reduz_e_liga(tmp_path, monkeypatch):
 
 
 def test_no_retriever_reduz_contexto_schema():
-    """Nó retriever produz contexto reduzido contendo tabelas relevantes."""
+    """Nó retriever produz contexto reduzido contendo tabelas relevantes quando schema >= 5000 chars."""
     from text_to_insight.nodes.retriever import nos_nodo_retriever
     from text_to_insight.nodes.schema import nos_nodo_esquema
 
     estado = {"db_path": DB_PATH, "pergunta_atual": "How many orders does each customer have?"}
-    estado["contexto_schema"] = nos_nodo_esquema(estado)["contexto_schema"]
+    schema_base = nos_nodo_esquema(estado)["contexto_schema"]
+    # Adiciona linhas de comentário para ultrapassar o limiar de 5000 chars e acionar o RAG
+    estado["contexto_schema"] = schema_base + "\n" + ("-- padding de teste para atingir threshold de RAG\n" * 100)
     tam_original = len(estado["contexto_schema"])
 
     out = nos_nodo_retriever(estado)
     assert "contexto_rag_schema" in out
     assert len(out["contexto_rag_schema"]) <= tam_original
     assert "orders" in out["contexto_rag_schema"].lower()
+
+
+def test_no_retriever_schema_pequeno_mantem_original():
+    """Para schemas pequenos (< 5000 chars), o retriever mantém contexto_rag_schema vazio."""
+    from text_to_insight.nodes.retriever import nos_nodo_retriever
+    from text_to_insight.nodes.schema import nos_nodo_esquema
+
+    estado = {"db_path": DB_PATH, "pergunta_atual": "How many orders does each customer have?"}
+    estado["contexto_schema"] = nos_nodo_esquema(estado)["contexto_schema"]
+    assert len(estado["contexto_schema"]) < 5000
+
+    out = nos_nodo_retriever(estado)
+    assert out.get("contexto_rag_schema") == ""
+    assert out.get("status") == "schema_obtido"
 
 # ============================================================
 # TESTES DO SCHEMA CRAWLER
@@ -436,7 +452,7 @@ def test_roteador_planejador_revisao_com_rag_desativado():
     schema_grande = "A" * 2000
     estado = {
         "contexto_schema": schema_grande,
-        "contexto_rag_schema": f"=== SCHEMA COMPLETO (RAG desativado) ===\n\n{schema_grande}",
+        "contexto_rag_schema": "",
         "status": "revisando_estrategia",
         "tentativas_revisao_retriever": 0
     }

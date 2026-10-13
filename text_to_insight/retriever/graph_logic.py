@@ -41,6 +41,20 @@ class SchemaGraph:
             
             #Se não houver FK, roda SchemaCrawler ou qualquer outra técnica (Isso aqui é discutível, provavelmente deveriamso passar o SC para um nó antes do RAG)
 
+    def get_schema(self, table_name: str) -> str | None:
+        """
+        Retorna o schema DDL da tabela por nome, com fallback case-insensitive.
+        """
+        if not table_name:
+            return None
+        if table_name in self.table_schemas:
+            return self.table_schemas[table_name]
+        table_lower = table_name.lower()
+        for name, schema_text in self.table_schemas.items():
+            if name.lower() == table_lower:
+                return schema_text
+        return None
+
     def _get_relations(self, tables: list):
         """
         Recebe uma lista de tabelas (que foram recuperadas pelo RAG) e tenta encontrar

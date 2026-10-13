@@ -494,15 +494,15 @@ def nos_nodo_data_exploration(
         print("[DATA_EXPLORATION] Data exploration desativada via toggle.")
         return {"contexto_data_exploration": ""}
 
-    contexto_rag = estado.get("contexto_rag_schema", "")
+    schema_alvo = estado.get("contexto_rag_schema") or estado.get("contexto_schema", "")
     db_path = estado.get("db_path", "").strip()
 
-    if not contexto_rag or not db_path:
-        print("[DATA_EXPLORATION] Sem contexto RAG ou db_path — pulando exploração.")
+    if not schema_alvo or not db_path:
+        print("[DATA_EXPLORATION] Sem schema ou db_path — pulando exploração.")
         return {}
 
-    # Extrair nomes de tabelas do contexto do retriever
-    table_names = _extract_table_names_from_rag_context(contexto_rag)
+    # Extrair nomes de tabelas do contexto de schema (RAG ou completo)
+    table_names = _extract_table_names_from_rag_context(schema_alvo)
     if not table_names:
         print("[DATA_EXPLORATION] Nenhuma tabela encontrada no contexto RAG.")
         return {}
@@ -557,7 +557,7 @@ def _exploration_selector_llm(
         or estado.get("pergunta_original", "")
         or estado.get("pergunta_usuario", "")
     )
-    contexto_rag = estado.get("contexto_rag_schema", "")
+    contexto_rag = estado.get("contexto_rag_schema", "") or estado.get("contexto_schema", "")
 
     if not pergunta or not contexto_rag:
         return {"colunas_para_explorar": {}}
@@ -675,7 +675,7 @@ def _exploration_selector_rag(
         or estado.get("pergunta_original", "")
         or estado.get("pergunta_usuario", "")
     )
-    contexto_rag = estado.get("contexto_rag_schema", "")
+    contexto_rag = estado.get("contexto_rag_schema", "") or estado.get("contexto_schema", "")
     print(contexto_rag)
 
     if not pergunta or not contexto_rag:

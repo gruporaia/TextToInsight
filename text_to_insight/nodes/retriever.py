@@ -35,11 +35,13 @@ def nos_nodo_retriever(estado: EstadoTextToInsight, use_rag: bool = True) -> dic
             "status": "schema_vazio",
             "tentativas_revisao_retriever": tentativas_revisao + 1,
         }
-
-    if not use_rag or schema_size > 5000:
+    # if use_rag is False, the RAG is disabled so we want pass the full schema
+    # but if the schema is not so big (less than 5000 chars), we can also pass the full schema to avoid RAG overhead
+    if (not use_rag) or schema_size < 5000:
         print("[RETRIEVER] RAG desativado. Passando o schema completo.")
         return {
-            "contexto_rag_schema": schema_full,
+            # contexto_rag_schema empty because we are not using RAG, the string must be empty because the code_agent will use this variable to check if RAG is used or not 
+            "contexto_rag_schema": "", # (empty string returns False)
             "status": "schema_obtido",
             "tentativas_revisao_retriever": tentativas_revisao + 1,
         }
