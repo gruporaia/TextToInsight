@@ -364,6 +364,50 @@ class TestNodoDataExploration:
         assert "name" not in text
         assert "category" not in text
 
+    # --- Bancos que não são um arquivo SQLite local: o nó deve PULAR ---------
+    # Cenário real: o usuário roda com --db-dialeto postgresql (ou --db-url) mas
+    # --db-path sobra com um .db antigo que EXISTE. Sem o guard, o nó exploraria
+    # esse arquivo sem relação com o banco de verdade.
+
+    @pytest.mark.parametrize(
+        "campos_do_banco",
+        [
+            {"db_dialeto": "postgresql"},
+            {"db_dialeto": "mysql"},
+            {"db_url": "postgresql://u:p@localhost:5432/banco"},
+            {"db_url": "sqlite:///outro_arquivo.db"},
+        ],
+    )
+    def test_skips_when_backend_is_not_local_sqlite(self, sample_db, campos_do_banco):
+        # sample_db é um .db REAL e explorável: se o guard falhasse, o nó o exploraria.
+        estado = {
+            "db_path": sample_db,
+            "contexto_rag_schema": "Tabela: products\n- id: INTEGER\n",
+            **campos_do_banco,
+        }
+        result = nos_nodo_data_exploration(estado)
+        assert result == {}
+
+    def test_skips_for_duckdb_extension(self, sample_db, tmp_path):
+        # .duckdb é detectado pela extensão do db_path; o nó não sabe abrir DuckDB.
+        arquivo = tmp_path / "dados.duckdb"
+        arquivo.write_bytes(Path(sample_db).read_bytes())
+        estado = {
+            "db_path": str(arquivo),
+            "contexto_rag_schema": "Tabela: products\n- id: INTEGER\n",
+        }
+        assert nos_nodo_data_exploration(estado) == {}
+
+    def test_still_explores_when_dialect_is_explicit_sqlite(self, sample_db):
+        estado = {
+            "db_path": sample_db,
+            "db_dialeto": "sqlite",
+            "db_url": "",  # vazio/None não conta como db_url preenchido
+            "contexto_rag_schema": "Tabela: products\n- id: INTEGER\n",
+        }
+        result = nos_nodo_data_exploration(estado)
+        assert "products" in result["contexto_data_exploration"]
+
 
 class MockLLMResponse:
     def __init__(self, content):

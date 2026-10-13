@@ -479,6 +479,28 @@ def _extract_table_names_from_rag_context(contexto_rag: str) -> list[str]:
 # Nó do grafo LangGraph
 # ---------------------------------------------------------------------------
 
+def _backend_suporta_exploracao(estado: EstadoTextToInsight, db_path: str) -> bool:
+    """
+    Este nó só sabe explorar um arquivo SQLite local (abre `db_path` com
+    sqlite3). Para qualquer outro banco ele não consegue explorar — e, pior,
+    se `db_path` sobrou preenchido com um valor antigo (o default do CLI
+    aponta para um .db do projeto), ele exploraria esse arquivo sem relação
+    nenhuma com o banco de verdade, devolvendo estatísticas erradas pra IA.
+
+    Retorna False quando:
+    - `db_url` está preenchido (o banco real vem da URL, não do db_path);
+    - ou o dialeto efetivo não é sqlite (`db_dialeto` explícito, ou deduzido
+      pela extensão do db_path, ex: .duckdb).
+    """
+    if (estado.get("db_url") or "").strip():
+        return False
+
+    from .schema import _detectar_dialeto
+
+    dialeto = (estado.get("db_dialeto") or "").strip().lower() or _detectar_dialeto(db_path)
+    return dialeto == "sqlite"
+
+
 def nos_nodo_data_exploration(
     estado: EstadoTextToInsight,
     use_data_exploration: bool = True,
@@ -499,6 +521,14 @@ def nos_nodo_data_exploration(
 
     if not schema_alvo or not db_path:
         print("[DATA_EXPLORATION] Sem schema ou db_path — pulando exploração.")
+        return {}
+
+    if not _backend_suporta_exploracao(estado, db_path):
+        print(
+            "[DATA_EXPLORATION] O banco configurado não é um arquivo SQLite local "
+            "(db_dialeto/db_url/extensão do db_path) — exploração ainda não "
+            "suportada para esse banco, pulando."
+        )
         return {}
 
     # Extrair nomes de tabelas do contexto de schema (RAG ou completo)

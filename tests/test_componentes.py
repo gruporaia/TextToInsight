@@ -98,6 +98,64 @@ def test_sql_rejeita_vazia():
     assert ok is False
 
 
+# Variantes de "SELECT ... INTO OUTFILE/DUMPFILE" (escrita de arquivo no servidor
+# MySQL). Todas começam com SELECT, então só o blacklist as barra. O MySQL aceita
+# comentários entre INTO e OUTFILE, então espaço não pode ser o único separador.
+VARIANTES_ESCRITA_DE_ARQUIVO = [
+    "SELECT * FROM t INTO OUTFILE '/tmp/x'",
+    "select * from t into  outfile '/tmp/x'",
+    "SELECT * FROM t INTO DUMPFILE '/tmp/x'",
+    "SELECT * FROM t INTO/**/OUTFILE '/tmp/x'",
+    "SELECT * FROM t INTO/*qualquer coisa*/DUMPFILE '/tmp/x'",
+    "SELECT * FROM t INTO /*!50000 OUTFILE*/ '/tmp/x'",
+    "SELECT * FROM t INTO -- x\nOUTFILE '/tmp/x'",
+    "SELECT * FROM t INTO #x\nOUTFILE '/tmp/x'",
+    "SELECT * FROM t\nINTO\nOUTFILE '/tmp/x'",
+]
+
+
+@pytest.mark.parametrize("sql", VARIANTES_ESCRITA_DE_ARQUIVO)
+def test_sql_rejeita_escrita_de_arquivo_mysql(sql):
+    """INTO OUTFILE/DUMPFILE é bloqueado qualquer que seja o separador entre as palavras."""
+    from text_to_insight.nodes.code_agent.code_sql import validar_sql_segura
+
+    ok, msg = validar_sql_segura(sql)
+    assert ok is False, f"deveria bloquear: {sql!r}"
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT LOAD_FILE('/etc/passwd')",
+        "SELECT pg_read_file('/etc/passwd')",
+        "SELECT load_extension('/tmp/x.so')",
+    ],
+)
+def test_sql_rejeita_leitura_de_arquivo_por_funcao(sql):
+    """Funções que leem arquivo do servidor também são bloqueadas."""
+    from text_to_insight.nodes.code_agent.code_sql import validar_sql_segura
+
+    ok, msg = validar_sql_segura(sql)
+    assert ok is False, f"deveria bloquear: {sql!r}"
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT * FROM orders",
+        "SELECT nome INTO @variavel FROM clientes LIMIT 1",  # INTO @var não escreve arquivo
+        "SELECT COUNT(*) FROM orders /* comentario inocente */",
+        "WITH t AS (SELECT 1) SELECT * FROM t",
+    ],
+)
+def test_sql_legitima_continua_permitida(sql):
+    """O blacklist não pode gerar falso positivo em consultas normais."""
+    from text_to_insight.nodes.code_agent.code_sql import validar_sql_segura
+
+    ok, msg = validar_sql_segura(sql)
+    assert ok is True, f"deveria permitir: {sql!r} ({msg})"
+
+
 # ============================================================
 # SQL Execution (code_sql.py)
 # ============================================================
