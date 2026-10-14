@@ -65,6 +65,7 @@ def construir_estado_inicial(
         "espera_humana": False,
         "linhas_resultado_completo": [],
         "historico_tentativas": [],
+        "cache_data_exploration": {},
         "ultimo_prompt": "",
         "schemacrawler_bin": os.getenv("SCHEMACRAWLER_BIN", ""),
         "inferir_fks_virtuais": inferir_fks_virtuais,
