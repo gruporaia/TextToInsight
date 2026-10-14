@@ -482,6 +482,7 @@ class BirdCSVReporter:
         config_rows = [
             f"| **Timestamp** | {timestamp} |",
             f"| **Model** | `{config.get('model', 'N/A')}` |",
+            f"| **Model kwargs** | `{json.dumps(config['model_kwargs']) if config.get('model_kwargs') else 'provider defaults'}` |",
             f"| **Dialect** | `{config.get('dialect', 'sqlite')}` |",
             f"| **Sample Size** | {config.get('sample_size', 'All')} |",
             f"| **Random Seed** | {config.get('seed', 'None')} |",

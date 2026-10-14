@@ -597,6 +597,44 @@ def test_cli_orchestrator_dry_run_with_dir_output(mock_bird_env: Path, tmp_path:
     assert generated_csv.with_suffix(".md").exists()
 
 
+def test_cli_orchestrator_model_kwargs_flag(mock_bird_env: Path, tmp_path: Path, monkeypatch) -> None:
+    """Verifies --model-kwargs KEY=VALUE parsing, JSON typing, and propagation to console/report."""
+    from scripts.test_bird_eval import parse_arguments
+
+    monkeypatch.setattr("sys.argv", ["test_bird_eval.py"])
+    assert dict(parse_arguments().model_kwargs) == {}
+
+    monkeypatch.setattr(
+        "sys.argv",
+        ["test_bird_eval.py", "--model-kwargs", "temperature=0", "max_tokens=256", "top_p=0.9", "stop=END"],
+    )
+    assert dict(parse_arguments().model_kwargs) == {
+        "temperature": 0,
+        "max_tokens": 256,
+        "top_p": 0.9,
+        "stop": "END",
+    }
+
+    monkeypatch.setattr("sys.argv", ["test_bird_eval.py", "--model-kwargs", "temperature"])
+    with pytest.raises(SystemExit):
+        parse_arguments()
+
+    out_csv = tmp_path / "kwargs_report.csv"
+    cmd = [
+        sys.executable,
+        "scripts/test_bird_eval.py",
+        "--data-dir", str(mock_bird_env),
+        "--sample-size", "1",
+        "--dry-run",
+        "--model-kwargs", "temperature=0.3",
+        "--output", str(out_csv),
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    assert result.returncode == 0, f"CLI command failed:\n{result.stderr}"
+    assert "Model kwargs: {'temperature': 0.3}" in result.stdout
+    assert '| **Model kwargs** | `{"temperature": 0.3}` |' in out_csv.with_suffix(".md").read_text(encoding="utf-8")
+
+
 # ==============================================================================
 # 6. Tests for Intermediate Folder Handling (dev_[date])
 # ==============================================================================

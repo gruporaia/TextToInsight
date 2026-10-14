@@ -54,6 +54,23 @@ from src.bird import (
 load_dotenv()
 
 
+def _model_kwarg(item: str) -> tuple[str, Any]:
+    """argparse type: parses ``KEY=VALUE`` into a (key, value) pair.
+
+    VALUE is decoded as JSON when possible (``0`` -> int, ``0.2`` -> float,
+    ``true`` -> bool, ``null`` -> None); otherwise it is kept as a string.
+    """
+    key, sep, raw_value = item.partition("=")
+    key = key.strip()
+    if not sep or not key:
+        raise argparse.ArgumentTypeError(f"expected KEY=VALUE, got '{item}'")
+    try:
+        value = json.loads(raw_value)
+    except json.JSONDecodeError:
+        value = raw_value
+    return key, value
+
+
 def parse_arguments() -> argparse.Namespace:
     """Parses command-line arguments for BIRD evaluation."""
     parser = argparse.ArgumentParser(
@@ -112,6 +129,17 @@ def parse_arguments() -> argparse.Namespace:
         type=str,
         default=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
         help="LLM model name (default: from OPENAI_MODEL or gpt-4o-mini)",
+    )
+    parser.add_argument(
+        "--model-kwargs",
+        type=_model_kwarg,
+        nargs="+",
+        default=[],
+        metavar="KEY=VALUE",
+        help=(
+            "Extra kwargs passed to the LLM constructor, e.g. "
+            "--model-kwargs temperature=0 max_tokens=512 (default: provider defaults)"
+        ),
     )
     parser.add_argument(
         "--use-evidence",
@@ -324,9 +352,13 @@ def main() -> None:
     # 5. Engine cache by db_id
     engine_cache: dict[str, Any] = {}
 
+    # LLM constructor kwargs (empty -> provider defaults apply)
+    model_kwargs: dict[str, Any] = dict(args.model_kwargs)
+
     # Print Configuration Summary
     print("\n Execution Configuration:")
     print(f"   - Model: {args.model} {'(Dry-run)' if args.dry_run else ''}")
+    print(f"   - Model kwargs: {model_kwargs or 'provider defaults'}")
     print(f"   - Evidence (Hints): {args.use_evidence}")
     print(f"   - Schema RAG: {args.rag}")
     print(f"   - Chain of Thought: {args.cot}")
@@ -398,6 +430,7 @@ def main() -> None:
                         use_rag=(args.rag == "on"),
                         enrich_rag=(args.enrich_rag == "on"),
                         inferir_fks_virtuais=args.infer_fks,
+                        model_kwargs=model_kwargs,
                     )
                 except Exception as e:
                     print(f"     ❌ Failed to instantiate InsightEngine for db '{db_id}': {e}")
@@ -591,6 +624,7 @@ def main() -> None:
     config_info = {
         "timestamp": timestamp,
         "model": args.model + (" (Dry-run)" if args.dry_run else ""),
+        "model_kwargs": model_kwargs,
         "dialect": "sqlite",
         "sample_size": len(examples),
         "seed": args.seed,

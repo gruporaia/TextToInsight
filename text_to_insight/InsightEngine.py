@@ -34,6 +34,7 @@ class InsightEngine:
         db_dialeto: str = "",
         db_config: dict | None = None,
         db_url: str = "",
+        model_kwargs: dict | None = None,
     ):
         self._hitl_ativado = hitl
         # `show_output` controla se a engine imprime o resultado final no terminal.
@@ -47,6 +48,8 @@ class InsightEngine:
         self._db_config = db_config
         self._db_url = db_url
         self._model = model
+        # Parâmetros repassados ao construtor do LLM (ex.: temperature, max_tokens).
+        self._model_kwargs = dict(model_kwargs or {})
         self._db_path = db_path
         self._use_cot = use_cot
         self._use_data_exploration = use_data_exploration
@@ -63,6 +66,7 @@ class InsightEngine:
             use_exploration_selector=self._use_exploration_selector,
             use_rag=self._use_rag,
             enrich_rag=self._enrich_rag,
+            model_kwargs=self._model_kwargs,
         )
 
         print(f"[CONFIG] HITL: {'ATIVADO' if self._hitl_ativado else 'DESATIVADO'}")
@@ -75,6 +79,7 @@ class InsightEngine:
         print(f"[CONFIG] ENRICH-RAG: {'ATIVADO' if self._enrich_rag else 'DESATIVADO'}")
         print(f"[CONFIG] INFERIR-FKS-VIRTUAIS: {'ATIVADO' if self._inferir_fks_virtuais else 'DESATIVADO'}")
         print(f"[CONFIG] USAR-SCHEMACRAWLER: {'ATIVADO' if self._usar_schemacrawler else 'DESATIVADO'}")
+        print(f"[CONFIG] MODEL_KWARGS: {self._model_kwargs or 'PADRÃO DO PROVEDOR'}")
 
     def _config(self, thread_id: str) -> dict[str, Any]:
         # O LangGraph usa esse bloco "configurable" para identificar a conversa.

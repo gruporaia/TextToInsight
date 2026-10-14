@@ -19,6 +19,26 @@ from text_to_insight.runtime import exibir_resultado_console
 load_dotenv()
 
 
+def _float_nao_negativo(valor: str) -> float:
+    numero = float(valor)
+    if numero < 0:
+        raise argparse.ArgumentTypeError(f"deve ser >= 0, recebido {valor}")
+    return numero
+
+
+def _int_positivo(valor: str) -> int:
+    numero = int(valor)
+    if numero <= 0:
+        raise argparse.ArgumentTypeError(f"deve ser > 0, recebido {valor}")
+    return numero
+
+
+def _montar_model_kwargs(args: argparse.Namespace) -> dict[str, Any]:
+    """Monta os parâmetros do LLM, omitindo os não informados (usa o padrão do provedor)."""
+    candidatos = {"temperature": args.temperature, "max_tokens": args.max_tokens}
+    return {chave: valor for chave, valor in candidatos.items() if valor is not None}
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Executa o pipeline Text-to-Insight para responder perguntas sobre o banco SQLite."
@@ -119,6 +139,18 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Nome da variável de ambiente com a chave de API.",
     )
     parser.add_argument(
+        "--temperature",
+        type=_float_nao_negativo,
+        default=None,
+        help="Temperatura do LLM (ex: 0 para respostas determinísticas). Padrão: padrão do provedor.",
+    )
+    parser.add_argument(
+        "--max-tokens",
+        type=_int_positivo,
+        default=None,
+        help="Limite de tokens gerados por resposta do LLM. Padrão: padrão do provedor.",
+    )
+    parser.add_argument(
         "--cot",
         choices=["on", "off"],
         default="on",
@@ -197,6 +229,7 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         use_cot=cot_ativado,
         use_data_exploration=data_exploration_ativado,
         use_exploration_selector=exploration_selector_mode,
+        model_kwargs=_montar_model_kwargs(args),
     )
 
     # show_output=False para evitar prints duplicados no console, já que exibir_resultado_console é chamado manualmente.
