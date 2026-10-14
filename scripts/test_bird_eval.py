@@ -323,6 +323,8 @@ def main() -> None:
 
     # 5. Engine cache by db_id
     engine_cache: dict[str, Any] = {}
+    # One read-only SQLAlchemy Engine per database; the script owns it and disposes it at the end.
+    db_engines: dict[str, Any] = {}
 
     # Print Configuration Summary
     print("\n Execution Configuration:")
@@ -375,6 +377,8 @@ def main() -> None:
             agent_time_ms = (time.perf_counter() - agent_start) * 1000
         else:
             # Import InsightEngine lazily only when executing live runs
+            from sqlalchemy import create_engine
+
             from text_to_insight import InsightEngine
 
             # Resolve db path
@@ -386,10 +390,14 @@ def main() -> None:
             # Cache InsightEngine per database ID
             if db_id not in engine_cache:
                 try:
+                    db_engines[db_id] = create_engine(
+                        f"sqlite:///file:{db_path_obj.resolve()}?mode=ro&uri=true"
+                    )
                     engine_cache[db_id] = InsightEngine(
                         api_key=api_key,
                         model=args.model,
                         db_path=str(db_path_obj),
+                        db_engine=db_engines[db_id],
                         hitl=False,
                         show_output=False,
                         enable_graphs=False,
@@ -566,6 +574,9 @@ def main() -> None:
         if not match_success and agent_exec_error:
             print(f"     ⚠️ Error: {agent_exec_error[:80]}")
 
+
+    for db_engine in db_engines.values():
+        db_engine.dispose()
 
     total_elapsed = time.perf_counter() - start_total_time
 
