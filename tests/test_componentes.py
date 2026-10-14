@@ -291,6 +291,25 @@ def test_executor_via_engine():
     assert resultado["total_linhas_resultado"] == 1
 
 
+@pytest.mark.parametrize("sql, esperado", [
+    ("SELECT 'Status :ativo' AS v", "Status :ativo"),
+    ("SELECT '12:30' AS v", "12:30"),
+    ("SELECT 'a % b' AS v", "a % b"),
+])
+def test_executor_via_engine_preserva_literais_com_dois_pontos(sql, esperado):
+    """A SQL do agente vai crua ao driver: ':palavra' em literal não vira parâmetro de bind."""
+    from text_to_insight.nodes.code_agent.code_sql import executar_sql_via_engine
+
+    engine = _engine_sqlite_fixture()
+    try:
+        resultado = executar_sql_via_engine(engine, sql)
+    finally:
+        engine.dispose()
+
+    assert resultado["ok"], resultado["erro_execucao"]
+    assert resultado["linhas_resultado_preview"][0]["v"] == esperado
+
+
 def test_executor_via_engine_nao_deixa_timeout_na_conexao_do_pool():
     """
     A conexão volta para o pool do chamador: o progress handler de timeout
