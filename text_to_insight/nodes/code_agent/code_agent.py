@@ -83,6 +83,8 @@ Regras:
 - NÃO use INSERT, UPDATE, DELETE, DROP, ALTER ou qualquer comando de escrita.
 - Use nomes de tabelas e colunas EXATAMENTE como aparecem no schema.
 - Se a pergunta for ambígua, faça a interpretação mais razoável.
+- No SELECT, retorne as colunas na mesma ordem em que a pergunta as pede.
+- Se a pergunta trouxer uma dica ou contexto adicional (por exemplo, depois de "Hint:" ou dentro de <additional_context>), siga-o: ele define termos, fórmulas e valores que a consulta deve usar.
 - Use as estatísticas de dados (DATA EXPLORATION) para entender distribuições, formatos e valores reais das colunas.
 - {nota_dialeto}
 
@@ -120,6 +122,8 @@ Regras:
 - NÃO inclua explicações, apenas a SQL pura.
 - Use nomes de tabelas e colunas EXATAMENTE como aparecem no schema.
 - Se a pergunta for ambígua, faça a interpretação mais razoável.
+- No SELECT, retorne as colunas na mesma ordem em que a pergunta as pede.
+- Se a pergunta trouxer uma dica ou contexto adicional (por exemplo, depois de "Hint:" ou dentro de <additional_context>), siga-o: ele define termos, fórmulas e valores que a consulta deve usar.
 - Use as estatísticas de dados (DATA EXPLORATION) para entender distribuições, formatos e valores reais das colunas e raciocinar sobre a natureza do D.
 - {nota_dialeto}
 
