@@ -18,9 +18,11 @@ flowchart TD
     Data -->|"SQL de Referencia (Gold)"| Executor
     Executor -->|"Resultados de Execucao"| Metrics["src/bird/metrics.py (EX Multiset / Counter)"]
     Metrics -->|"Linhas Canonicas"| Reporter["src/bird/csv_reporter.py"]
+    CLI -->|"Captura Tee & Traço"| Logger["src/bird/logger.py (BirdExecutionLogger)"]
     Reporter -->|"16 colunas"| CSV["reports/bird/.../*.csv"]
     Reporter -->|"Relatorio Sintetico"| MD["reports/bird/.../*.md"]
     Reporter -->|"Formato Oficial BIRD"| JSON["reports/bird/.../*.json (predict_dev.json)"]
+    Logger -->|"Trilha Completa de Execucao"| LOG["reports/bird/.../*.log"]
 ```
 
 ---
@@ -115,6 +117,8 @@ O orquestrador de avaliacao e acionado via `scripts/test_bird_eval.py`.
 | `--data-exploration` | `on`, `off` | `on` | Permite que o agente consulte amostras de valores nas tabelas. |
 | `--timeout` | Inteiro | `30` | Tempo limite em segundos para execucao de queries no SQLite. |
 | `--dry-run` | Flag | Desativado | Simula a geracao de SQL sem custo de API. |
+| `--log` | `on`, `off` | `on` | Controla geracao do arquivo de log detalhado de execucao (`.log`). |
+| `--log-file` | Caminho | `None` | Define caminho customizado para o arquivo de log (padrao: gerado na pasta de saida). |
 | `--output` | Caminho | `None` (gera timestamp) | Define o arquivo CSV ou a pasta de destino dos relatorios. |
 
 ### 4.2. Cenarios Comuns de Execucao
@@ -149,10 +153,10 @@ python scripts/test_bird_eval.py --sample-size 20 --seed 42 --rag off --output r
 
 ---
 
-## 5. Gerenciamento e Personalizacao dos Relatorios (`reports/bird/`)
+## 5. Gerenciamento e Personalizacao dos Relatorios e Logs (`reports/bird/`)
 
-### 5.1. Os Tres Artefatos Gerados por Bateria
-A cada bateria de testes, o sistema consolida as saidas em tres formatos complementares:
+### 5.1. Os Quatro Artefatos Gerados por Bateria
+A cada bateria de testes, o sistema consolida as saidas em quatro formatos complementares:
 
 1. **Arquivo Detalhado (`.csv`):**
    Registra linha a linha cada tentativa de cada pergunta avaliada. Quando o agente aciona o loop de auto-correcao, cada tentativa e registrada como uma linha individual contendo o mesmo `question_id` e o respectivo `attempt_number` (1, 2, 3...), garantindo ordenacao estrita e contigua por `(question_id, attempt_number)`. Contem 16 colunas tecnicas com SQL gerada, SQL gabarito, status de sandbox, mensagens de erro capturadas, tempo de resposta e tokens consumidos.
@@ -162,12 +166,20 @@ A cada bateria de testes, o sistema consolida as saidas em tres formatos complem
    - **Secao 6 (Analise Detalhada de Falhas):** diagnostico minucioso de cada divergencia de dados ou erro de sandbox, apresentando a query gabarito, o historico de tentativas do agente e **tabelas comparativas Markdown com as primeiras 10 linhas de dados retornadas por cada consulta** (Ouro vs. Agente) e o total de linhas.
 3. **Predicoes Oficiais BIRD (`.json`):**
    Arquivo formatado no padrao canonico do benchmark (`predict_dev.json`), contendo sempre a consulta final candidata gerada, pronto para ser submetido diretamente ao script oficial de validacao do BIRD.
+4. **Log Estruturado de Execucao (`.log`):**
+   Criado pelo `BirdExecutionLogger` (`src/bird/logger.py`), registra cronologicamente a trilha completa de auditoria para cada pergunta avaliada:
+   - **Delimitadores Claros:** blocos individuais delimitados por `=== [START QID: ... | DB: ... | Difficulty: ...] ===` e `=== [END QID: ...] ===`.
+   - **Contexto de Esquema (RAG):** schema recuperado via SchemaGraphRAG ou schema integral do banco, alem de estatisticas de exploracao de dados.
+   - **Fluxo de Execucao dos Nos (Tee):** captura em tempo real todas as mensagens de console emitidas durante o ciclo de resolucao (`[PLANEJADOR]`, `[RETRIEVER]`, `[SCHEMA]`, `[DATA_EXPLORATION]`, `[EXECUTOR]`, `[CRITICO]`), sem bloquear a visualizacao ao vivo no terminal.
+   - **Historico Completo de Tentativas:** registra o prompt completo enviado ao LLM, o raciocinio Chain-of-Thought / thoughts emitido pelo modelo, a consulta SQL candidata e erros de sandbox encontrados.
+   - **Comparacao com a Referencia (Gold):** quantidade de linhas retornadas (Gold vs. Agente), status de equivalencia `EX MATCH`, similaridade de texto, latencia em ms e contagem detalhada de tokens (input/output/total).
+   - **Sumario Executivo no Rodape:** consolida a acuracia final de execucao (EX), Pass@1, taxa de recuperacao por auto-correcao, consumo de tokens e tempo total de execucao.
 
 ### 5.2. Personalizacao do Diretorio e Nome de Destino via `--output`
 O parametro `--output` aceita duas abordagens:
 
 #### Opcao A: Especificar o Nome da Pasta de Destino (Recomendado)
-Ao passar o caminho de um diretorio, os tres arquivos serao gerados dentro dele mantendo o timestamp da execucao:
+Ao passar o caminho de um diretorio, os quatro arquivos serao gerados dentro dele mantendo o timestamp da execucao:
 ```bash
 python scripts/test_bird_eval.py --sample-size 20 --output reports/bird/bateria_validacao_inicial
 ```
@@ -176,11 +188,12 @@ Estrutura gerada:
 reports/bird/bateria_validacao_inicial/
 ├── bird_eval_2026-09-29_21-30-00.csv
 ├── bird_eval_2026-09-29_21-30-00.md
-└── bird_eval_2026-09-29_21-30-00.json
+├── bird_eval_2026-09-29_21-30-00.json
+└── bird_eval_2026-09-29_21-30-00.log
 ```
 
 #### Opcao B: Especificar o Nome Exato do Arquivo Base
-Ao passar um caminho terminando em `.csv`, o sistema utilizara o mesmo nome base para gerar o `.md` e o `.json` correspondentes:
+Ao passar um caminho terminando em `.csv`, o sistema utilizara o mesmo nome base para gerar o `.md`, o `.json` e o `.log` correspondentes:
 ```bash
 python scripts/test_bird_eval.py --sample-size 20 --output reports/bird/benchmark_v1.csv
 ```
@@ -189,16 +202,18 @@ Estrutura gerada:
 reports/bird/
 ├── benchmark_v1.csv
 ├── benchmark_v1.md
-└── benchmark_v1.json
+├── benchmark_v1.json
+└── benchmark_v1.log
 ```
 
 #### Comportamento Padrao (Sem `--output`)
-Quando o parametro `--output` for omitido, o sistema cria automaticamente uma subpasta com data e hora:
+Quando o parametro `--output` for omitido, o sistema cria automaticamente uma subpasta com data e hora contendo todos os artefatos:
 ```text
 reports/bird/run_YYYY-MM-DD_HH-MM-SS/
 ├── bird_eval_YYYY-MM-DD_HH-MM-SS.csv
 ├── bird_eval_YYYY-MM-DD_HH-MM-SS.md
-└── bird_eval_YYYY-MM-DD_HH-MM-SS.json
+├── bird_eval_YYYY-MM-DD_HH-MM-SS.json
+└── bird_eval_YYYY-MM-DD_HH-MM-SS.log
 ```
 
 ---
@@ -257,6 +272,10 @@ As metricas sao calculadas em `src/bird/metrics.py` e agregadas em `src/bird/csv
    - **Perguntas incorretas:** filtre por `execution_match == False` na ultima tentativa de cada `question_id`.
    - **Erros de sintaxe ou schema:** filtre por `execution_status == 'exec_erro'` e examine a coluna `error`.
    - **Efetividade da auto-correcao:** filtre por `attempt_number > 1` para observar se a query final convergiu para `execution_match == True`.
+4. **Auditoria Profunda no Arquivo de Log (`.log`):**
+   - **Inspecao de Prompts e Raciocinio:** busque por `=== [START QID: <id>] ===` para ler o prompt exato fornecido ao LLM e os pensamentos (`[RACIOCÍNIO DO AGENTE (CoT / THOUGHT)]`), entendendo *por que* o modelo tomou determinada decisao.
+   - **Depuracao de Schema Recuperado:** examine a secao `[SCHEMA / RAG CONTEXT]` para verificar se tabelas ou colunas criticas foram podadas indevidamente pelo RAG.
+   - **Rastreamento de Execucao (Tee):** visualize os prints internos dos nos em `[EXECUTION TRACE / FLUXO DE NÓS (TEE)]` para auditar a ordem e tempo de ativacao de cada componente.
 
 ### 7.3. Matriz de Diagnostico de Falhas
 
