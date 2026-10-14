@@ -58,6 +58,7 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     contexto_rag_schema: str
     contexto_data_exploration: str
     colunas_para_explorar: dict[str, list[str]]
+    cache_data_exploration: dict[str, dict[str, Any]]
     raciocinio_agente: str  # CoT <thought> extraído do agente de código
     contexto_prompt_agente: str  # schema + data exploration enviados ao agente
     tem_descricao : bool
