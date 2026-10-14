@@ -41,6 +41,7 @@ from dotenv import load_dotenv
 # Import BIRD evaluation modules
 from src.bird import (
     BirdCSVReporter,
+    BirdExecutionLogger,
     BirdQueryExecutor,
     build_bird_comparison_row,
     compare_bird_results,
@@ -158,6 +159,19 @@ def parse_arguments() -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="Simulate execution without calling live LLMs (zero API cost)",
+    )
+    parser.add_argument(
+        "--log",
+        type=str,
+        choices=["on", "off"],
+        default="on",
+        help="Enable execution log file generation (default: on)",
+    )
+    parser.add_argument(
+        "--log-file",
+        type=str,
+        default=None,
+        help="Custom path for the log file (default: None = auto-generated in output-dir)",
     )
 
     return parser.parse_args()
@@ -321,6 +335,21 @@ def main() -> None:
     reporter = BirdCSVReporter(filepath=csv_path)
     print(f"✓ CSV Reporter initialized at: {csv_path}")
 
+    # Initialize Execution Logger in the same output directory
+    output_dir = csv_path.parent
+    chosen_log_file = args.log_file
+    if not chosen_log_file and args.output and Path(args.output).suffix.lower() == ".csv":
+        chosen_log_file = csv_path.with_suffix(".log")
+
+    logger = BirdExecutionLogger(
+        output_dir=output_dir,
+        timestamp=timestamp,
+        enabled=(args.log == "on"),
+        log_file=chosen_log_file,
+    )
+    if args.log == "on":
+        print(f"✓ Execution Logger initialized at: {logger.log_path}")
+
     # 5. Engine cache by db_id
     engine_cache: dict[str, Any] = {}
 
@@ -331,8 +360,25 @@ def main() -> None:
     print(f"   - Schema RAG: {args.rag}")
     print(f"   - Chain of Thought: {args.cot}")
     print(f"   - Data Exploration: {args.data_exploration}")
+    print(f"   - Logging: {args.log}")
     print(f"   - Total Questions to Run: {len(examples)}")
     print("-" * 80 + "\n")
+
+    # Log Run Header
+    logger.log_run_header({
+        "timestamp": timestamp,
+        "model": args.model + (" (Dry-run)" if args.dry_run else ""),
+        "dialect": "sqlite",
+        "sample_size": len(examples),
+        "seed": args.seed,
+        "use_rag": (args.rag == "on"),
+        "use_evidence": (args.use_evidence == "on"),
+        "use_cot": (args.cot == "on"),
+        "use_data_exploration": (args.data_exploration == "on"),
+        "infer_fks": args.infer_fks,
+        "db_filter": args.db_filter,
+        "difficulty_filter": args.difficulty,
+    })
 
     # 6. Evaluation Loop
     start_total_time = time.perf_counter()
@@ -368,60 +414,64 @@ def main() -> None:
         # 6.3 Run Agent or Simulate
         agent_exec_error = ""
         agent_start = time.perf_counter()
+        captured_trace = ""
 
-        if args.dry_run:
-            agent_result = simulate_agent_run(ex, attempt_number=1)
-            time.sleep(0.05)  # brief simulation delay
-            agent_time_ms = (time.perf_counter() - agent_start) * 1000
-        else:
-            # Import InsightEngine lazily only when executing live runs
-            from text_to_insight import InsightEngine
+        with logger.capture_trace() as get_trace:
+            if args.dry_run:
+                agent_result = simulate_agent_run(ex, attempt_number=1)
+                time.sleep(0.05)  # brief simulation delay
+                agent_time_ms = (time.perf_counter() - agent_start) * 1000
+            else:
+                # Import InsightEngine lazily only when executing live runs
+                from text_to_insight import InsightEngine
 
-            # Resolve db path
-            db_path_obj = get_database_path(data_dir=data_dir, db_id=db_id)
-            if not db_path_obj.exists():
-                print(f"     ❌ Database file not found: {db_path_obj}")
-                continue
-
-            # Cache InsightEngine per database ID
-            if db_id not in engine_cache:
-                try:
-                    engine_cache[db_id] = InsightEngine(
-                        api_key=api_key,
-                        model=args.model,
-                        db_path=str(db_path_obj),
-                        hitl=False,
-                        show_output=False,
-                        enable_graphs=False,
-                        use_cot=(args.cot == "on"),
-                        use_data_exploration=(args.data_exploration == "on"),
-                        use_rag=(args.rag == "on"),
-                        enrich_rag=(args.enrich_rag == "on"),
-                        inferir_fks_virtuais=args.infer_fks,
-                    )
-                except Exception as e:
-                    print(f"     ❌ Failed to instantiate InsightEngine for db '{db_id}': {e}")
+                # Resolve db path
+                db_path_obj = get_database_path(data_dir=data_dir, db_id=db_id)
+                if not db_path_obj.exists():
+                    print(f"     ❌ Database file not found: {db_path_obj}")
                     continue
 
-            engine = engine_cache[db_id]
+                # Cache InsightEngine per database ID
+                if db_id not in engine_cache:
+                    try:
+                        engine_cache[db_id] = InsightEngine(
+                            api_key=api_key,
+                            model=args.model,
+                            db_path=str(db_path_obj),
+                            hitl=False,
+                            show_output=False,
+                            enable_graphs=False,
+                            use_cot=(args.cot == "on"),
+                            use_data_exploration=(args.data_exploration == "on"),
+                            use_rag=(args.rag == "on"),
+                            enrich_rag=(args.enrich_rag == "on"),
+                            inferir_fks_virtuais=args.infer_fks,
+                        )
+                    except Exception as e:
+                        print(f"     ❌ Failed to instantiate InsightEngine for db '{db_id}': {e}")
+                        continue
 
-            try:
-                agent_result = engine.run(
-                    thread_id=f"bird_eval_{q_id}_{int(time.time())}",
-                    query=prompt_query,
-                )
-            except Exception as e:
-                agent_exec_error = str(e)
-                agent_result = {
-                    "sql_gerada": "",
-                    "status": "exec_erro",
-                    "erro_execucao": agent_exec_error,
-                    "tokens_input": 0,
-                    "tokens_output": 0,
-                    "tokens_total": 0,
-                    "historico_tentativas": [],
-                }
-            agent_time_ms = (time.perf_counter() - agent_start) * 1000
+                engine = engine_cache[db_id]
+
+                try:
+                    agent_result = engine.run(
+                        thread_id=f"bird_eval_{q_id}_{int(time.time())}",
+                        query=prompt_query,
+                    )
+                except Exception as e:
+                    agent_exec_error = str(e)
+                    agent_result = {
+                        "sql_gerada": "",
+                        "status": "exec_erro",
+                        "erro_execucao": agent_exec_error,
+                        "tokens_input": 0,
+                        "tokens_output": 0,
+                        "tokens_total": 0,
+                        "historico_tentativas": [],
+                    }
+                agent_time_ms = (time.perf_counter() - agent_start) * 1000
+
+        captured_trace = get_trace()
 
         # Extract agent execution values
         agent_sql = str(agent_result.get("sql_gerada") or "").strip()
@@ -522,7 +572,22 @@ def main() -> None:
         )
         reporter.append_row(final_row)
 
-        # 6.8 Collect detailed diagnostic cases for Markdown report
+        # 6.7.1 Log detailed query execution to .log file
+        logger.log_query(
+            question_id=q_id,
+            db_id=db_id,
+            difficulty=difficulty,
+            question=raw_question,
+            evidence=evidence,
+            gold_sql=gold_sql,
+            agent_result=agent_result,
+            match_success=match_success,
+            similarity_score=sim_score,
+            time_ms=agent_time_ms,
+            gold_results=results_gold,
+            agent_results=results_agent,
+            captured_trace=captured_trace,
+        )
         if match_success and len(historico_tent) > 1:
             self_corrections.append({
                 "question_id": q_id,
@@ -606,6 +671,12 @@ def main() -> None:
     )
     print(f"✓ Markdown report saved to: {md_path}")
     print(f"✓ Detailed CSV log saved to: {csv_path}")
+
+    # Finalize execution log
+    logger.log_run_footer(summary, total_elapsed=total_elapsed)
+    logger.close()
+    if args.log == "on":
+        print(f"✓ Detailed execution log saved to: {logger.log_path}")
 
     # Display Executive Summary in Terminal
     print("\n" + reporter.format_markdown_report(summary, config_info=config_info, detailed_cases=detailed_cases))
