@@ -40,26 +40,31 @@ _NOTA_DIALETO = {
 }
 
 
-def _resolver_info_dialeto(estado: EstadoTextToInsight) -> tuple[str, str]:
+def _resolver_info_dialeto(estado: EstadoTextToInsight, engine=None) -> tuple[str, str]:
     """Resolve (nome_exibicao, nota_sintaxe) do dialeto configurado no estado.
 
     Ordem de resolução:
-    1. `db_dialeto`, se informado explicitamente.
+    1. `engine.dialect.name`, se uma Engine SQLAlchemy foi injetada pelo
+       chamador (caso mais confiável: vem direto da conexão, sem adivinhar).
     2. `db_url`, cujo dialeto é lido do prefixo da URL (sem conectar).
     3. 'sqlite' como default, preservando o comportamento anterior quando
        nada é informado (compatibilidade retroativa).
     """
-    dialeto = (estado.get("db_dialeto") or "").strip().lower()
+    if engine is not None:
+        dialeto = engine.dialect.name
+        nome = _NOME_DIALETO.get(dialeto, _NOME_DIALETO["sqlite"])
+        nota = _NOTA_DIALETO.get(dialeto, _NOTA_DIALETO["sqlite"])
+        return nome, nota
 
-    if not dialeto:
-        db_url = (estado.get("db_url") or "").strip()
-        if db_url:
-            try:
-                from sqlalchemy.engine import make_url
+    dialeto = ""
+    db_url = (estado.get("db_url") or "").strip()
+    if db_url:
+        try:
+            from sqlalchemy.engine import make_url
 
-                dialeto = make_url(db_url).get_backend_name()
-            except Exception:
-                dialeto = ""
+            dialeto = make_url(db_url).get_backend_name()
+        except Exception:
+            dialeto = ""
 
     dialeto = dialeto or "sqlite"
     nome = _NOME_DIALETO.get(dialeto, _NOME_DIALETO["sqlite"])
@@ -163,9 +168,13 @@ def _formatar_historico_tentativas(historico: list[dict]) -> str:
     return "\n".join(partes) + "\nNÃO repita os mesmos erros. Gere uma SQL diferente e corrigida."
 
 
-def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI, use_cot: bool = True) -> dict:
+def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI, use_cot: bool = True, engine=None) -> dict:
     """
     Nó Agente de Código: usa Gemini para gerar SQL a partir da pergunta + schema.
+
+    `engine`, se informado, é a Engine SQLAlchemy injetada pelo chamador —
+    usada apenas para resolver o dialeto (via `engine.dialect.name`) e ajustar
+    a sintaxe do prompt, sem depender de `db_url` no estado.
     """
     pergunta = (
         estado.get("pergunta_atual", "")
@@ -182,7 +191,7 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativ
     print(f"[AGENTE_CODIGO] Gerando SQL (tentativa {tentativas + 1})...")
 
     historico_section = _formatar_historico_tentativas(historico)
-    dialeto_nome, nota_dialeto = _resolver_info_dialeto(estado)
+    dialeto_nome, nota_dialeto = _resolver_info_dialeto(estado, engine=engine)
 
     template = PROMPT_TEMPLATE_COT if use_cot else PROMPT_TEMPLATE_NO_COT
 
