@@ -19,6 +19,14 @@ from typing import Any
 # mas na prática escrevem ou leem arquivos no servidor de banco:
 #   - MySQL: "SELECT ... INTO OUTFILE/DUMPFILE" escreve um arquivo;
 #            LOAD_FILE() lê um arquivo arbitrário do disco.
+#            As palavras OUTFILE e DUMPFILE são bloqueadas SOZINHAS (e não a
+#            frase "INTO OUTFILE"): o MySQL aceita comentários entre as duas
+#            palavras (INTO/**/OUTFILE, INTO /*!50000 OUTFILE*/, ou um
+#            comentário de linha seguido de quebra de linha), então casar a
+#            frase com \s+ deixava essas variantes passarem. Como OUTFILE e
+#            DUMPFILE só existem nessa construção, bloquear a palavra isolada
+#            não depende de qual separador foi usado. (Custo: uma coluna
+#            chamada "outfile" também seria bloqueada — aceitável.)
 #   - PostgreSQL: pg_read_file/pg_read_binary_file/pg_ls_dir leem arquivos e
 #            diretórios do servidor; lo_import/lo_export leem/escrevem via
 #            large objects — todas exigem privilégio elevado, mas são
@@ -28,7 +36,7 @@ BLOQUEIOS_REGEX = re.compile(
     r"\b("
     r"insert|update|delete|drop|alter|truncate|create|attach|detach|pragma|"
     r"vacuum|reindex|replace|"
-    r"into\s+outfile|into\s+dumpfile|load_file|load_extension|"
+    r"outfile|dumpfile|load_file|load_extension|"
     r"pg_read_file|pg_read_binary_file|pg_ls_dir|lo_import|lo_export"
     r")\b",
     re.IGNORECASE,

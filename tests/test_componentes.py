@@ -98,6 +98,64 @@ def test_sql_rejeita_vazia():
     assert ok is False
 
 
+# Variantes de "SELECT ... INTO OUTFILE/DUMPFILE" (escrita de arquivo no servidor
+# MySQL). Todas começam com SELECT, então só o blacklist as barra. O MySQL aceita
+# comentários entre INTO e OUTFILE, então espaço não pode ser o único separador.
+VARIANTES_ESCRITA_DE_ARQUIVO = [
+    "SELECT * FROM t INTO OUTFILE '/tmp/x'",
+    "select * from t into  outfile '/tmp/x'",
+    "SELECT * FROM t INTO DUMPFILE '/tmp/x'",
+    "SELECT * FROM t INTO/**/OUTFILE '/tmp/x'",
+    "SELECT * FROM t INTO/*qualquer coisa*/DUMPFILE '/tmp/x'",
+    "SELECT * FROM t INTO /*!50000 OUTFILE*/ '/tmp/x'",
+    "SELECT * FROM t INTO -- x\nOUTFILE '/tmp/x'",
+    "SELECT * FROM t INTO #x\nOUTFILE '/tmp/x'",
+    "SELECT * FROM t\nINTO\nOUTFILE '/tmp/x'",
+]
+
+
+@pytest.mark.parametrize("sql", VARIANTES_ESCRITA_DE_ARQUIVO)
+def test_sql_rejeita_escrita_de_arquivo_mysql(sql):
+    """INTO OUTFILE/DUMPFILE é bloqueado qualquer que seja o separador entre as palavras."""
+    from text_to_insight.nodes.code_agent.code_sql import validar_sql_segura
+
+    ok, msg = validar_sql_segura(sql)
+    assert ok is False, f"deveria bloquear: {sql!r}"
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT LOAD_FILE('/etc/passwd')",
+        "SELECT pg_read_file('/etc/passwd')",
+        "SELECT load_extension('/tmp/x.so')",
+    ],
+)
+def test_sql_rejeita_leitura_de_arquivo_por_funcao(sql):
+    """Funções que leem arquivo do servidor também são bloqueadas."""
+    from text_to_insight.nodes.code_agent.code_sql import validar_sql_segura
+
+    ok, msg = validar_sql_segura(sql)
+    assert ok is False, f"deveria bloquear: {sql!r}"
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT * FROM orders",
+        "SELECT nome INTO @variavel FROM clientes LIMIT 1",  # INTO @var não escreve arquivo
+        "SELECT COUNT(*) FROM orders /* comentario inocente */",
+        "WITH t AS (SELECT 1) SELECT * FROM t",
+    ],
+)
+def test_sql_legitima_continua_permitida(sql):
+    """O blacklist não pode gerar falso positivo em consultas normais."""
+    from text_to_insight.nodes.code_agent.code_sql import validar_sql_segura
+
+    ok, msg = validar_sql_segura(sql)
+    assert ok is True, f"deveria permitir: {sql!r} ({msg})"
+
+
 # ============================================================
 # SQL Execution (code_sql.py)
 # ============================================================
@@ -442,19 +500,34 @@ def test_schema_graph_rag_retrieve_reduz_e_liga(tmp_path, monkeypatch):
 
 
 def test_no_retriever_reduz_contexto_schema():
-    """Nó retriever produz contexto reduzido contendo tabelas relevantes."""
+    """Nó retriever produz contexto reduzido contendo tabelas relevantes quando schema >= 5000 chars."""
+    from text_to_insight.nodes.retriever import nos_nodo_retriever
+    from text_to_insight.nodes.schema import nos_nodo_esquema
+
+    estado = {"db_path": DB_PATH, "pergunta_atual": "How many orders does each customer have?"}
+    schema_base = nos_nodo_esquema(estado)["contexto_schema"]
+    # Adiciona linhas de comentário para ultrapassar o limiar de 5000 chars e acionar o RAG
+    estado["contexto_schema"] = schema_base + "\n" + ("-- padding de teste para atingir threshold de RAG\n" * 100)
+    tam_original = len(estado["contexto_schema"])
+
+    out = nos_nodo_retriever(estado)
+    assert "contexto_rag_schema" in out
+    assert len(out["contexto_rag_schema"]) <= tam_original
+    assert "orders" in out["contexto_rag_schema"].lower()
+
+
+def test_no_retriever_schema_pequeno_mantem_original():
+    """Para schemas pequenos (< 5000 chars), o retriever mantém contexto_rag_schema vazio."""
     from text_to_insight.nodes.retriever import nos_nodo_retriever
     from text_to_insight.nodes.schema import nos_nodo_esquema
 
     estado = {"db_path": DB_PATH, "pergunta_atual": "How many orders does each customer have?"}
     estado["contexto_schema"] = nos_nodo_esquema(estado)["contexto_schema"]
-    tam_original = len(estado["contexto_schema"])
+    assert len(estado["contexto_schema"]) < 5000
 
     out = nos_nodo_retriever(estado)
-    assert "contexto_rag_schema" in out
-    #isso aqui pode quebrar, como nosso GraphRAG encontra relações, pode ser sim que seja maior que o original
-    assert len(out["contexto_rag_schema"]) <= tam_original
-    assert "orders" in out["contexto_rag_schema"].lower()
+    assert out.get("contexto_rag_schema") == ""
+    assert out.get("status") == "schema_obtido"
 
 # ============================================================
 # TESTES DO SCHEMA CRAWLER
@@ -565,6 +638,17 @@ def test_roteador_planejador_fallback_agente_codigo():
     estado = {
         "contexto_schema": "Tabela: a\n- id: INT\n",
         "status": "status_inexistente"
+    }
+    assert roteador_planejador(estado) == "agente_codigo"
+
+def test_roteador_planejador_revisao_com_rag_desativado():
+    from text_to_insight.routers.edges import roteador_planejador
+    schema_grande = "A" * 2000
+    estado = {
+        "contexto_schema": schema_grande,
+        "contexto_rag_schema": "",
+        "status": "revisando_estrategia",
+        "tentativas_revisao_retriever": 0
     }
     assert roteador_planejador(estado) == "agente_codigo"
 

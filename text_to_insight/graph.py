@@ -128,6 +128,7 @@ class Graph:
             {
                 "retriever": "retriever",
                 "enriquecimento_rag": path,
+                "fim": END,
             }
         )
 

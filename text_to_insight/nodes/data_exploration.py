@@ -487,6 +487,26 @@ def _extract_table_names_from_rag_context(contexto_rag: str) -> list[str]:
 # Nó do grafo LangGraph
 # ---------------------------------------------------------------------------
 
+def _backend_suporta_exploracao(estado: EstadoTextToInsight, db_path: str) -> bool:
+    """
+    Este nó só sabe explorar um arquivo SQLite local (abre `db_path` com
+    sqlite3). Para qualquer outro banco ele não consegue explorar — e, pior,
+    se `db_path` sobrou preenchido com um valor antigo (o default do CLI
+    aponta para um .db do projeto), ele exploraria esse arquivo sem relação
+    nenhuma com o banco de verdade, devolvendo estatísticas erradas pra IA.
+
+    Retorna False quando:
+    - `db_url` está preenchido (o banco real vem da URL, não do db_path);
+    - ou o dialeto deduzido pela extensão do db_path não é sqlite (ex: .duckdb).
+    """
+    if (estado.get("db_url") or "").strip():
+        return False
+
+    from .schema import _detectar_dialeto
+
+    return _detectar_dialeto(db_path) == "sqlite"
+
+
 def nos_nodo_data_exploration(
     estado: EstadoTextToInsight,
     use_data_exploration: bool = True,
@@ -511,15 +531,23 @@ def nos_nodo_data_exploration(
         print(f"[DATA_EXPLORATION] Exploração só suporta SQLite (engine: {engine.dialect.name}) — pulando.")
         return {"contexto_data_exploration": ""}
 
-    contexto_rag = estado.get("contexto_rag_schema", "")
+    schema_alvo = estado.get("contexto_rag_schema") or estado.get("contexto_schema", "")
     db_path = estado.get("db_path", "").strip()
 
-    if not contexto_rag or (engine is None and not db_path):
-        print("[DATA_EXPLORATION] Sem contexto RAG ou db_path — pulando exploração.")
+    if not schema_alvo or (engine is None and not db_path):
+        print("[DATA_EXPLORATION] Sem schema ou db_path — pulando exploração.")
         return {}
 
-    # Extrair nomes de tabelas do contexto do retriever
-    table_names = _extract_table_names_from_rag_context(contexto_rag)
+    if engine is None and not _backend_suporta_exploracao(estado, db_path):
+        print(
+            "[DATA_EXPLORATION] O banco configurado não é um arquivo SQLite local "
+            "(db_url/extensão do db_path) — exploração ainda não "
+            "suportada para esse banco, pulando."
+        )
+        return {}
+
+    # Extrair nomes de tabelas do contexto de schema (RAG ou completo)
+    table_names = _extract_table_names_from_rag_context(schema_alvo)
     if not table_names:
         print("[DATA_EXPLORATION] Nenhuma tabela encontrada no contexto RAG.")
         return {}
@@ -581,7 +609,7 @@ def _exploration_selector_llm(
         or estado.get("pergunta_original", "")
         or estado.get("pergunta_usuario", "")
     )
-    contexto_rag = estado.get("contexto_rag_schema", "")
+    contexto_rag = estado.get("contexto_rag_schema", "") or estado.get("contexto_schema", "")
 
     if not pergunta or not contexto_rag:
         return {"colunas_para_explorar": {}}
@@ -699,7 +727,7 @@ def _exploration_selector_rag(
         or estado.get("pergunta_original", "")
         or estado.get("pergunta_usuario", "")
     )
-    contexto_rag = estado.get("contexto_rag_schema", "")
+    contexto_rag = estado.get("contexto_rag_schema", "") or estado.get("contexto_schema", "")
     print(contexto_rag)
 
     if not pergunta or not contexto_rag:
