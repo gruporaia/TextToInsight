@@ -46,8 +46,6 @@ def construir_estado_inicial(
     db_path: str,
     inferir_fks_virtuais: bool = False,
     usar_schemacrawler: bool = True,
-    db_dialeto: str = "",
-    db_config: dict[str, Any] | None = None,
     db_url: str = "",
 ) -> dict[str, Any]:
     """Cria o estado inicial padrão para uma execução do grafo."""
@@ -63,9 +61,7 @@ def construir_estado_inicial(
         "status": "iniciado",
         "tentativas_loop": 0,
         "db_path": db_path,
-        "db_dialeto": db_dialeto,
         "db_url": db_url,
-        "db_config": db_config,
         "espera_humana": False,
         "linhas_resultado_completo": [],
         "historico_tentativas": [],
@@ -81,18 +77,12 @@ _URL_SENHA_REGEX = re.compile(r"(://[^:/@\s]+:)[^@\s]+(@)")
 
 def _redigir_credenciais(estado: dict[str, Any]) -> dict[str, Any]:
     """
-    Devolve uma copia rasa do estado com senha de `db_config` e `db_url`
+    Devolve uma copia rasa do estado com senha de `db_url`
     mascaradas. Usar sempre antes de devolver o estado final ao chamador
     (biblioteca) ou de persisti-lo fora do checkpointer do grafo — o estado
     bruto guarda a senha em texto puro, e nao deve vazar pra fora do grafo.
     """
     estado_seguro = dict(estado)
-
-    db_config = estado_seguro.get("db_config")
-    if isinstance(db_config, dict) and db_config.get("password"):
-        db_config_seguro = dict(db_config)
-        db_config_seguro["password"] = "***"
-        estado_seguro["db_config"] = db_config_seguro
 
     db_url = estado_seguro.get("db_url")
     if db_url:

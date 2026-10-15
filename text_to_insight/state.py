@@ -25,7 +25,6 @@ StatusExecucao = Literal[
 "reprovado",
 ]
 
-DialetoBanco = Literal["sqlite", "postgresql", "mysql"]
 
 # Criação de classe mãe que será estendida para EstadoTextToInsight para que
 # pergunta_original/pergunta_atual e db_path sejam obrigatorios
@@ -77,9 +76,7 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     historico_tentativas: Annotated[list[dict[str, str]], operator.add]
     linhas_resultado_completo: list[dict[str, Any]]
     schemacrawler_bin : str | None
-    db_dialeto: DialetoBanco
     db_url: str
-    db_config: dict[str, Any] | None
     inferir_fks_virtuais: bool
     usar_schemacrawler: bool
 

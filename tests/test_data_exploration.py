@@ -365,15 +365,14 @@ class TestNodoDataExploration:
         assert "category" not in text
 
     # --- Bancos que não são um arquivo SQLite local: o nó deve PULAR ---------
-    # Cenário real: o usuário roda com --db-dialeto postgresql (ou --db-url) mas
-    # --db-path sobra com um .db antigo que EXISTE. Sem o guard, o nó exploraria
-    # esse arquivo sem relação com o banco de verdade.
+    # Cenário real: o usuário roda com --db-url mas --db-path sobra com um .db
+    # antigo que EXISTE. Sem o guard, o nó exploraria esse arquivo sem relação
+    # com o banco de verdade.
 
     @pytest.mark.parametrize(
         "campos_do_banco",
         [
-            {"db_dialeto": "postgresql"},
-            {"db_dialeto": "mysql"},
+            {"db_url": "mysql+pymysql://u:p@localhost:3306/banco"},
             {"db_url": "postgresql://u:p@localhost:5432/banco"},
             {"db_url": "sqlite:///outro_arquivo.db"},
         ],
@@ -398,10 +397,9 @@ class TestNodoDataExploration:
         }
         assert nos_nodo_data_exploration(estado) == {}
 
-    def test_still_explores_when_dialect_is_explicit_sqlite(self, sample_db):
+    def test_still_explores_local_sqlite_with_empty_db_url(self, sample_db):
         estado = {
             "db_path": sample_db,
-            "db_dialeto": "sqlite",
             "db_url": "",  # vazio/None não conta como db_url preenchido
             "contexto_rag_schema": "Tabela: products\n- id: INTEGER\n",
         }

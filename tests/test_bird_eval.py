@@ -23,6 +23,7 @@ import pytest
 
 from src.bird import (
     BirdCSVReporter,
+    BirdExecutionLogger,
     BirdQueryExecutor,
     build_bird_comparison_row,
     compare_bird_results,
@@ -547,7 +548,222 @@ def test_markdown_report_detailed_inspection(tmp_path: Path) -> None:
 
 
 # ==============================================================================
-# 5. Smoke Test for scripts/test_bird_eval.py
+# 5. Execution Logger Tests (BirdExecutionLogger)
+# ==============================================================================
+
+def test_bird_execution_logger_lifecycle_and_formatting(tmp_path: Path) -> None:
+    """Verifies header, query block, tee capture, and footer formatting in .log file."""
+    output_dir = tmp_path / "run_test"
+    timestamp = "2026-10-14_17-45-00"
+
+    logger = BirdExecutionLogger(
+        output_dir=output_dir,
+        timestamp=timestamp,
+        enabled=True,
+    )
+
+    # 1. Header
+    logger.log_run_header({
+        "timestamp": timestamp,
+        "model": "gpt-5-turbo",
+        "dialect": "sqlite",
+        "sample_size": 2,
+        "seed": 42,
+        "use_rag": True,
+        "use_evidence": True,
+        "use_cot": True,
+        "use_data_exploration": False,
+        "infer_fks": False,
+        "db_filter": "school",
+        "difficulty_filter": "simple",
+    })
+
+    # 2. Query 1: Single attempt with Tee capture
+    with logger.capture_trace() as get_trace:
+        print("[PLANEJADOR] Generating plan for QID 1")
+        print("[EXECUTOR] Executing query on school DB")
+
+    trace_output = get_trace()
+    assert "[PLANEJADOR]" in trace_output
+    assert "[EXECUTOR]" in trace_output
+
+    logger.log_query(
+        question_id=1,
+        db_id="school",
+        difficulty="simple",
+        question="How many students are enrolled in grade 10?",
+        evidence="grade 10 corresponds to grade_level = 10",
+        gold_sql="SELECT count(*) FROM students WHERE grade_level = 10",
+        agent_result={
+            "sql_gerada": "SELECT count(*) FROM students WHERE grade_level = 10",
+            "status": "aprovado",
+            "erro_execucao": "",
+            "raciocinio_agente": "Filter by grade_level = 10 and aggregate with count.",
+            "ultimo_prompt": "You are a SQL expert...",
+            "contexto_rag_schema": "TABLE students (id INT, grade_level INT)",
+            "tokens_input": 500,
+            "tokens_output": 50,
+            "tokens_total": 550,
+        },
+        match_success=True,
+        similarity_score=1.0,
+        time_ms=125.0,
+        gold_results=[(3,)],
+        agent_results=[(3,)],
+        captured_trace=trace_output,
+    )
+
+    # 3. Query 2: Multi-attempt self-correction query
+    logger.log_query(
+        question_id=2,
+        db_id="school",
+        difficulty="moderate",
+        question="Average age of students in Math class?",
+        evidence="Math class has name = 'Math'",
+        gold_sql="SELECT avg(s.age) FROM students AS s JOIN classes AS c ON s.class_id = c.id WHERE c.name = 'Math'",
+        agent_result={
+            "sql_gerada": "SELECT avg(s.age) FROM students AS s JOIN classes AS c ON s.class_id = c.id WHERE c.name = 'Math'",
+            "status": "aprovado",
+            "erro_execucao": "",
+            "tokens_input": 1200,
+            "tokens_output": 120,
+            "tokens_total": 1320,
+            "historico_tentativas": [
+                {
+                    "sql": "SELECT avg(age) FROM students WHERE class = 'Math'",
+                    "erro": "no such column: class",
+                    "prompt": "Prompt attempt 1",
+                    "raciocinio": "Initial attempt without join",
+                },
+                {
+                    "sql": "SELECT avg(s.age) FROM students AS s JOIN classes AS c ON s.class_id = c.id WHERE c.name = 'Math'",
+                    "erro": "",
+                    "prompt": "Prompt attempt 2 with correction",
+                    "raciocinio": "Correction: join with classes table on class_id",
+                },
+            ],
+        },
+        match_success=True,
+        similarity_score=0.95,
+        time_ms=450.0,
+        gold_results=[(15.5,)],
+        agent_results=[(15.5,)],
+    )
+
+    # 4. Footer
+    logger.log_run_footer(
+        summary={
+            "total_questions": 2,
+            "execution_match_final": 2,
+            "execution_match_final_pct": 100.0,
+            "pass1_execution_match": 1,
+            "pass1_pct": 50.0,
+            "self_correction_success_pct": 100.0,
+            "tokens_total": 1870,
+            "tokens_input": 1700,
+            "tokens_output": 170,
+        },
+        total_elapsed=2.5,
+    )
+    logger.close()
+
+    # Assert file existence and structure
+    log_file = output_dir / f"bird_eval_{timestamp}.log"
+    assert log_file.exists()
+    content = log_file.read_text(encoding="utf-8")
+
+    # Header assertions
+    assert "TEXTTOINSIGHT - BIRD BENCHMARK EXECUTION LOG" in content
+    assert "Timestamp:          2026-10-14_17-45-00" in content
+    assert "Model:              gpt-5-turbo" in content
+    assert "RAG: ON | Evidence: ON | CoT: ON | DataExploration: OFF | InferFKs: OFF" in content
+    assert "Filters:            DB: school | Difficulty: simple" in content
+
+    # QID 1 assertions
+    assert "=== [START QID: 1 | DB: school | Difficulty: simple] ===" in content
+    assert "[QUESTION] How many students are enrolled in grade 10?" in content
+    assert "[EVIDENCE / HINT] grade 10 corresponds to grade_level = 10" in content
+    assert "TABLE students (id INT, grade_level INT)" in content
+    assert "--- [EXECUTION TRACE / FLUXO DE NÓS (TEE)] ---" in content
+    assert "[PLANEJADOR] Generating plan for QID 1" in content
+    assert "[EXECUTOR] Executing query on school DB" in content
+    assert "[RACIOCÍNIO DO AGENTE (CoT / THOUGHT)]:" in content
+    assert "[SQL GERADA]:\nSELECT count(*) FROM students WHERE grade_level = 10" in content
+    assert "[STATUS SANDBOX]: aprovado" in content
+    assert "[EX MATCH (Execution Accuracy)]: ✅ TRUE" in content
+    assert "[SQL SIMILARITY]: 1.0000" in content
+    assert "[LATÊNCIA AGENTE]: 125 ms" in content
+    assert "[TOKENS]: Input: 500 | Output: 50 | Total: 550" in content
+    assert "=== [END QID: 1] ===" in content
+
+    # QID 2 (Self-correction attempts) assertions
+    assert "=== [START QID: 2 | DB: school | Difficulty: moderate] ===" in content
+    assert "--- [ATTEMPTS (2 tentativas)] ---" in content
+    assert ">> Tentativa #1:" in content
+    assert "[Prompt Enviado]:\nPrompt attempt 1" in content
+    assert "[Raciocínio CoT / Thought]:\nInitial attempt without join" in content
+    assert "[Status / Erro]: no such column: class" in content
+    assert ">> Tentativa #2:" in content
+    assert "Prompt attempt 2 with correction" in content
+    assert "Correction: join with classes table on class_id" in content
+    assert "=== [END QID: 2] ===" in content
+
+    # Footer assertions
+    assert "EVALUATION RUN SUMMARY" in content
+    assert "Execution Accuracy (Final EX):      2/2 (100.00%)" in content
+    assert "Pass@1 EX Accuracy:                 1/2 (50.00%)" in content
+    assert "Self-Correction Recovery Rate:      100.00%" in content
+    assert "Total Tokens Consumed:              1,870 (Input: 1,700 | Output: 170)" in content
+    assert "Total Elapsed Time:                 2.5 seconds" in content
+
+
+def test_bird_execution_logger_disabled(tmp_path: Path) -> None:
+    """Verifies that BirdExecutionLogger does not write when enabled=False."""
+    output_dir = tmp_path / "disabled_run"
+    logger = BirdExecutionLogger(
+        output_dir=output_dir,
+        enabled=False,
+    )
+    assert logger._file_handle is None
+
+    # Operations should be no-ops without error
+    logger.log_run_header({"model": "gpt-5"})
+    with logger.capture_trace() as get_trace:
+        print("This should not crash or buffer")
+    assert get_trace() == ""
+
+    logger.log_query(
+        question_id=1,
+        db_id="school",
+        difficulty="simple",
+        question="Q",
+        evidence="",
+        gold_sql="SELECT 1",
+        agent_result={},
+        match_success=True,
+        similarity_score=1.0,
+        time_ms=10.0,
+    )
+    logger.log_run_footer({"total_questions": 1}, total_elapsed=1.0)
+    logger.close()
+
+    assert not (output_dir / f"bird_eval_{logger.timestamp}.log").exists()
+
+
+def test_bird_execution_logger_custom_log_path(tmp_path: Path) -> None:
+    """Verifies explicit log_file parameter paths."""
+    custom_log = tmp_path / "nested" / "my_custom_eval.log"
+    with BirdExecutionLogger(output_dir=tmp_path, log_file=custom_log, enabled=True) as logger:
+        logger.log_run_header({"model": "custom-model"})
+        logger.log_run_footer({"total_questions": 0}, total_elapsed=0.5)
+
+    assert custom_log.exists()
+    content = custom_log.read_text(encoding="utf-8")
+    assert "custom-model" in content
+
+
+# ==============================================================================
+# 6. Smoke Tests for scripts/test_bird_eval.py CLI Orchestrator
 # ==============================================================================
 
 def test_cli_orchestrator_dry_run(mock_bird_env: Path, tmp_path: Path) -> None:
@@ -570,7 +786,14 @@ def test_cli_orchestrator_dry_run(mock_bird_env: Path, tmp_path: Path) -> None:
     assert out_csv.exists()
     assert out_csv.with_suffix(".json").exists()
     assert out_csv.with_suffix(".md").exists()
+    assert out_csv.with_suffix(".log").exists()
     assert "EVALUATION SUMMARY & REPORT GENERATION" in result.stdout
+
+    # Verify log content
+    log_content = out_csv.with_suffix(".log").read_text(encoding="utf-8")
+    assert "TEXTTOINSIGHT - BIRD BENCHMARK EXECUTION LOG" in log_content
+    assert "=== [START QID:" in log_content
+    assert "EVALUATION RUN SUMMARY" in log_content
 
 
 def test_cli_orchestrator_dry_run_with_dir_output(mock_bird_env: Path, tmp_path: Path) -> None:
@@ -595,6 +818,51 @@ def test_cli_orchestrator_dry_run_with_dir_output(mock_bird_env: Path, tmp_path:
     generated_csv = generated_csvs[0]
     assert generated_csv.with_suffix(".json").exists()
     assert generated_csv.with_suffix(".md").exists()
+    assert generated_csv.with_suffix(".log").exists()
+
+
+def test_cli_orchestrator_log_disabled(mock_bird_env: Path, tmp_path: Path) -> None:
+    """Verifies that passing --log off suppresses .log file generation."""
+    out_csv = tmp_path / "no_log_report.csv"
+    cmd = [
+        sys.executable,
+        "scripts/test_bird_eval.py",
+        "--data-dir", str(mock_bird_env),
+        "--sample-size", "1",
+        "--seed", "42",
+        "--dry-run",
+        "--output", str(out_csv),
+        "--log", "off",
+    ]
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    assert result.returncode == 0, f"CLI command failed:\n{result.stderr}"
+
+    assert out_csv.exists()
+    assert not out_csv.with_suffix(".log").exists()
+
+
+def test_cli_orchestrator_custom_log_file(mock_bird_env: Path, tmp_path: Path) -> None:
+    """Verifies that passing --log-file directs logging to an explicit path."""
+    out_csv = tmp_path / "custom_log_report.csv"
+    custom_log = tmp_path / "explicit_logs" / "custom_test.log"
+    cmd = [
+        sys.executable,
+        "scripts/test_bird_eval.py",
+        "--data-dir", str(mock_bird_env),
+        "--sample-size", "1",
+        "--seed", "42",
+        "--dry-run",
+        "--output", str(out_csv),
+        "--log-file", str(custom_log),
+    ]
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    assert result.returncode == 0, f"CLI command failed:\n{result.stderr}"
+
+    assert out_csv.exists()
+    assert custom_log.exists()
+    assert "TEXTTOINSIGHT - BIRD BENCHMARK EXECUTION LOG" in custom_log.read_text(encoding="utf-8")
 
 
 def test_cli_orchestrator_model_kwargs_flag(mock_bird_env: Path, tmp_path: Path, monkeypatch) -> None:

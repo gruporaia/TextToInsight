@@ -12,6 +12,7 @@ Suporta dois modos de introspecção:
 2. PRAGMA SQLite nativo (fallback garantido para SQLite)
 """
 from pathlib import Path
+from typing import Any
 import re
 import sqlite3
 import subprocess
@@ -25,7 +26,7 @@ from ..state import EstadoTextToInsight
 # ---------------------------------------------------------------------------
 _SC_DIALETOS = {
     "sqlite": {
-        "args": lambda db, _cfg: [
+        "args": lambda db: [
             "--server=sqlite",
             f"--database={db}",
             "--user=",
@@ -33,32 +34,13 @@ _SC_DIALETOS = {
         ]
     },
     "duckdb": {
-        "args": lambda db, _cfg: [
+        "args": lambda db: [
             f"--url=jdbc:duckdb:{db}",
             "--user=",
             "--password=",
         ]
     },
-    "postgresql": {
-        "args": lambda _db, cfg: [
-            "--server=postgresql",
-            f"--host={cfg['host']}",
-            f"--port={cfg.get('port', 5432)}",
-            f"--database={cfg['database']}",
-            f"--user={cfg['user']}",
-            f"--password={cfg['password']}",
-        ]
-    },
-    "mysql": {
-        "args": lambda _db, cfg: [
-            "--server=mysql",
-            f"--host={cfg['host']}",
-            f"--port={cfg.get('port', 3306)}",
-            f"--database={cfg['database']}",
-            f"--user={cfg['user']}",
-            f"--password={cfg['password']}",
-        ]
-    },
+    
 }
 
 _EXTENSAO_PARA_DIALETO = {
@@ -68,7 +50,7 @@ _EXTENSAO_PARA_DIALETO = {
     ".duckdb":  "duckdb",
 }
 
-# apenas dialetos de sqlite e duckdb são detectados por extensão. Para PostgreSQL e outros bancos remotos, é necessário configurar o dialeto explicitamente no estado (ex: "postgresql") e fornecer as credenciais em db_config.
+# apenas dialetos de sqlite e duckdb são detectados por extensão. Para PostgreSQL e outros bancos remotos, a entrada é por url ou engine.
 
 
 def _detectar_dialeto(db_path: str) -> str:
@@ -283,7 +265,6 @@ def _rodar_schemacrawler(
     db_path: str,
     dialeto: str,
     sc_bin: str,
-    cfg: dict,
 ) -> str:
     """
     Executa o Schema Crawler via subprocess e retorna o texto do schema já
@@ -293,7 +274,6 @@ def _rodar_schemacrawler(
         db_path: Caminho do banco de dados
         dialeto:  'sqlite' | 'duckdb' | 'postgresql'
         sc_bin:   Caminho para schemacrawler.sh
-        cfg:      Configuração de conexão para bancos remotos
 
     Returns:
         str: Schema no formato canônico
@@ -302,7 +282,7 @@ def _rodar_schemacrawler(
     if not dialeto_config:
         raise ValueError(f"Dialeto não suportado pelo Schema Crawler: {dialeto}")
 
-    args_dialeto = dialeto_config["args"](db_path, cfg)
+    args_dialeto = dialeto_config["args"](db_path)
     cmd = [
         sc_bin,
         *args_dialeto,
@@ -398,193 +378,9 @@ def _formatar_schema_sqlite(conn: sqlite3.Connection) -> str:
 # Introspecção PostgreSQL nativa (fallback sem Schema Crawler)
 # ---------------------------------------------------------------------------
 
-def _formatar_schema_postgres(conn) -> str:
-    """
-    Constrói representação textual do schema via information_schema (PostgreSQL).
-    Formato compatível com enrich_schema.py e SchemaGraphRAG.
-    """
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        SELECT table_name FROM information_schema.tables
-        WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
-        ORDER BY table_name
-        """
-    )
-    tabelas = [row[0] for row in cursor.fetchall()]
 
-    partes = ["=== SCHEMA POSTGRESQL (INTROSPECCAO REAL) ===", ""]
-
-    if not tabelas:
-        partes.append("Nenhuma tabela encontrada no banco.")
-        return "\n".join(partes)
-
-    for tabela in tabelas:
-        partes.append(f"Tabela: {tabela}")
-
-        cursor.execute(
-            """
-            SELECT column_name, data_type, is_nullable
-            FROM information_schema.columns
-            WHERE table_schema = 'public' AND table_name = %s
-            ORDER BY ordinal_position
-            """,
-            (tabela,),
-        )
-        colunas = cursor.fetchall()
-
-        cursor.execute(
-            """
-            SELECT kcu.column_name
-            FROM information_schema.table_constraints tc
-            JOIN information_schema.key_column_usage kcu
-              ON tc.constraint_name = kcu.constraint_name
-             AND tc.table_schema = kcu.table_schema
-            WHERE tc.constraint_type = 'PRIMARY KEY'
-              AND tc.table_schema = 'public' AND tc.table_name = %s
-            """,
-            (tabela,),
-        )
-        pks = {row[0] for row in cursor.fetchall()}
-
-        if colunas:
-            for nome, tipo, is_nullable in colunas:
-                flags = []
-                if nome in pks:
-                    flags.append("PK")
-                if is_nullable == "NO":
-                    flags.append("NOT NULL")
-                sufixo = f" ({', '.join(flags)})" if flags else ""
-                partes.append(f"- {nome}: {tipo}{sufixo}")
-        else:
-            partes.append("- [sem colunas detectadas]")
-
-        cursor.execute(
-            """
-            SELECT kcu.column_name, ccu.table_name, ccu.column_name
-            FROM information_schema.table_constraints tc
-            JOIN information_schema.key_column_usage kcu
-              ON tc.constraint_name = kcu.constraint_name
-             AND tc.table_schema = kcu.table_schema
-            JOIN information_schema.constraint_column_usage ccu
-              ON tc.constraint_name = ccu.constraint_name
-             AND tc.table_schema = ccu.table_schema
-            WHERE tc.constraint_type = 'FOREIGN KEY'
-              AND tc.table_schema = 'public' AND tc.table_name = %s
-            """,
-            (tabela,),
-        )
-        fks = cursor.fetchall()
-        if fks:
-            partes.append("  Foreign keys:")
-            for col_origem, tabela_ref, col_destino in fks:
-                partes.append(f"  - {col_origem} -> {tabela_ref}.{col_destino}")
-
-        partes.append("")
-
-    return "\n".join(partes)
-
-
-# ---------------------------------------------------------------------------
-# Introspecção MySQL nativa (fallback sem Schema Crawler)
-# ---------------------------------------------------------------------------
-
-def _formatar_schema_mysql(conn) -> str:
-    """
-    Constrói representação textual do schema via information_schema (MySQL).
-    Formato compatível com enrich_schema.py e SchemaGraphRAG.
-    """
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        SELECT table_name FROM information_schema.tables
-        WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'
-        ORDER BY table_name
-        """
-    )
-    tabelas = [row[0] for row in cursor.fetchall()]
-
-    partes = ["=== SCHEMA MYSQL (INTROSPECCAO REAL) ===", ""]
-
-    if not tabelas:
-        partes.append("Nenhuma tabela encontrada no banco.")
-        return "\n".join(partes)
-
-    for tabela in tabelas:
-        partes.append(f"Tabela: {tabela}")
-
-        cursor.execute(
-            """
-            SELECT column_name, data_type, is_nullable, column_key
-            FROM information_schema.columns
-            WHERE table_schema = DATABASE() AND table_name = %s
-            ORDER BY ordinal_position
-            """,
-            (tabela,),
-        )
-        colunas = cursor.fetchall()
-
-        if colunas:
-            for nome, tipo, is_nullable, column_key in colunas:
-                flags = []
-                if column_key == "PRI":
-                    flags.append("PK")
-                if is_nullable == "NO":
-                    flags.append("NOT NULL")
-                sufixo = f" ({', '.join(flags)})" if flags else ""
-                partes.append(f"- {nome}: {tipo}{sufixo}")
-        else:
-            partes.append("- [sem colunas detectadas]")
-
-        cursor.execute(
-            """
-            SELECT column_name, referenced_table_name, referenced_column_name
-            FROM information_schema.key_column_usage
-            WHERE table_schema = DATABASE() AND table_name = %s
-              AND referenced_table_name IS NOT NULL
-            """,
-            (tabela,),
-        )
-        fks = cursor.fetchall()
-        if fks:
-            partes.append("  Foreign keys:")
-            for col_origem, tabela_ref, col_destino in fks:
-                partes.append(f"  - {col_origem} -> {tabela_ref}.{col_destino}")
-
-        partes.append("")
-
-    return "\n".join(partes)
-
-
-def _introspeccao_nativa(dialeto: str, caminho_db: Path | None, db_cfg: dict) -> str:
+def _introspeccao_nativa(dialeto: str, caminho_db: Path) -> str:
     """Abre conexão e roteia para o formatador de schema nativo do dialeto."""
-    if dialeto == "postgresql":
-        import psycopg2
-        conn = psycopg2.connect(
-            host=db_cfg["host"],
-            port=db_cfg.get("port", 5432),
-            dbname=db_cfg["database"],
-            user=db_cfg["user"],
-            password=db_cfg["password"],
-        )
-        try:
-            return _formatar_schema_postgres(conn)
-        finally:
-            conn.close()
-
-    if dialeto == "mysql":
-        import pymysql
-        conn = pymysql.connect(
-            host=db_cfg["host"],
-            port=db_cfg.get("port", 3306),
-            database=db_cfg["database"],
-            user=db_cfg["user"],
-            password=db_cfg["password"],
-        )
-        try:
-            return _formatar_schema_mysql(conn)
-        finally:
-            conn.close()
 
     if dialeto == "sqlite":
         conn = sqlite3.connect(f"file:{caminho_db}?mode=ro", uri=True)
@@ -596,7 +392,7 @@ def _introspeccao_nativa(dialeto: str, caminho_db: Path | None, db_cfg: dict) ->
     # um resultado incorreto silenciosamente).
     raise RuntimeError(
         f"Dialeto '{dialeto}' não possui introspecção nativa disponível "
-        "(apenas sqlite, postgresql e mysql). Configure schemacrawler_bin "
+        "(apenas sqlite). Configure schemacrawler_bin "
         "para este dialeto."
     )
 
@@ -789,15 +585,16 @@ def _inferir_fks_virtuais(schema_canonico: str) -> str:
 # Nó do grafo
 # ---------------------------------------------------------------------------
 
-def nos_nodo_esquema(estado: EstadoTextToInsight) -> dict:
+def nos_nodo_esquema(estado: EstadoTextToInsight, engine: Any = None) -> dict:
     """
     Nó Schema: busca metadados do banco de dados e popula contexto_schema.
 
     Fluxo:
-    1. Valida db_path.
-    2. Verifica cache enriquecido, se existir, retorna direto (pula enrich).
-    3. Tenta Schema Crawler se schemacrawler_bin estiver configurado.
-    4. Fallback para PRAGMA SQLite nativo (apenas SQLite).
+    1. Se uma Engine SQLAlchemy foi injetada pelo chamador (`engine`), usa ela
+       diretamente — o dialeto vem de `engine.dialect.name`, sem tocar em
+       db_path/db_url do estado.
+    2. Caso contrário, valida db_path, verifica cache enriquecido, tenta
+       Schema Crawler e por fim PRAGMA SQLite nativo.
 
     O formato de saída é sempre compatível com enrich_schema.py e
     SchemaGraphRAG, independentemente da fonte de introspecção.
@@ -805,7 +602,6 @@ def nos_nodo_esquema(estado: EstadoTextToInsight) -> dict:
     Campos lidos do estado:
         db_path (str):           Caminho do banco de dados (obrigatório)
         schemacrawler_bin (str): Path para schemacrawler.sh (opcional)
-        db_config (dict):        host/port/user/password para bancos remotos
 
     Campos escritos no estado:
         contexto_schema (str)
@@ -813,14 +609,31 @@ def nos_nodo_esquema(estado: EstadoTextToInsight) -> dict:
         status (str)
         tem_descricao (bool)
     """
+    if engine is not None:
+        try:
+            contexto = _formatar_schema_sqlalchemy(engine)
+        except Exception as e:
+            msg = f"Falha ao ler schema via engine: {e}"
+            print(f"[SCHEMA] Erro: {msg}")
+            return {"contexto_schema": "", "erro_execucao": msg, "status": "exec_erro"}
+
+        if estado.get("inferir_fks_virtuais", False):
+            print("[SCHEMA] Inferindo FKs virtuais.")
+            contexto = _inferir_fks_virtuais(contexto)
+
+        return {
+            "contexto_schema": contexto,
+            "erro_execucao": "",
+            "status": "schema_obtido",
+            "tem_descricao": False,
+        }
+
     db_url = estado.get("db_url", "").strip()
     if db_url:
-        from sqlalchemy import create_engine
-
-        from .code_agent.code_sql import _normalizar_db_url
+        from .code_agent.code_sql import _criar_engine_de_url
 
         try:
-            engine = create_engine(_normalizar_db_url(db_url))
+            engine = _criar_engine_de_url(db_url)
             try:
                 contexto = _formatar_schema_sqlalchemy(engine)
             finally:
@@ -842,10 +655,9 @@ def nos_nodo_esquema(estado: EstadoTextToInsight) -> dict:
         }
     db_path = estado.get("db_path", "").strip()
     sc_bin  = estado.get("schemacrawler_bin", "").strip()
-    db_cfg  = estado.get("db_config") or {}
     usar_schemacrawler = estado.get("usar_schemacrawler", True)
     inferir_fks_virtuais = estado.get("inferir_fks_virtuais", False)
-    dialeto = estado.get("db_dialeto") or _detectar_dialeto(db_path)
+    dialeto = _detectar_dialeto(db_path)
 
     # --- Validação ---
     caminho_db: Path | None = None
@@ -858,13 +670,6 @@ def nos_nodo_esquema(estado: EstadoTextToInsight) -> dict:
         caminho_db = Path(db_path)
         if not caminho_db.exists():
             msg = f"Arquivo de banco não encontrado: {db_path}"
-            print(f"[SCHEMA] Erro: {msg}")
-            return {"contexto_schema": "", "erro_execucao": msg, "status": "exec_erro"}
-    else:
-        campos_obrigatorios = ("host", "database", "user", "password")
-        faltando = [c for c in campos_obrigatorios if not db_cfg.get(c)]
-        if faltando:
-            msg = f"db_config incompleto para dialeto '{dialeto}', faltam: {', '.join(faltando)}"
             print(f"[SCHEMA] Erro: {msg}")
             return {"contexto_schema": "", "erro_execucao": msg, "status": "exec_erro"}
 
@@ -890,12 +695,12 @@ def nos_nodo_esquema(estado: EstadoTextToInsight) -> dict:
 
     if usar_schemacrawler and sc_disponivel:
         try:
-            contexto = _rodar_schemacrawler(db_path, dialeto, sc_bin, db_cfg)
+            contexto = _rodar_schemacrawler(db_path, dialeto, sc_bin)
             print("[SCHEMA] Schema Crawler: introspecção concluída.")
         except Exception as e:
             print(f"[SCHEMA] Schema Crawler falhou ({e}). Tentando fallback nativo...")
             try:
-                contexto = _introspeccao_nativa(dialeto, caminho_db, db_cfg)
+                contexto = _introspeccao_nativa(dialeto, caminho_db)
             except Exception as e2:
                 msg = f"Falha na introspecção nativa (dialeto '{dialeto}'): {e2}"
                 print(f"[SCHEMA] Erro: {msg}")
@@ -906,7 +711,7 @@ def nos_nodo_esquema(estado: EstadoTextToInsight) -> dict:
         else:
             print(f"[SCHEMA] schemacrawler_bin não configurado — usando introspecção nativa ({dialeto}).")
         try:
-            contexto = _introspeccao_nativa(dialeto, caminho_db, db_cfg)
+            contexto = _introspeccao_nativa(dialeto, caminho_db)
         except Exception as e:
             msg = f"Falha na introspecção nativa (dialeto '{dialeto}'): {e}"
             print(f"[SCHEMA] Erro: {msg}")
