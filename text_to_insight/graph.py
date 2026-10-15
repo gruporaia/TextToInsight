@@ -40,7 +40,7 @@ def nos_nodo_espera_humana(estado: EstadoTextToInsight):
 
 class Graph:
     def __init__(self, api_key: str, model: str, hitl: bool = True, enable_graphs: bool = True, use_cot: bool = True, use_data_exploration: bool = True, use_exploration_selector: str = "off", use_rag: bool = True, enrich_rag: bool = False, model_kwargs: dict | None = None, db_engine=None):
-         self.llm = get_model(model, api_key, **(model_kwargs or {}))
+        self.llm = get_model(model, api_key, **(model_kwargs or {}))
         self.memory = MemorySaver()
         self.enable_graphs = enable_graphs
         self.use_cot = use_cot
