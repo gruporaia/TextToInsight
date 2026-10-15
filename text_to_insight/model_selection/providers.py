@@ -7,7 +7,7 @@ qualquer módulo importado antes do uso) com ``default_registry.register``.
 from .registry import default_registry
 
 
-@default_registry.register("gemini", keywords=["gemini"])
+@default_registry.register("google", keywords=["gemini", "google"], aliases=["gemini"])
 def build_gemini(model_name: str, api_key: str, **kwargs):
     """Aceita parâmetros extras do ChatGoogleGenerativeAI, ex.: ``temperature``,
     ``max_tokens`` (alias de ``max_output_tokens``)."""
@@ -16,7 +16,7 @@ def build_gemini(model_name: str, api_key: str, **kwargs):
     return ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, **kwargs)
 
 
-@default_registry.register("openai", keywords=["gpt"])
+@default_registry.register("openai", keywords=["gpt", "openai"], aliases=["gpt"])
 def build_openai(model_name: str, api_key: str, **kwargs):
     """Aceita parâmetros extras do ChatOpenAI, ex.: ``temperature``, ``max_tokens``."""
     from langchain_openai import ChatOpenAI

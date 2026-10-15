@@ -6,7 +6,7 @@ do contexto do schema e de feedback anterior (se houver), usando Gemini.
 """
 
 import re
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.chat_models import BaseChatModel
 
 from ...state import EstadoTextToInsight
 from ...utils import extrair_tokens
@@ -163,7 +163,7 @@ def _formatar_historico_tentativas(historico: list[dict]) -> str:
     return "\n".join(partes) + "\nNÃO repita os mesmos erros. Gere uma SQL diferente e corrigida."
 
 
-def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI, use_cot: bool = True) -> dict:
+def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: BaseChatModel, use_cot: bool = True) -> dict:
     """
     Nó Agente de Código: usa Gemini para gerar SQL a partir da pergunta + schema.
     """

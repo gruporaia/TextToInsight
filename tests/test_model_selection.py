@@ -11,6 +11,7 @@ from text_to_insight.model_selection import (
 
 
 def test_registry_padrao_contem_provedores_builtin():
+    assert "google" in default_registry
     assert "gemini" in default_registry
     assert "openai" in default_registry
 
@@ -18,14 +19,41 @@ def test_registry_padrao_contem_provedores_builtin():
 @pytest.mark.parametrize(
     "model_name, provider",
     [
-        ("gemini-2.5-flash", "gemini"),
-        ("GEMINI-PRO", "gemini"),
+        ("gemini-2.5-flash", "google"),
+        ("GEMINI-PRO", "google"),
         ("gpt-4o-mini", "openai"),
         ("GPT-4.1", "openai"),
     ],
 )
 def test_registry_resolve_por_palavra_chave(model_name, provider):
     assert default_registry.resolve(model_name).name == provider
+
+
+@pytest.mark.parametrize(
+    "identifier, expected_provider, expected_model",
+    [
+        ("google/gemini-2.5-flash", "google", "gemini-2.5-flash"),
+        ("gemini/gemini-2.5-flash", "google", "gemini-2.5-flash"),
+        ("openai/gpt-4o", "openai", "gpt-4o"),
+        ("gpt/gpt-4o", "openai", "gpt-4o"),
+        ("openai/o1-mini", "openai", "o1-mini"),
+        ("openai/o3-mini", "openai", "o3-mini"),
+    ],
+)
+def test_parse_model_formato_relativo(identifier, expected_provider, expected_model):
+    spec, concrete_model = default_registry.parse_model(identifier)
+    assert spec.name == expected_provider
+    assert concrete_model == expected_model
+
+
+def test_parse_model_provedor_desconhecido():
+    with pytest.raises(ValueError, match="Provedor 'anthropic' não reconhecido"):
+        default_registry.parse_model("anthropic/claude-3-5-sonnet")
+
+
+def test_parse_model_barra_sem_modelo():
+    with pytest.raises(ValueError, match="inválido"):
+        default_registry.parse_model("openai/")
 
 
 def test_registry_modelo_desconhecido_levanta_value_error():
@@ -88,6 +116,37 @@ def test_factory_repassa_kwargs_ao_builder():
     registry = ModelRegistry()
     registry.register("fake", builder=lambda m, k, **kw: kw)
     assert ModelFactory(registry).create("fake-1", "k", temperature=0.5) == {"temperature": 0.5}
+
+
+def test_factory_repassa_modelo_sem_prefixo_ao_builder():
+    registry = ModelRegistry()
+    recebidos = []
+
+    @registry.register("fake", keywords=["fake"])
+    def _build(model_name, api_key, **kwargs):
+        recebidos.append((model_name, api_key))
+        return {"model": model_name}
+
+    factory = ModelFactory(registry)
+    res = factory.create("fake/modelo-real", "k1")
+    assert res == {"model": "modelo-real"}
+    assert recebidos == [("modelo-real", "k1")]
+
+
+def test_get_model_instancia_gemini_com_provedor_relativo():
+    from langchain_google_genai import ChatGoogleGenerativeAI
+
+    llm = get_model("google/gemini-2.5-flash", "fake-key")
+    assert isinstance(llm, ChatGoogleGenerativeAI)
+    assert llm.model == "gemini-2.5-flash"
+
+
+def test_get_model_instancia_openai_com_provedor_relativo():
+    from langchain_openai import ChatOpenAI
+
+    llm = get_model("openai/gpt-4o-mini", "fake-key")
+    assert isinstance(llm, ChatOpenAI)
+    assert llm.model_name == "gpt-4o-mini"
 
 
 def test_get_model_desconhecido_levanta_value_error():
