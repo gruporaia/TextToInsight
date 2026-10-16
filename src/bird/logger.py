@@ -119,10 +119,15 @@ class BirdExecutionLogger:
         sample_size = config_info.get("sample_size", "all")
         seed = config_info.get("seed", 42)
         use_rag = "ON" if config_info.get("use_rag") else "OFF"
+        enrich_rag = "ON" if config_info.get("enrich_rag") else "OFF"
         use_evidence = "ON" if config_info.get("use_evidence") else "OFF"
         use_cot = "ON" if config_info.get("use_cot") else "OFF"
         use_exploration = "ON" if config_info.get("use_data_exploration") else "OFF"
+        exploration_selector = config_info.get("exploration_selector") or "off"
+        schemacrawler = "ON" if config_info.get("schemacrawler") else "OFF"
         infer_fks = "ON" if config_info.get("infer_fks") else "OFF"
+        model_kwargs = config_info.get("model_kwargs") or {}
+        kwargs_str = f" | ModelKwargs: {model_kwargs}" if model_kwargs else ""
         db_filter = config_info.get("db_filter") or "None"
         diff_filter = config_info.get("difficulty_filter") or "None"
 
@@ -136,8 +141,9 @@ class BirdExecutionLogger:
             f"Dialect:            {dialect}",
             f"Sample Size:        {sample_size}",
             f"Seed:               {seed}",
-            f"Configuration:      RAG: {use_rag} | Evidence: {use_evidence} | CoT: {use_cot} | "
-            f"DataExploration: {use_exploration} | InferFKs: {infer_fks}",
+            f"Configuration:      RAG: {use_rag} | EnrichRAG: {enrich_rag} | Evidence: {use_evidence} | CoT: {use_cot} | "
+            f"DataExploration: {use_exploration} (Selector: {exploration_selector}) | "
+            f"SchemaCrawler: {schemacrawler} | InferFKs: {infer_fks}{kwargs_str}",
             f"Filters:            DB: {db_filter} | Difficulty: {diff_filter}",
             f"Output Directory:   {self.output_dir}",
             f"Log File:           {self.log_path.name}",

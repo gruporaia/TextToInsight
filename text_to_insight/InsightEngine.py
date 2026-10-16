@@ -30,7 +30,7 @@ class InsightEngine:
         use_rag: bool = True,
         enrich_rag: bool = False,
         inferir_fks_virtuais: bool = False,
-        usar_schemacrawler: bool = True,
+        usar_schemacrawler: bool = False,
         db_url: str = "",
         model_kwargs: dict | None = None,
         db_engine: Any = None,

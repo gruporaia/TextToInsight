@@ -108,13 +108,16 @@ O orquestrador de avaliacao e acionado via `scripts/test_bird_eval.py`.
 | `--db-filter` | Texto | `None` | Restringe a avaliacao a um banco especifico (ex: `financial`). |
 | `--difficulty` | `simple`, `moderate`, `challenging` | `None` | Filtra perguntas por nivel de complexidade. |
 | `--stratify` | Flag | Desativado | Mantem a proporcao original de dificuldades na amostra. |
-| `--model` | Texto | Variável `OPENAI_MODEL` ou `gpt-4o-mini` | Identificador do modelo LLM a ser utilizado. |
+| `--model` | Texto | Variável `OPENAI_MODEL` ou `gpt-4o-mini` | Identificador do modelo LLM a ser utilizado. Suporta o formato `<provedor>/<modelo>` (ex.: `openai/gpt-4o`, `google/gemini-2.5-flash`, `openai/gpt6-luna`) ou nomes padrão. |
+| `--model-kwargs` | `KEY=VALUE ...` | `[]` | Kwargs adicionais repassados ao construtor do LLM (ex.: `temperature=0`, `max_tokens=512`, `base_url="..."`). |
 | `--use-evidence` | `on`, `off` | `on` | Controla injecao de formulas e dicas de negocio no prompt. |
 | `--rag` | `on`, `off` | `on` | Ativa selecao dinamica de tabelas via SchemaGraphRAG. |
 | `--enrich-rag` | `on`, `off` | `off` | Ativa enriquecimento de colunas relevantes no RAG. |
 | `--infer-fks` | Flag | Desativado | Habilita inferencia heuristica de chaves estrangeiras virtuais. |
 | `--cot` | `on`, `off` | `on` | Ativa raciocinio explicito passo a passo (Chain of Thought). |
 | `--data-exploration` | `on`, `off` | `on` | Permite que o agente consulte amostras de valores nas tabelas. |
+| `--exploration-selector` | `off`, `heuristic`, `llm` | `off` | Modo de selecao de colunas para exploracao de dados. |
+| `--schemacrawler` | `on`, `off` | `off` | Ativa/desativa introspeccao via SchemaCrawler (padrao: `off`, usa PRAGMA nativo do SQLite). |
 | `--timeout` | Inteiro | `30` | Tempo limite em segundos para execucao de queries no SQLite. |
 | `--dry-run` | Flag | Desativado | Simula a geracao de SQL sem custo de API. |
 | `--log` | `on`, `off` | `on` | Controla geracao do arquivo de log detalhado de execucao (`.log`). |

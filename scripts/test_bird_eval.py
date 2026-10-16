@@ -178,6 +178,18 @@ def parse_arguments() -> argparse.Namespace:
         help="Enable data exploration node (default: on)",
     )
     parser.add_argument(
+        "--exploration-selector",
+        choices=["off", "heuristic", "llm"],
+        default="off",
+        help="Column exploration selector mode: off, heuristic, llm (default: off)",
+    )
+    parser.add_argument(
+        "--schemacrawler",
+        choices=["on", "off"],
+        default="off",
+        help="Enable SchemaCrawler for schema introspection (default: off)",
+    )
+    parser.add_argument(
         "--timeout",
         type=int,
         default=30,
@@ -390,8 +402,11 @@ def main() -> None:
     print(f"   - Model kwargs: {model_kwargs or 'provider defaults'}")
     print(f"   - Evidence (Hints): {args.use_evidence}")
     print(f"   - Schema RAG: {args.rag}")
+    print(f"   - Enrich RAG: {args.enrich_rag}")
     print(f"   - Chain of Thought: {args.cot}")
     print(f"   - Data Exploration: {args.data_exploration}")
+    print(f"   - Exploration Selector: {args.exploration_selector}")
+    print(f"   - SchemaCrawler: {args.schemacrawler}")
     print(f"   - Logging: {args.log}")
     print(f"   - Total Questions to Run: {len(examples)}")
     print("-" * 80 + "\n")
@@ -400,13 +415,17 @@ def main() -> None:
     logger.log_run_header({
         "timestamp": timestamp,
         "model": args.model + (" (Dry-run)" if args.dry_run else ""),
+        "model_kwargs": model_kwargs,
         "dialect": "sqlite",
         "sample_size": len(examples),
         "seed": args.seed,
         "use_rag": (args.rag == "on"),
+        "enrich_rag": (args.enrich_rag == "on"),
         "use_evidence": (args.use_evidence == "on"),
         "use_cot": (args.cot == "on"),
         "use_data_exploration": (args.data_exploration == "on"),
+        "exploration_selector": args.exploration_selector,
+        "schemacrawler": (args.schemacrawler == "on"),
         "infer_fks": args.infer_fks,
         "db_filter": args.db_filter,
         "difficulty_filter": args.difficulty,
@@ -475,9 +494,12 @@ def main() -> None:
                             enable_graphs=False,
                             use_cot=(args.cot == "on"),
                             use_data_exploration=(args.data_exploration == "on"),
+                            use_exploration_selector=args.exploration_selector,
                             use_rag=(args.rag == "on"),
                             enrich_rag=(args.enrich_rag == "on"),
                             inferir_fks_virtuais=args.infer_fks,
+                            usar_schemacrawler=(args.schemacrawler == "on"),
+                            model_kwargs=model_kwargs,
                         )
                     except Exception as e:
                         print(f"     ❌ Failed to instantiate InsightEngine for db '{db_id}': {e}")
@@ -693,6 +715,9 @@ def main() -> None:
         "sample_size": len(examples),
         "seed": args.seed,
         "use_rag": (args.rag == "on"),
+        "enrich_rag": (args.enrich_rag == "on"),
+        "exploration_selector": args.exploration_selector,
+        "schemacrawler": (args.schemacrawler == "on"),
         "use_evidence": (args.use_evidence == "on"),
         "db_filter": args.db_filter,
         "difficulty_filter": args.difficulty,

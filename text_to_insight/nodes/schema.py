@@ -655,7 +655,7 @@ def nos_nodo_esquema(estado: EstadoTextToInsight, engine: Any = None) -> dict:
         }
     db_path = estado.get("db_path", "").strip()
     sc_bin  = estado.get("schemacrawler_bin", "").strip()
-    usar_schemacrawler = estado.get("usar_schemacrawler", True)
+    usar_schemacrawler = estado.get("usar_schemacrawler", False)
     inferir_fks_virtuais = estado.get("inferir_fks_virtuais", False)
     dialeto = _detectar_dialeto(db_path)
 

@@ -570,9 +570,12 @@ def test_bird_execution_logger_lifecycle_and_formatting(tmp_path: Path) -> None:
         "sample_size": 2,
         "seed": 42,
         "use_rag": True,
+        "enrich_rag": False,
         "use_evidence": True,
         "use_cot": True,
         "use_data_exploration": False,
+        "exploration_selector": "off",
+        "schemacrawler": False,
         "infer_fks": False,
         "db_filter": "school",
         "difficulty_filter": "simple",
@@ -676,7 +679,7 @@ def test_bird_execution_logger_lifecycle_and_formatting(tmp_path: Path) -> None:
     assert "TEXTTOINSIGHT - BIRD BENCHMARK EXECUTION LOG" in content
     assert "Timestamp:          2026-10-14_17-45-00" in content
     assert "Model:              gpt-5-turbo" in content
-    assert "RAG: ON | Evidence: ON | CoT: ON | DataExploration: OFF | InferFKs: OFF" in content
+    assert "RAG: ON | EnrichRAG: OFF | Evidence: ON | CoT: ON | DataExploration: OFF (Selector: off) | SchemaCrawler: OFF | InferFKs: OFF" in content
     assert "Filters:            DB: school | Difficulty: simple" in content
 
     # QID 1 assertions
@@ -901,6 +904,32 @@ def test_cli_orchestrator_model_kwargs_flag(mock_bird_env: Path, tmp_path: Path,
     assert result.returncode == 0, f"CLI command failed:\n{result.stderr}"
     assert "Model kwargs: {'temperature': 0.3}" in result.stdout
     assert '| **Model kwargs** | `{"temperature": 0.3}` |' in out_csv.with_suffix(".md").read_text(encoding="utf-8")
+
+
+def test_cli_orchestrator_schemacrawler_and_selector_flags(mock_bird_env: Path, tmp_path: Path) -> None:
+    """Verifies that --schemacrawler and --exploration-selector flags parse and log correctly."""
+    out_csv = tmp_path / "sc_selector_report.csv"
+    cmd = [
+        sys.executable,
+        "scripts/test_bird_eval.py",
+        "--data-dir", str(mock_bird_env),
+        "--sample-size", "1",
+        "--dry-run",
+        "--schemacrawler", "on",
+        "--exploration-selector", "heuristic",
+        "--enrich-rag", "on",
+        "--output", str(out_csv),
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    assert result.returncode == 0, f"CLI command failed:\n{result.stderr}"
+    assert "SchemaCrawler: on" in result.stdout
+    assert "Exploration Selector: heuristic" in result.stdout
+    assert "Enrich RAG: on" in result.stdout
+
+    log_content = out_csv.with_suffix(".log").read_text(encoding="utf-8")
+    assert "SchemaCrawler: ON" in log_content
+    assert "Selector: heuristic" in log_content
+    assert "EnrichRAG: ON" in log_content
 
 
 # ==============================================================================
