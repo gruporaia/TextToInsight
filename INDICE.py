@@ -27,7 +27,10 @@ TextToInsight/                             (Raiz do projeto)
 │   ├── state.py                           ⭐ TypedDict EstadoTextToInsight
 │   ├── graph.py                           ⭐ Grafo compilado (entry point)
 │   ├── InsightEngine.py                   API pública da biblioteca
-│   ├── model_selection.py                 Seleção de modelo/provedor LLM
+│   ├── 📁 model_selection/                Seleção de modelo/provedor LLM (Registry + Factory)
+│   │   ├── registry.py                    ModelRegistry (provedor -> builder)
+│   │   ├── factory.py                     ModelFactory + get_model()
+│   │   └── providers.py                   Provedores registrados (Gemini, OpenAI)
 │   ├── runtime.py                         Runtime compartilhado
 │   ├── utils.py                           Telemetria de tokens e latência
 │   │

@@ -20,12 +20,14 @@ from src.bird.metrics import (
     compare_bird_results,
     normalize_sql,
     normalize_value,
+    results_f1_score,
     sql_similarity_score,
 )
 from src.bird.csv_reporter import (
     BirdCSVReporter,
     format_result_rows_markdown_table,
 )
+from src.bird.logger import BirdExecutionLogger
 
 __all__ = [
     "load_bird_dev_examples",
@@ -37,10 +39,12 @@ __all__ = [
     "get_database_uri",
     "BirdQueryExecutor",
     "compare_bird_results",
+    "results_f1_score",
     "normalize_sql",
     "normalize_value",
     "sql_similarity_score",
     "build_bird_comparison_row",
     "BirdCSVReporter",
     "format_result_rows_markdown_table",
+    "BirdExecutionLogger",
 ]

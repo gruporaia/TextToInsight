@@ -6,7 +6,7 @@ produzir uma resposta em linguagem natural que responda à pergunta do usuário
 com base na SQL gerada e nos resultados obtidos.
 """
 
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.chat_models import BaseChatModel
 import sys
 import os
 
@@ -37,7 +37,7 @@ Gere APENAS a resposta final para o usuário (sem títulos, sem marcas, sem expl
 """
 
 
-def nos_nodo_resposta(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -> dict:
+def nos_nodo_resposta(estado: EstadoTextToInsight, llm: BaseChatModel) -> dict:
     """
     Nó Resposta: quando a execução for bem-sucedida, gera uma resposta
     em linguagem natural para o usuário baseada na SQL e nos resultados.
