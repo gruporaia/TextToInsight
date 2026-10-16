@@ -48,6 +48,7 @@ from src.bird import (
     get_database_path,
     load_bird_dev_examples,
     prepare_prompt_question,
+    results_f1_score,
     sample_examples,
     sql_similarity_score,
 )
@@ -547,6 +548,7 @@ def main() -> None:
                 inter_err = str(att.get("erro") or "").strip()
                 inter_match = False
                 inter_status = "exec_erro" if inter_err else "exec_ok"
+                inter_f1 = {"precision": 0.0, "recall": 0.0, "f1": 0.0}
 
                 # As decided: if intermediate attempt had no syntax error in sandbox, execute to check Pass@1 EX match
                 if not inter_err and inter_sql:
@@ -556,6 +558,10 @@ def main() -> None:
                             results_gold=results_gold,
                             results_agent=inter_exec["results"],
                             gold_sql=gold_sql,
+                        )
+                        inter_f1 = results_f1_score(
+                            results_gold=results_gold,
+                            results_agent=inter_exec["results"],
                         )
                     else:
                         inter_err = inter_exec["error"] or "Query execution error"
@@ -576,6 +582,9 @@ def main() -> None:
                     execution_status=inter_status,
                     similarity_score=inter_sim,
                     execution_match=inter_match,
+                    precision=inter_f1["precision"],
+                    recall=inter_f1["recall"],
+                    f1=inter_f1["f1"],
                     error=inter_err,
                     tokens_input=0,
                     tokens_output=0,
@@ -587,6 +596,7 @@ def main() -> None:
         results_agent = None
         agent_columns = []
         match_success = False
+        final_f1 = {"precision": 0.0, "recall": 0.0, "f1": 0.0}
 
         if agent_sql and not agent_exec_error:
             agent_db_exec = executor.execute_query(db_id=db_id, sql=agent_sql)
@@ -597,6 +607,10 @@ def main() -> None:
                     results_gold=results_gold,
                     results_agent=results_agent,
                     gold_sql=gold_sql,
+                )
+                final_f1 = results_f1_score(
+                    results_gold=results_gold,
+                    results_agent=results_agent,
                 )
             else:
                 agent_exec_error = agent_db_exec["error"] or "Query execution error"
@@ -619,6 +633,9 @@ def main() -> None:
             execution_status=agent_status,
             similarity_score=sim_score,
             execution_match=match_success,
+            precision=final_f1["precision"],
+            recall=final_f1["recall"],
+            f1=final_f1["f1"],
             error=agent_exec_error,
             tokens_input=tokens_in,
             tokens_output=tokens_out,
@@ -641,6 +658,9 @@ def main() -> None:
             gold_results=results_gold,
             agent_results=results_agent,
             captured_trace=captured_trace,
+            precision=final_f1["precision"],
+            recall=final_f1["recall"],
+            f1=final_f1["f1"],
         )
         if match_success and len(historico_tent) > 1:
             self_corrections.append({
@@ -666,6 +686,9 @@ def main() -> None:
                 "evidence": evidence,
                 "gold_sql": gold_sql,
                 "agent_sql": agent_sql,
+                "precision": final_f1["precision"],
+                "recall": final_f1["recall"],
+                "f1": final_f1["f1"],
                 "error": agent_exec_error,
                 "attempts": historico_tent if historico_tent else [{"sql": agent_sql, "erro": agent_exec_error}],
                 "gold_results": results_gold,
@@ -680,6 +703,7 @@ def main() -> None:
         attempts_badge = f"({total_attempts} att)" if total_attempts > 1 else ""
         print(
             f"     Result: {match_icon} EX Match {attempts_badge}| {status_icon} Sandbox: {agent_status.upper()} | "
+            f"Recall: {final_f1['recall']:.2f} | F1: {final_f1['f1']:.2f} | "
             f"Sim: {sim_score:.2f} | Time: {agent_time_ms:.0f}ms | Tokens: {tokens_tot:,}"
         )
         if not match_success and agent_exec_error:

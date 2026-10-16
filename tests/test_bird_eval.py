@@ -36,6 +36,7 @@ from src.bird import (
     normalize_sql,
     normalize_value,
     prepare_prompt_question,
+    results_f1_score,
     sample_examples,
     sql_similarity_score,
 )
@@ -334,21 +335,75 @@ def test_metrics_execution_accuracy() -> None:
     assert compare_bird_results([("Alice",), ("Bob",)], [("Alice",), ("Bob",)], gold_sql=gold_ordered_sql) is True
 
 
+def test_results_f1_score_exact_match_tuples() -> None:
+    """Verifies that exact column matches return precision=1.0, recall=1.0, f1=1.0 with float tolerance."""
+    gold = [(1, "Alice", 95.5), (2, "Bob", 80.0)]
+    agent = [(2, "Bob", 80.004), (1, "Alice", 95.5)]  # reversed rows, 1e-2 float tolerance
+    res = results_f1_score(gold, agent, ignore_order=True)
+    assert res == {"precision": 1.0, "recall": 1.0, "f1": 1.0}
+
+
+def test_results_f1_score_extra_columns_high_recall() -> None:
+    """Verifies that extra columns give recall=1.0 while penalizing precision (the core Text-to-Insight insight)."""
+    gold = [("Alice",), ("Bob",)]
+    agent = [(1, "Alice", "SP"), (2, "Bob", "RJ")]  # 3 columns including the requested column
+    assert compare_bird_results(gold, agent) is False
+    res = results_f1_score(gold, agent)
+    assert res["recall"] == 1.0
+    assert res["precision"] == 0.3333
+    assert res["f1"] == 0.5
+
+
+def test_results_f1_score_partial_columns() -> None:
+    """Verifies partial column matches (missing 1 of 3 columns)."""
+    gold = [(1, "Alice", 100), (2, "Bob", 200)]
+    agent = [(1, "Alice"), (2, "Bob")]
+    res = results_f1_score(gold, agent)
+    assert res["recall"] == 0.6667
+    assert res["precision"] == 1.0
+    assert res["f1"] == 0.8
+
+
+def test_results_f1_score_edge_cases_and_dict_support() -> None:
+    """Verifies edge cases (None, empty sets, dict rows) in results_f1_score."""
+    # 1. SQL error (None) -> all 0.0
+    assert results_f1_score(None, [(1,)]) == {"precision": 0.0, "recall": 0.0, "f1": 0.0}
+    assert results_f1_score([(1,)], None) == {"precision": 0.0, "recall": 0.0, "f1": 0.0}
+
+    # 2. Both empty -> all 1.0
+    assert results_f1_score([], []) == {"precision": 1.0, "recall": 1.0, "f1": 1.0}
+
+    # 3. Asymmetric empty
+    assert results_f1_score([], [(1,)]) == {"precision": 0.0, "recall": 1.0, "f1": 0.0}
+    assert results_f1_score([(1,)], []) == {"precision": 1.0, "recall": 0.0, "f1": 0.0}
+
+    # 4. Dict input support
+    gold_dicts = [{"name": "Alice"}, {"name": "Bob"}]
+    agent_dicts = [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]
+    res = results_f1_score(gold_dicts, agent_dicts)
+    assert res["recall"] == 1.0
+    assert res["precision"] == 0.5
+    assert res["f1"] == 0.6667
+
+
 # ==============================================================================
 # 4. Tests for src.bird.csv_reporter
 # ==============================================================================
 
 def test_csv_reporter_and_predict_json(tmp_path: Path) -> None:
-    """Validates 16-column CSV output, summary aggregation, and official BIRD predict_dev.json."""
+    """Validates 19-column CSV output, summary aggregation, and official BIRD predict_dev.json."""
     csv_file = tmp_path / "reports" / "eval.csv"
     reporter = BirdCSVReporter(filepath=csv_file)
 
-    # Verify header
-    assert len(reporter.HEADERS) == 16
+    # Verify header (19 columns)
+    assert len(reporter.HEADERS) == 19
     with open(csv_file, "r", encoding="utf-8") as f:
         header = f.readline().strip().split(",")
-        assert len(header) == 16
+        assert len(header) == 19
         assert "execution_status" in header
+        assert "precision" in header
+        assert "recall" in header
+        assert "f1" in header
         assert "critic_verdict" not in header
 
     # Add sample rows:
@@ -358,14 +413,14 @@ def test_csv_reporter_and_predict_json(tmp_path: Path) -> None:
         question="Count students", evidence="", gold_sql="SELECT count(*) FROM students",
         agent_sql="SELECT count(id) FROM students", time_ms=500.0,
         execution_status="exec_erro", error="Syntax error near id", similarity_score=0.9,
-        execution_match=False, tokens_input=300, tokens_output=30
+        execution_match=False, precision=0.0, recall=0.0, f1=0.0, tokens_input=300, tokens_output=30
     )
     row_1_att2 = build_bird_comparison_row(
         question_id=1, attempt_number=2, db_id="school", difficulty="simple",
         question="Count students", evidence="", gold_sql="SELECT count(*) FROM students",
         agent_sql="SELECT count(*) FROM students", time_ms=400.0,
         execution_status="exec_ok", error="", similarity_score=1.0,
-        execution_match=True, tokens_input=400, tokens_output=25
+        execution_match=True, precision=1.0, recall=1.0, f1=1.0, tokens_input=400, tokens_output=25
     )
     reporter.append_row(row_1_att1)
     reporter.append_row(row_1_att2)
@@ -382,6 +437,10 @@ def test_csv_reporter_and_predict_json(tmp_path: Path) -> None:
     assert summary["sandbox_success_count"] == 1
     assert summary["by_difficulty"]["simple"]["count"] == 1
     assert summary["by_difficulty"]["simple"]["ex_rate"] == 100.0
+    assert summary["avg_precision"] == 1.0
+    assert summary["avg_recall"] == 1.0
+    assert summary["avg_f1"] == 1.0
+    assert summary["by_difficulty"]["simple"]["avg_recall"] == 1.0
 
 
     # Official predict_dev.json export verification

@@ -71,7 +71,7 @@ class BirdCSVReporter:
     Manages CSV persistence, summary metrics aggregation, and BIRD-compatible JSON exports.
     """
 
-    # 16 standardized columns matching build_bird_comparison_row() in src/bird/metrics.py
+    # 19 standardized columns matching build_bird_comparison_row() in src/bird/metrics.py
     HEADERS: list[str] = [
         "question_id",
         "attempt_number",
@@ -85,6 +85,9 @@ class BirdCSVReporter:
         "execution_status",
         "similarity_score",
         "execution_match",
+        "precision",
+        "recall",
+        "f1",
         "error",
         "tokens_input",
         "tokens_output",
@@ -284,6 +287,9 @@ class BirdCSVReporter:
             "ex_final_rate": 0.0,
             "ex_pass_at_1_count": 0,
             "ex_pass_at_1_rate": 0.0,
+            "avg_precision": 0.0,
+            "avg_recall": 0.0,
+            "avg_f1": 0.0,
             "sandbox_success_count": 0,
             "sandbox_success_rate": 0.0,
             "self_correction_count": 0,
@@ -304,9 +310,9 @@ class BirdCSVReporter:
                 "avg_similarity_score": 0.0,
             },
             "by_difficulty": {
-                "simple": {"count": 0, "ex_count": 0, "ex_rate": 0.0, "sandbox_success_rate": 0.0, "avg_tokens": 0.0, "avg_time_ms": 0.0},
-                "moderate": {"count": 0, "ex_count": 0, "ex_rate": 0.0, "sandbox_success_rate": 0.0, "avg_tokens": 0.0, "avg_time_ms": 0.0},
-                "challenging": {"count": 0, "ex_count": 0, "ex_rate": 0.0, "sandbox_success_rate": 0.0, "avg_tokens": 0.0, "avg_time_ms": 0.0},
+                "simple": {"count": 0, "ex_count": 0, "ex_rate": 0.0, "avg_precision": 0.0, "avg_recall": 0.0, "avg_f1": 0.0, "sandbox_success_rate": 0.0, "avg_tokens": 0.0, "avg_time_ms": 0.0},
+                "moderate": {"count": 0, "ex_count": 0, "ex_rate": 0.0, "avg_precision": 0.0, "avg_recall": 0.0, "avg_f1": 0.0, "sandbox_success_rate": 0.0, "avg_tokens": 0.0, "avg_time_ms": 0.0},
+                "challenging": {"count": 0, "ex_count": 0, "ex_rate": 0.0, "avg_precision": 0.0, "avg_recall": 0.0, "avg_f1": 0.0, "sandbox_success_rate": 0.0, "avg_tokens": 0.0, "avg_time_ms": 0.0},
             },
         }
 
@@ -334,11 +340,16 @@ class BirdCSVReporter:
         all_times_ms: list[float] = []
         all_similarities: list[float] = []
 
+        # Precision, recall, f1 totals (final attempt of each question)
+        final_precisions: list[float] = []
+        final_recalls: list[float] = []
+        final_f1s: list[float] = []
+
         # Data structure for tier aggregation
         tier_data: dict[str, dict[str, Any]] = {
-            "simple": {"count": 0, "ex_count": 0, "sandbox_success": 0, "tokens": 0, "times": []},
-            "moderate": {"count": 0, "ex_count": 0, "sandbox_success": 0, "tokens": 0, "times": []},
-            "challenging": {"count": 0, "ex_count": 0, "sandbox_success": 0, "tokens": 0, "times": []},
+            "simple": {"count": 0, "ex_count": 0, "sandbox_success": 0, "tokens": 0, "times": [], "precisions": [], "recalls": [], "f1s": []},
+            "moderate": {"count": 0, "ex_count": 0, "sandbox_success": 0, "tokens": 0, "times": [], "precisions": [], "recalls": [], "f1s": []},
+            "challenging": {"count": 0, "ex_count": 0, "sandbox_success": 0, "tokens": 0, "times": [], "precisions": [], "recalls": [], "f1s": []},
         }
 
         for q_id, attempts in grouped.items():
@@ -378,6 +389,19 @@ class BirdCSVReporter:
             if sandbox_ok:
                 tier_data[tier_key]["sandbox_success"] += 1
 
+            # 4. Precision, Recall, F1 extraction on final attempt
+            final_prec = float(final_attempt.get("precision") or 0.0)
+            final_rec = float(final_attempt.get("recall") or 0.0)
+            final_f1 = float(final_attempt.get("f1") or 0.0)
+
+            final_precisions.append(final_prec)
+            final_recalls.append(final_rec)
+            final_f1s.append(final_f1)
+
+            tier_data[tier_key]["precisions"].append(final_prec)
+            tier_data[tier_key]["recalls"].append(final_rec)
+            tier_data[tier_key]["f1s"].append(final_f1)
+
             # Sum tokens and times for this entire question across its attempts
             q_tokens_total = sum(int(a.get("tokens_total") or 0) for a in attempts)
             q_time_total = sum(float(a.get("time_ms") or 0.0) for a in attempts)
@@ -415,11 +439,17 @@ class BirdCSVReporter:
             t_sb = d["sandbox_success"]
             t_tok = d["tokens"]
             t_times = d["times"]
+            t_precs = d["precisions"]
+            t_recs = d["recalls"]
+            t_f1s = d["f1s"]
 
             by_difficulty_summary[tier] = {
                 "count": cnt,
                 "ex_count": t_ex,
                 "ex_rate": round((t_ex / cnt) * 100, 2) if cnt else 0.0,
+                "avg_precision": round(sum(t_precs) / cnt, 4) if cnt else 0.0,
+                "avg_recall": round(sum(t_recs) / cnt, 4) if cnt else 0.0,
+                "avg_f1": round(sum(t_f1s) / cnt, 4) if cnt else 0.0,
                 "sandbox_success_rate": round((t_sb / cnt) * 100, 2) if cnt else 0.0,
                 "avg_tokens": round(t_tok / cnt, 1) if cnt else 0.0,
                 "avg_time_ms": round(sum(t_times) / cnt, 1) if cnt else 0.0,
@@ -433,6 +463,9 @@ class BirdCSVReporter:
             "ex_final_rate": ex_final_rate,
             "ex_pass_at_1_count": ex_pass_at_1_count,
             "ex_pass_at_1_rate": ex_pass_at_1_rate,
+            "avg_precision": round(sum(final_precisions) / total_questions, 4) if total_questions else 0.0,
+            "avg_recall": round(sum(final_recalls) / total_questions, 4) if total_questions else 0.0,
+            "avg_f1": round(sum(final_f1s) / total_questions, 4) if total_questions else 0.0,
             "sandbox_success_count": sandbox_success_count,
             "sandbox_success_rate": sandbox_success_rate,
             "self_correction_count": self_correction_count,
@@ -504,11 +537,13 @@ class BirdCSVReporter:
             cnt = d.get("count", 0)
             ex_cnt = d.get("ex_count", 0)
             ex_rate = d.get("ex_rate", 0.0)
+            avg_rec = d.get("avg_recall", 0.0) * 100
+            avg_f1 = d.get("avg_f1", 0.0) * 100
             sb_rate = d.get("sandbox_success_rate", 0.0)
             avg_tok = d.get("avg_tokens", 0.0)
             avg_ms = d.get("avg_time_ms", 0.0)
             diff_rows.append(
-                f"| **{tier.capitalize()}** | {cnt} | {ex_cnt} | **{ex_rate:.1f}%** | {sb_rate:.1f}% | {avg_tok:,.0f} | {avg_ms:,.0f} ms |"
+                f"| **{tier.capitalize()}** | {cnt} | {ex_cnt} | **{ex_rate:.1f}%** | {avg_rec:.1f}% | {avg_f1:.1f}% | {sb_rate:.1f}% | {avg_tok:,.0f} | {avg_ms:,.0f} ms |"
             )
         diff_table = "\n".join(diff_rows)
 
@@ -533,14 +568,17 @@ class BirdCSVReporter:
 | **Pass@1 (First Attempt EX)** | **{summary.get('ex_pass_at_1_rate', 0.0):.2f}%** ({summary.get('ex_pass_at_1_count', 0)}/{summary.get('total_questions', 0)}) |
 | **Sandbox Execution Success Rate** | **{summary.get('sandbox_success_rate', 0.0):.2f}%** ({summary.get('sandbox_success_count', 0)}/{summary.get('total_questions', 0)}) |
 | **Self-Correction Recovery Rate** | **{summary.get('self_correction_rate', 0.0):.2f}%** ({summary.get('self_correction_count', 0)} corrected) |
+| **Average Result Recall (Final)** | **{summary.get('avg_recall', 0.0) * 100:.2f}%** ({summary.get('avg_recall', 0.0):.4f}) |
+| **Average Result Precision (Final)** | **{summary.get('avg_precision', 0.0) * 100:.2f}%** ({summary.get('avg_precision', 0.0):.4f}) |
+| **Average Result F1 Score (Final)** | **{summary.get('avg_f1', 0.0) * 100:.2f}%** ({summary.get('avg_f1', 0.0):.4f}) |
 | **Average Attempts per Question** | {summary.get('avg_attempts_per_question', 0.0):.2f} |
 | **Average SQL Text Similarity** | {summary.get('sql_similarity', {}).get('avg_similarity_score', 0.0):.4f} |
 
 ---
 
 ## 3. Results Stratified by Difficulty
-| Difficulty | Questions | EX Matches | EX Rate (%) | Sandbox Success (%) | Avg Tokens / Q | Avg Latency |
-|---|---|---|---|---|---|---|
+| Difficulty | Questions | EX Matches | EX Rate (%) | Avg Recall (%) | Avg F1 (%) | Sandbox Success (%) | Avg Tokens / Q | Avg Latency |
+|---|---|---|---|---|---|---|---|---|
 {diff_table}
 
 ---
@@ -631,12 +669,17 @@ class BirdCSVReporter:
                 gold_cols = f_case.get("gold_columns")
                 agent_results = f_case.get("agent_results")
                 agent_cols = f_case.get("agent_columns")
+                f_rec = float(f_case.get("recall") or 0.0)
+                f_prec = float(f_case.get("precision") or 0.0)
+                f_f1 = float(f_case.get("f1") or 0.0)
 
                 fail_blocks.append(f"### Question {qid} (`{db}` - {diff})")
                 fail_blocks.append("")
                 fail_blocks.append(f"**Question:** {question}")
                 if evidence:
                     fail_blocks.append(f"> **Evidence / Hint:** {evidence}")
+                fail_blocks.append("")
+                fail_blocks.append(f"**Result Metrics:** `Recall: {f_rec:.4f}` | `Precision: {f_prec:.4f}` | `F1: {f_f1:.4f}`")
                 fail_blocks.append("")
                 fail_blocks.append("**Gold SQL:**")
                 fail_blocks.append(f"```sql\n{gold_sql}\n```")

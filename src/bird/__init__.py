@@ -20,6 +20,7 @@ from src.bird.metrics import (
     compare_bird_results,
     normalize_sql,
     normalize_value,
+    results_f1_score,
     sql_similarity_score,
 )
 from src.bird.csv_reporter import (
@@ -38,6 +39,7 @@ __all__ = [
     "get_database_uri",
     "BirdQueryExecutor",
     "compare_bird_results",
+    "results_f1_score",
     "normalize_sql",
     "normalize_value",
     "sql_similarity_score",

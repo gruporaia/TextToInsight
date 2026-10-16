@@ -168,6 +168,9 @@ class BirdExecutionLogger:
         gold_results: list[Any] | None = None,
         agent_results: list[Any] | None = None,
         captured_trace: str = "",
+        precision: float = 0.0,
+        recall: float = 0.0,
+        f1: float = 0.0,
     ) -> None:
         """Writes a detailed, structured execution block for a single benchmark query."""
         if not self.enabled:
@@ -264,6 +267,9 @@ class BirdExecutionLogger:
 
         match_icon = "✅ TRUE" if match_success else "❌ FALSE"
         lines.append(f"[EX MATCH (Execution Accuracy)]: {match_icon}")
+        lines.append(
+            f"[RESULT METRICS (Column-Level)]: Recall: {recall:.4f} | Precision: {precision:.4f} | F1: {f1:.4f}"
+        )
         lines.append(f"[SQL SIMILARITY]: {similarity_score:.4f}")
         lines.append(f"[LATÊNCIA AGENTE]: {time_ms:.0f} ms")
 
@@ -290,6 +296,10 @@ class BirdExecutionLogger:
         pass1_pct = summary.get("ex_pass_at_1_rate", summary.get("pass1_pct", 0.0))
         self_corr_pct = summary.get("self_correction_rate", summary.get("self_correction_success_pct", 0.0))
 
+        avg_rec = summary.get("avg_recall", 0.0)
+        avg_prec = summary.get("avg_precision", 0.0)
+        avg_f1 = summary.get("avg_f1", 0.0)
+
         tokens_dict = summary.get("tokens") if isinstance(summary.get("tokens"), dict) else {}
         tok_tot = tokens_dict.get("total_all", summary.get("tokens_total", 0))
         tok_in = tokens_dict.get("total_input", summary.get("tokens_input", 0))
@@ -303,6 +313,9 @@ class BirdExecutionLogger:
             f"Total Questions Evaluated:          {total_q}",
             f"Execution Accuracy (Final EX):      {final_ex}/{total_q} ({final_pct:.2f}%)",
             f"Pass@1 EX Accuracy:                 {pass1_ex}/{total_q} ({pass1_pct:.2f}%)",
+            f"Average Result Recall (Final):      {avg_rec * 100:.2f}% ({avg_rec:.4f})",
+            f"Average Result Precision (Final):   {avg_prec * 100:.2f}% ({avg_prec:.4f})",
+            f"Average Result F1 Score (Final):    {avg_f1 * 100:.2f}% ({avg_f1:.4f})",
             f"Self-Correction Recovery Rate:      {self_corr_pct:.2f}%",
             f"Total Tokens Consumed:              {tok_tot:,} (Input: {tok_in:,} | Output: {tok_out:,})",
             f"Total Elapsed Time:                 {total_elapsed:.1f} seconds",
