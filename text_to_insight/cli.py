@@ -127,6 +127,18 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Modo de seleção de colunas para exploração. Padrão: off.",
     )
     parser.add_argument(
+        "--verificador",
+        choices=["off", "avisar"],
+        default="off",
+        help="Confere a SQL e o resultado depois da execução e avisa na resposta quando algo parece errado. Padrão: off.",
+    )
+    parser.add_argument(
+        "--verificador-jev",
+        choices=["on", "off"],
+        default="on",
+        help="Com o verificador ligado, o Jev é o verificador principal (as regras rodam em segundo plano). Precisa de TYPESAFE_API_KEY; sem ela, só as regras. Padrão: on.",
+    )
+    parser.add_argument(
         "pergunta",
         nargs="*",
         help="Pergunta em linguagem natural. Se omitida, usa uma pergunta padrão.",
@@ -186,6 +198,8 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         use_data_exploration=data_exploration_ativado,
         use_exploration_selector=exploration_selector_mode,
         model_kwargs=_montar_model_kwargs(args),
+        verificador=args.verificador,
+        verificador_jev=args.verificador_jev == "on",
     )
 
     # show_output=False para evitar prints duplicados no console, já que exibir_resultado_console é chamado manualmente.

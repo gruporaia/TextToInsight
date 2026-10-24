@@ -125,6 +125,7 @@ class BirdExecutionLogger:
         use_exploration = "ON" if config_info.get("use_data_exploration") else "OFF"
         exploration_selector = config_info.get("exploration_selector") or "off"
         schemacrawler = "ON" if config_info.get("schemacrawler") else "OFF"
+        verificador = config_info.get("verificador") or "off"
         infer_fks = "ON" if config_info.get("infer_fks") else "OFF"
         model_kwargs = config_info.get("model_kwargs") or {}
         kwargs_str = f" | ModelKwargs: {model_kwargs}" if model_kwargs else ""
@@ -143,7 +144,7 @@ class BirdExecutionLogger:
             f"Seed:               {seed}",
             f"Configuration:      RAG: {use_rag} | EnrichRAG: {enrich_rag} | Evidence: {use_evidence} | CoT: {use_cot} | "
             f"DataExploration: {use_exploration} (Selector: {exploration_selector}) | "
-            f"SchemaCrawler: {schemacrawler} | InferFKs: {infer_fks}{kwargs_str}",
+            f"SchemaCrawler: {schemacrawler} | InferFKs: {infer_fks} | Verificador: {verificador}{kwargs_str}",
             f"Filters:            DB: {db_filter} | Difficulty: {diff_filter}",
             f"Output Directory:   {self.output_dir}",
             f"Log File:           {self.log_path.name}",
@@ -277,6 +278,14 @@ class BirdExecutionLogger:
         tokens_out = int(agent_result.get("tokens_output") or 0)
         tokens_tot = int(agent_result.get("tokens_total") or (tokens_in + tokens_out))
         lines.append(f"[TOKENS]: Input: {tokens_in:,} | Output: {tokens_out:,} | Total: {tokens_tot:,}")
+        alertas = agent_result.get("alertas_verificador") or []
+        lines.append("[ALERTAS DO VERIFICADOR]: " + (" | ".join(a.get("mensagem", "") for a in alertas) if alertas else "(nenhum)"))
+        verif = agent_result.get("verificacao") or {}
+        if verif:
+            probs = " / ".join(f"{k} {v:.0%}" for k, v in (verif.get("probs_jev") or {}).items())
+            lines.append(f"[VERIFICADOR]: alerta {'sim' if verif.get('alerta') else 'não'} | nível: {verif.get('nivel') or '-'}"
+                         f" | jev: {verif.get('nivel_jev') or 'sem Jev'}" + (f" ({probs})" if probs else "")
+                         + f" | regras: {', '.join(verif.get('niveis_regras') or []) or '-'} | origem: {verif.get('origem') or '-'}")
 
         # 6. Block Footer
         lines.append(f"=== [END QID: {question_id}] ===\n\n")

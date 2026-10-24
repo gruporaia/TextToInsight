@@ -34,6 +34,8 @@ class InsightEngine:
         db_url: str = "",
         model_kwargs: dict | None = None,
         db_engine: Any = None,
+        verificador: str = "off",
+        verificador_jev: bool = True,
     ):
         """
         `db_engine`, se informado, deve ser uma Engine do SQLAlchemy já
@@ -74,6 +76,8 @@ class InsightEngine:
             enrich_rag=self._enrich_rag,
             model_kwargs=self._model_kwargs,
             db_engine=self._db_engine,
+            verificador=verificador,
+            verificador_jev=verificador_jev,
         )
 
         print(f"[CONFIG] HITL: {'ATIVADO' if self._hitl_ativado else 'DESATIVADO'}")
@@ -86,6 +90,7 @@ class InsightEngine:
         print(f"[CONFIG] ENRICH-RAG: {'ATIVADO' if self._enrich_rag else 'DESATIVADO'}")
         print(f"[CONFIG] INFERIR-FKS-VIRTUAIS: {'ATIVADO' if self._inferir_fks_virtuais else 'DESATIVADO'}")
         print(f"[CONFIG] USAR-SCHEMACRAWLER: {'ATIVADO' if self._usar_schemacrawler else 'DESATIVADO'}")
+        print(f"[CONFIG] VERIFICADOR: {verificador.upper()}" + (" + JEV" if verificador != "off" and verificador_jev else ""))
         print(f"[CONFIG] MODEL_KWARGS: {self._model_kwargs or 'PADRÃO DO PROVEDOR'}")
 
     def _config(self, thread_id: str) -> dict[str, Any]:

@@ -13,6 +13,7 @@ Nós disponíveis:
     - csv_saver: Salva resultado da query em CSV.
     - graph_generator: Gera gráfico matplotlib a partir do CSV.
     - data_exploration: Calcula estatísticas por coluna das tabelas recuperadas.
+    - verificador: Confere a SQL e o resultado depois da execução (regras, sem LLM).
 """
 
 from .planner import nos_nodo_planejador
@@ -25,6 +26,7 @@ from .sandbox import nos_nodo_sandbox
 from .response import nos_nodo_resposta
 from .csv_saver import nos_nodo_salvar_csv
 from .graph_generator import nos_nodo_gerador_grafico
+from .verificador import nos_nodo_verificador
 
 __all__ = [
     "nos_nodo_planejador",
@@ -38,5 +40,6 @@ __all__ = [
     "nos_nodo_salvar_csv",
     "nos_nodo_gerador_grafico",
     "nos_nodo_enrich",
+    "nos_nodo_verificador",
 ]
 

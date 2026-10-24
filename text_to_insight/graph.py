@@ -30,6 +30,7 @@ from .nodes import (
     nos_nodo_salvar_csv,
     nos_nodo_gerador_grafico,
     nos_nodo_enrich,
+    nos_nodo_verificador,
 )
 from .routers import roteador_sandbox, roteador_planejador, roteador_grafico, roteador_schema
 from .model_selection import get_model
@@ -39,7 +40,7 @@ def nos_nodo_espera_humana(estado: EstadoTextToInsight):
     return estado
 
 class Graph:
-    def __init__(self, api_key: str, model: str, hitl: bool = True, enable_graphs: bool = True, use_cot: bool = True, use_data_exploration: bool = True, use_exploration_selector: str = "off", use_rag: bool = True, enrich_rag: bool = False, model_kwargs: dict | None = None, db_engine=None):
+    def __init__(self, api_key: str, model: str, hitl: bool = True, enable_graphs: bool = True, use_cot: bool = True, use_data_exploration: bool = True, use_exploration_selector: str = "off", use_rag: bool = True, enrich_rag: bool = False, model_kwargs: dict | None = None, db_engine=None, verificador: str = "off", verificador_jev: bool = True):
         self.llm = get_model(model, api_key, **(model_kwargs or {}))
         self.memory = MemorySaver()
         self.enable_graphs = enable_graphs
@@ -53,6 +54,10 @@ class Graph:
         # closure/partial diretamente para os nos que precisam dela, então
         # nunca e persistida pelo checkpointer (MemorySaver).
         self.db_engine = db_engine
+        # Verificador depois da SQL: "off" (fora do grafo) ou "avisar".
+        self.verificador = verificador
+        # O Jev é o verificador principal (as regras rodam em segundo plano e são o plano B sem chave).
+        self.verificador_jev = verificador_jev
         self.grafo_text_to_insight = self._compilar_grafo(hitl, enrich_rag)
 
     def _construir_grafo_text_to_insight(self, hitl: bool, enrich_rag: bool) -> StateGraph:
@@ -80,6 +85,14 @@ class Graph:
         construtor_grafo.add_node("salvar_csv", nos_nodo_salvar_csv)
         construtor_grafo.add_node("gerador_grafico", partial(nos_nodo_gerador_grafico, llm=self.llm))
         construtor_grafo.add_node("resposta", partial(nos_nodo_resposta, llm=self.llm))
+        # Depois de uma execução, o sandbox vai para salvar_csv/resposta. Com o verificador ligado,
+        # ele passa antes pelo verificador, que segue para o mesmo destino.
+        destino_apos_sandbox = "salvar_csv" if self.enable_graphs else "resposta"
+        mapa_sandbox = {"salvar_csv": "salvar_csv", "resposta": "resposta", "planejador": "planejador"}
+        if self.verificador != "off":
+            construtor_grafo.add_node("verificador", partial(nos_nodo_verificador, modo=self.verificador, usar_jev=self.verificador_jev, **engine_kwargs))
+            construtor_grafo.add_edge("verificador", destino_apos_sandbox)
+            mapa_sandbox.update({"salvar_csv": "verificador", "resposta": "verificador"})
 
         # 2. ARESTAS FIXAS
         construtor_grafo.add_edge(START, "planejador")
@@ -102,11 +115,7 @@ class Graph:
         construtor_grafo.add_conditional_edges(
             "sandbox",
             partial(roteador_sandbox, enable_graphs=self.enable_graphs),
-            {
-                "salvar_csv": "salvar_csv",
-                "resposta": "resposta",
-                "planejador": "planejador",
-            }
+            mapa_sandbox,
         )
 
         construtor_grafo.add_conditional_edges(

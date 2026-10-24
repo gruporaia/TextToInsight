@@ -85,6 +85,10 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     caminho_grafico: str
     grafico_gerado: bool
     ultimo_prompt: str
+    # Alertas do nó verificador ({"regra", "mensagem"}); vazio quando o verificador está desligado.
+    alertas_verificador: list[dict[str, str]]
+    # Resultado do verificador: {"alerta", "niveis_regras", "nivel_jev", "probs_jev", "origem"}.
+    verificacao: dict[str, Any]
 
     # Campos exclusivos para métricas. Possibilita a soma automática dos tokens utilizados
     # por cada chamada do Gemini nos vários diferentes nós.

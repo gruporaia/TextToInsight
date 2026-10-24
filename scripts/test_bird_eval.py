@@ -191,6 +191,18 @@ def parse_arguments() -> argparse.Namespace:
         help="Enable SchemaCrawler for schema introspection (default: off)",
     )
     parser.add_argument(
+        "--verificador",
+        choices=["off", "avisar"],
+        default="off",
+        help="Verificador depois da SQL: off ou avisar (default: off)",
+    )
+    parser.add_argument(
+        "--verificador-jev",
+        choices=["on", "off"],
+        default="on",
+        help="Jev como verificador principal, regras em segundo plano; precisa de TYPESAFE_API_KEY, sem ela só as regras (default: on)",
+    )
+    parser.add_argument(
         "--timeout",
         type=int,
         default=30,
@@ -408,6 +420,7 @@ def main() -> None:
     print(f"   - Data Exploration: {args.data_exploration}")
     print(f"   - Exploration Selector: {args.exploration_selector}")
     print(f"   - SchemaCrawler: {args.schemacrawler}")
+    print(f"   - Verificador: {args.verificador} (Jev: {args.verificador_jev})")
     print(f"   - Logging: {args.log}")
     print(f"   - Total Questions to Run: {len(examples)}")
     print("-" * 80 + "\n")
@@ -423,6 +436,7 @@ def main() -> None:
         "use_rag": (args.rag == "on"),
         "enrich_rag": (args.enrich_rag == "on"),
         "use_evidence": (args.use_evidence == "on"),
+        "verificador": args.verificador + (" + jev" if args.verificador_jev == "on" else ""),
         "use_cot": (args.cot == "on"),
         "use_data_exploration": (args.data_exploration == "on"),
         "exploration_selector": args.exploration_selector,
@@ -501,6 +515,8 @@ def main() -> None:
                             inferir_fks_virtuais=args.infer_fks,
                             usar_schemacrawler=(args.schemacrawler == "on"),
                             model_kwargs=model_kwargs,
+                            verificador=args.verificador,
+                            verificador_jev=(args.verificador_jev == "on"),
                         )
                     except Exception as e:
                         print(f"     ❌ Failed to instantiate InsightEngine for db '{db_id}': {e}")
@@ -743,6 +759,7 @@ def main() -> None:
         "exploration_selector": args.exploration_selector,
         "schemacrawler": (args.schemacrawler == "on"),
         "use_evidence": (args.use_evidence == "on"),
+        "verificador": args.verificador + (" + jev" if args.verificador_jev == "on" else ""),
         "db_filter": args.db_filter,
         "difficulty_filter": args.difficulty,
     }

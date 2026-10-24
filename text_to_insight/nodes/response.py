@@ -12,6 +12,7 @@ import os
 
 from ..state import EstadoTextToInsight
 from ..utils import extrair_tokens
+from .verificador import texto_do_aviso
 
 PROMPT_RESPONSE = """Você é um assistente que transforma resultados de consultas SQL
 e amostras de dados em uma resposta em linguagem natural clara e concisa para o
@@ -120,6 +121,11 @@ def nos_nodo_resposta(estado: EstadoTextToInsight, llm: BaseChatModel) -> dict:
                 texto = f"Não foram encontrados resultados para a sua pergunta: '{pergunta}'."
             else:
                 texto = f"Resultado: {total} linha(s) retornada(s).{exemplo}"
+
+    aviso = texto_do_aviso(estado.get("alertas_verificador") or [], estado.get("verificacao") or {})
+    if aviso:
+        texto = texto + aviso
+        print("[RESPOSTA] Aviso do verificador acrescentado à resposta.")
 
     print(f"[RESPOSTA] Texto gerado ({len(texto)} bytes)")
     print(f"[RESPOSTA] TExto gerado: {texto}")
