@@ -286,3 +286,68 @@ def test_dica_colada_na_pergunta_nao_esconde_coluna_a_mais():
     pergunta = "Identify the gender of the superhero.\nHint: Phoenix Force refers to power_name = 'Phoenix Force', and gender to gender"
     regras = _regras(ver.checar(pergunta, "SELECT s.name, g.gender FROM s JOIN g ON 1=1", [{"name": "Jean", "gender": "F"}]))
     assert regras == ["colunas_nao_pedidas"]
+
+
+# ---------------------------------------------------------------------------
+# Colunas juntadas (regra firme) e filtros não pedidos (dúvida).
+# ---------------------------------------------------------------------------
+
+def test_colunas_juntadas_no_select_final():
+    # Q1375 do BIRD: nome e sobrenome numa coluna só
+    alertas = ver.checar("List all the members.", "SELECT first_name || ' ' || last_name AS full_name FROM member", [{"full_name": "a b"}])
+    assert "colunas_juntadas" in _regras(alertas)
+    assert "colunas_juntadas" in _regras(ver.checar("Names?", "SELECT CONCAT(a, b) FROM t", [{"x": "ab"}]))
+    # concatenar só no filtro não conta
+    assert ver.checar("Who?", "SELECT name FROM t WHERE first || last = 'ab'", [{"name": "x"}]) == []
+
+
+Q37 = ("What is the complete address of the school with the lowest excellence rate? Indicate the Street, City, Zip and State."
+       "\nHint: Execellence Rate = NumGE1500 / NumTstTakr; complete address has Street, City, State, Zip code")
+
+
+def test_filtros_que_a_pergunta_nao_pediu():
+    sql = ("SELECT sch.Street FROM satscores AS sat JOIN schools AS sch ON sch.CDSCode = sat.cds "
+           "WHERE sat.rtype = 'S' AND sat.NumTstTakr > 0 AND sat.NumGE1500 IS NOT NULL ORDER BY 1 LIMIT 1")
+    assert set(ver.checar_duvidas(Q37, sql)) == {"sat.rtype = 'S'", "sat.NumTstTakr > 0", "sat.NumGE1500 IS NOT NULL"}
+
+
+def test_filtro_citado_pelo_valor_ou_pela_coluna_nao_e_duvida():
+    # Q1514: a data e a hora estão na pergunta/dica, só os nomes das colunas não
+    q = "What kind of currency did the customer paid at 16:25:00 in 2012/8/24?\nHint: '2012/8/24' can be represented by '2012-08-24';"
+    assert ver.checar_duvidas(q, "SELECT c.Currency FROM t WHERE t.Date = '2012-08-24' AND t.Time = '16:25:00'") == []
+    # Q1078: o valor (nome do jogador) está na pergunta
+    q = "Which player is older, Aaron Lennon or Abdelaziz Barrada?"
+    assert ver.checar_duvidas(q, "SELECT player_name FROM Player WHERE player_name IN ('Aaron Lennon', 'Abdelaziz Barrada')") == []
+    # Q1323: "not fundraisers" cobre type <> 'Fundraiser'
+    q = "List all the names of events that had an attendance of over 20 students but were not fundraisers."
+    assert ver.checar_duvidas(q, "SELECT event_name FROM event e WHERE e.type <> 'Fundraiser'") == []
+    # a coluna está na pergunta (Gender ~ gender) e o valor curto 'F' não é acusado só por existir a letra f no texto
+    assert ver.checar_duvidas("How many female clients?\nHint: female refers to gender = 'F'", "SELECT COUNT(*) FROM client WHERE gender = 'F'") == []
+
+
+def test_valor_curto_so_conta_como_palavra_inteira():
+    # 'S' não pode ser "citado" só porque a letra s aparece em "schools"
+    assert ver.checar_duvidas("How many schools are there?", "SELECT COUNT(*) FROM satscores WHERE rtype = 'S'") == ["rtype = 'S'"]
+
+
+def test_is_not_null_pedido_na_pergunta_nao_e_duvida():
+    q = "How many schools have a non-null phone number?"
+    assert ver.checar_duvidas(q, "SELECT COUNT(*) FROM schools WHERE Phone IS NOT NULL") == []
+
+
+def test_duvida_nao_liga_o_alerta_firme_e_tem_aviso_proprio():
+    estado = {"status": "exec_ok", "pergunta_atual": Q37,
+              "sql_gerada": "SELECT Street FROM satscores sat JOIN schools sch ON sch.CDSCode = sat.cds WHERE sat.rtype = 'S' ORDER BY 1 LIMIT 1",
+              "linhas_resultado_completo": [{"Street": "Rua X"}]}
+    out = ver.nos_nodo_verificador(estado, usar_jev=False)
+    assert out["verificacao"]["alerta"] is False
+    assert out["verificacao"]["duvidas"] == ["sat.rtype = 'S'"]
+    aviso = ver.texto_do_aviso(out["alertas_verificador"], out["verificacao"])
+    assert aviso == "\n\nConfira se é isso que você quer: a consulta acrescentou filtros que a pergunta não pediu: sat.rtype = 'S'."
+    assert "pode estar errada" not in aviso
+
+
+def test_aviso_de_erro_vem_antes_da_duvida():
+    verif = {"alerta": True, "nivel": "alta", "nivel_jev": "", "niveis_regras": ["alta"], "duvidas": ["x > 0"]}
+    aviso = ver.texto_do_aviso([{"regra": "resultado_vazio", "mensagem": "a consulta não devolveu nenhuma linha"}], verif)
+    assert aviso.index("pode estar errada") < aviso.index("Confira se é isso que você quer")

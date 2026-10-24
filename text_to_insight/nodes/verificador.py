@@ -50,6 +50,7 @@ MENSAGENS = {
     "numero_com_varias_colunas": "a pergunta pede um número, mas a resposta tem várias colunas ({detalhe})",
     "colunas_nao_pedidas": "a resposta tem colunas que a pergunta não pediu ({detalhe})",
     "coluna_de_apoio": "a resposta devolve colunas usadas só para filtrar ou ordenar ({detalhe})",
+    "colunas_juntadas": "a resposta junta várias colunas numa só ({detalhe})",
 }
 
 
@@ -157,7 +158,117 @@ def checar(
         apoio = _colunas_de_apoio(arvore)
         if apoio:
             alerta("coluna_de_apoio", ", ".join(apoio))
+    if arvore is not None:
+        juntadas = _colunas_juntadas(arvore)
+        if juntadas:
+            alerta("colunas_juntadas", ", ".join(juntadas))
     return alertas
+
+
+def _colunas_juntadas(arvore) -> list[str]:
+    """Expressões do SELECT final que concatenam colunas (|| ou CONCAT)."""
+    sel = arvore if isinstance(arvore, exp.Select) else arvore.find(exp.Select)
+    if sel is None:
+        return []
+    juntadas = []
+    for e in sel.expressions:
+        alvo = e.this if isinstance(e, exp.Alias) else e
+        if alvo.find(exp.DPipe) is not None or alvo.find(exp.Concat) is not None or alvo.find(exp.ConcatWs) is not None:
+            juntadas.append(e.alias_or_name or alvo.sql(dialect="sqlite")[:40])
+    return juntadas
+
+
+# ---------------------------------------------------------------------------
+# Dúvidas: filtros que a pergunta não pediu. Não é alerta firme (às vezes o filtro está certo, ex.:
+# rtype = 'S' para "escolas"); vira um "confira se é isso que você quer", que é onde o HITL vai entrar.
+# ---------------------------------------------------------------------------
+
+_PEDIU_EXCLUIR = re.compile(r"\b(not null|null|exclud\w*|non-?zero|greater than 0|more than 0|não nul\w*|diferente de zero)\b", re.I)
+
+
+def _pedacos_da_coluna(nome: str) -> list[str]:
+    """'NumTstTakr' -> num, tst, takr; 'first_name' -> first, name."""
+    partes = re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+", nome.replace("_", " "))
+    return [p.lower() for p in partes if len(p) > 2] or [nome.lower()]
+
+
+def _coluna_citada(nome: str, texto: str) -> bool:
+    if nome.lower() in texto.lower():
+        return True
+    palavras = set(re.findall(r"[a-z0-9]+", texto.lower()))
+    return all(any(w.startswith(p[:4]) for w in palavras) for p in _pedacos_da_coluna(nome))
+
+
+def _valor_citado(outro, texto: str) -> bool:
+    """O valor comparado aparece na pergunta ou na dica (ex.: 'Fresno Unified', 400, '2012-08-24', 'Fundraiser')."""
+    if outro is None:
+        return False
+    literais = [outro] if isinstance(outro, exp.Literal) else list(outro.find_all(exp.Literal))
+    t = texto.lower()
+    t_sem = re.sub(r"[^a-z0-9]", "", t)
+    for lit in literais:
+        v = str(lit.this).lower().strip("%")
+        if not v:
+            continue
+        v_sem = re.sub(r"[^a-z0-9]", "", v)
+        if len(v) < 3:
+            if re.search(r"(?<![a-z0-9])" + re.escape(v) + r"(?![a-z0-9])", t):
+                return True
+            continue
+        if v in t or (len(v_sem) >= 3 and v_sem in t_sem) or (len(v) >= 6 and v[:6] in t):
+            return True
+    return False
+
+
+def _condicoes_de_filtro(arvore):
+    """(condição, coluna, valor) dos filtros coluna x valor em WHERE e HAVING; junções coluna x coluna ficam de fora."""
+    for sel in arvore.find_all(exp.Select):
+        for parte in ("where", "having"):
+            no = sel.args.get(parte)
+            if no is None:
+                continue
+            for c in no.find_all(exp.EQ, exp.NEQ, exp.GT, exp.GTE, exp.LT, exp.LTE, exp.In, exp.Like, exp.Is, exp.Not):
+                if isinstance(c, exp.Not):
+                    if not isinstance(c.this, exp.Is):
+                        continue
+                    col, outro = c.this.this, c.this.expression
+                elif isinstance(c, exp.Is) and isinstance(c.parent, exp.Not):
+                    continue  # já tratado como IS NOT NULL
+                else:
+                    col, outro = c.this, c.args.get("expression")
+                    if isinstance(c, exp.In):
+                        outro = exp.Tuple(expressions=c.expressions) if c.expressions else c.args.get("query")
+                if not isinstance(col, exp.Column) or isinstance(outro, exp.Column):
+                    continue
+                yield c, col, outro
+
+
+def _defensivo(c, outro) -> bool:
+    if isinstance(c, exp.Not):
+        return True  # IS NOT NULL
+    eh_zero = isinstance(outro, exp.Literal) and outro.this in ("0", "")
+    return (isinstance(c, exp.GT) and eh_zero and outro.this == "0") or (isinstance(c, exp.NEQ) and eh_zero)
+
+
+def checar_duvidas(pergunta: str, sql: str) -> list[str]:
+    """Filtros que a pergunta e a dica não pedem: coluna e valor não citados, ou filtro defensivo não pedido."""
+    from .jev_cliente import separar_dica
+    texto_pergunta, dica = separar_dica(pergunta)
+    texto = f"{texto_pergunta} {dica}"
+    arvore = _parse(sql) if sql else None
+    if arvore is None:
+        return []
+    filtros = []
+    for c, col, outro in _condicoes_de_filtro(arvore):
+        nao_citado = not _coluna_citada(col.name, texto) and not _valor_citado(outro, texto)
+        defensivo = _defensivo(c, outro) and not _PEDIU_EXCLUIR.search(texto)
+        if nao_citado or defensivo:
+            filtro = c.sql(dialect="sqlite")
+            if isinstance(c, exp.Not):
+                filtro = f"{col.sql(dialect='sqlite')} IS NOT NULL"
+            if filtro not in filtros:
+                filtros.append(filtro)
+    return filtros
 
 
 def _abrir_sqlite(estado: EstadoTextToInsight, engine=None):
@@ -227,6 +338,7 @@ NIVEL_DA_REGRA = {
     "numero_com_varias_colunas": "media",
     "colunas_nao_pedidas": "baixa",
     "coluna_de_apoio": "baixa",
+    "colunas_juntadas": "baixa",
 }
 DESCRICAO_DO_NIVEL = {
     "alta": "um filtro usa um valor que não existe nos dados ou o resultado veio vazio",
@@ -361,12 +473,26 @@ def nos_nodo_verificador(estado: EstadoTextToInsight, modo: str = "avisar", engi
           f" | jev: {jev} | regras: {', '.join(verificacao['niveis_regras']) or '-'} | origem: {verificacao['origem'] or '-'}")
     if alertas:
         print("[VERIFICADOR] Detalhes das regras: " + " | ".join(a["mensagem"] for a in alertas))
+    try:
+        verificacao["duvidas"] = checar_duvidas(pergunta, sql)
+    except Exception as e:
+        print(f"[VERIFICADOR] Falha ao procurar filtros não pedidos: {e}")
+        verificacao["duvidas"] = []
+    if verificacao["duvidas"]:
+        print("[VERIFICADOR] Dúvida (filtros não pedidos): " + " | ".join(verificacao["duvidas"]))
     return {"alertas_verificador": alertas, "verificacao": verificacao}
 
 
 def texto_do_aviso(alertas: list[dict[str, str]], verificacao: dict[str, Any] | None = None) -> str:
-    """Aviso no fim da resposta: primeiro o que o Jev apontou, depois os detalhes das regras."""
+    """Aviso no fim da resposta: o de erro (Jev primeiro, regras como detalhe) e, depois, o de dúvida."""
     verificacao = verificacao or {}
+    duvidas = verificacao.get("duvidas") or []
+    texto_duvida = ("\n\nConfira se é isso que você quer: a consulta acrescentou filtros que a pergunta não pediu: "
+                    + "; ".join(duvidas) + ".") if duvidas else ""
+    return _texto_do_erro(alertas, verificacao) + texto_duvida
+
+
+def _texto_do_erro(alertas: list[dict[str, str]], verificacao: dict[str, Any]) -> str:
     if not alertas and not verificacao.get("alerta"):
         return ""
     nivel_jev = verificacao.get("nivel_jev", "")
