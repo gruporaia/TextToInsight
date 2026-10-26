@@ -556,7 +556,6 @@ def test_extracao_schema_com_schemacrawler():
         db_path=DB_PATH,
         dialeto="sqlite",
         sc_bin=SC_BIN,
-        cfg={},
     )
 
     assert "orders" in schema.lower()
