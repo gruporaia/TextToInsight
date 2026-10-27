@@ -319,6 +319,7 @@ def explore_table(
     conn: sqlite3.Connection,
     table_name: str,
     columns_to_explore: list[str] | None = None,
+    row_count: int | None = None,
 ) -> TableExplorationResult:
     """
     Calcula estatísticas por coluna para uma tabela SQLite.
@@ -327,16 +328,20 @@ def explore_table(
         conn: Conexão SQLite (preferencialmente read-only).
         table_name: Nome da tabela a explorar.
         columns_to_explore: Lista opcional de colunas a explorar. Se omitida (ou None), explora todas.
+        row_count: Contagem de linhas já conhecida (ex: vinda do cache) para evitar SELECT COUNT(*).
 
     Returns:
         TableExplorationResult com stats por coluna.
     """
     cursor = conn.cursor()
 
-    # Contagem total de linhas (estimativa rápida)
+    # Contagem total de linhas (reaproveita do cache se já conhecida)
     safe_tbl = f'"{table_name}"'
-    cursor.execute(f"SELECT COUNT(*) FROM {safe_tbl}")
-    total_rows = cursor.fetchone()[0]
+    if row_count is None:
+        cursor.execute(f"SELECT COUNT(*) FROM {safe_tbl}")
+        total_rows = cursor.fetchone()[0]
+    else:
+        total_rows = row_count
 
     # Introspect colunas
     cursor.execute(f"PRAGMA table_info({safe_tbl})")
@@ -372,6 +377,7 @@ def explore_tables(
     db_path: str,
     table_names: list[str],
     colunas_para_explorar: dict[str, list[str]] | None = None,
+    known_row_counts: dict[str, int] | None = None,
 ) -> dict[str, TableExplorationResult]:
     """
     Explora múltiplas tabelas e retorna dict indexado por nome de tabela.
@@ -380,6 +386,7 @@ def explore_tables(
         db_path: Caminho para o arquivo SQLite.
         table_names: Lista de nomes de tabelas a explorar.
         colunas_para_explorar: Dicionário opcional mapeando tabela para lista de colunas a explorar.
+        known_row_counts: Dicionário opcional mapeando tabela para contagem de linhas já conhecida.
 
     Returns:
         Dict[table_name, TableExplorationResult]
@@ -391,7 +398,7 @@ def explore_tables(
 
     conn = sqlite3.connect(f"file:{caminho}?mode=ro", uri=True)
     try:
-        return _explorar_tabelas(conn, table_names, colunas_para_explorar)
+        return _explorar_tabelas(conn, table_names, colunas_para_explorar, known_row_counts)
     finally:
         conn.close()
 
@@ -400,6 +407,7 @@ def _explorar_tabelas(
     conn: Any,
     table_names: list[str],
     colunas_para_explorar: dict[str, list[str]] | None,
+    known_row_counts: dict[str, int] | None = None,
 ) -> dict[str, TableExplorationResult]:
     results: dict[str, TableExplorationResult] = {}
     for table_name in table_names:
@@ -407,7 +415,8 @@ def _explorar_tabelas(
             cols_to_explore = None
             if colunas_para_explorar and table_name in colunas_para_explorar:
                 cols_to_explore = colunas_para_explorar[table_name]
-            results[table_name] = explore_table(conn, table_name, cols_to_explore)
+            row_count = known_row_counts.get(table_name) if known_row_counts else None
+            results[table_name] = explore_table(conn, table_name, cols_to_explore, row_count=row_count)
         except Exception as e:
             print(f"[DATA_EXPLORATION] Erro ao explorar tabela '{table_name}': {e}")
             continue
@@ -429,44 +438,145 @@ def format_exploration_for_prompt(
     if not exploration_results:
         return ""
 
-    parts = ["=== DATA EXPLORATION (estatísticas amostrais) ===\n"]
+    parts = [_CABECALHO_EXPLORACAO]
 
     for table_name, table_result in exploration_results.items():
-        parts.append(f"Tabela: {table_name} (~{table_result.row_count_estimate} linhas)")
+        parts.append(_formatar_tabela(table_name, table_result.row_count_estimate))
 
         for col_name, stats in table_result.columns.items():
-            if isinstance(stats, NumericColumnStats):
-                parts.append(
-                    f"  {col_name} [numeric]: "
-                    f"mean={stats.mean}, median={stats.median}, std={stats.std_dev}, "
-                    f"min={stats.min}, max={stats.max}, null_rate={stats.null_rate}"
-                )
-            elif isinstance(stats, CategoricalColumnStats):
-                top_str = ", ".join(
-                    f"{v['value']}({v['count']})" for v in stats.top_values
-                )
-                samples_str = ", ".join(f'"{s}"' for s in stats.sample_values)
-                parts.append(
-                    f"  {col_name} [categorical]: "
-                    f"cardinality={stats.cardinality}, null_rate={stats.null_rate}, "
-                    f"top=[{top_str}], samples=[{samples_str}]"
-                )
-            elif isinstance(stats, DateColumnStats):
-                samples_str = ", ".join(f'"{s}"' for s in stats.sample_values)
-                parts.append(
-                    f"  {col_name} [date]: "
-                    f"min={stats.min}, max={stats.max}, "
-                    f"null_rate={stats.null_rate}, samples=[{samples_str}]"
-                )
-            elif isinstance(stats, BooleanColumnStats):
-                parts.append(
-                    f"  {col_name} [boolean]: "
-                    f"true={stats.true_count}, false={stats.false_count}, "
-                    f"null_rate={stats.null_rate}"
-                )
+            linha = _formatar_coluna(col_name, stats)
+            if linha:
+                parts.append(linha)
         parts.append("")  # Linha em branco entre tabelas
 
     return "\n".join(parts)
+
+
+_CABECALHO_EXPLORACAO = "=== DATA EXPLORATION (estatísticas amostrais) ===\n"
+
+
+def _formatar_tabela(table_name: str, row_count: int) -> str:
+    return f"Tabela: {table_name} (~{row_count} linhas)"
+
+
+def _formatar_coluna(col_name: str, stats: ColumnStats) -> str | None:
+    if isinstance(stats, NumericColumnStats):
+        return (
+            f"  {col_name} [numeric]: "
+            f"mean={stats.mean}, median={stats.median}, std={stats.std_dev}, "
+            f"min={stats.min}, max={stats.max}, null_rate={stats.null_rate}"
+        )
+    if isinstance(stats, CategoricalColumnStats):
+        top_str = ", ".join(
+            f"{v['value']}({v['count']})" for v in stats.top_values
+        )
+        samples_str = ", ".join(f'"{s}"' for s in stats.sample_values)
+        return (
+            f"  {col_name} [categorical]: "
+            f"cardinality={stats.cardinality}, null_rate={stats.null_rate}, "
+            f"top=[{top_str}], samples=[{samples_str}]"
+        )
+    if isinstance(stats, DateColumnStats):
+        samples_str = ", ".join(f'"{s}"' for s in stats.sample_values)
+        return (
+            f"  {col_name} [date]: "
+            f"min={stats.min}, max={stats.max}, "
+            f"null_rate={stats.null_rate}, samples=[{samples_str}]"
+        )
+    if isinstance(stats, BooleanColumnStats):
+        return (
+            f"  {col_name} [boolean]: "
+            f"true={stats.true_count}, false={stats.false_count}, "
+            f"null_rate={stats.null_rate}"
+        )
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Cache da exploração (por pergunta)
+#
+# A cada falha de execução o retriever devolve mais tabelas (top_k cresce),
+# e sem cache o nó recalculava as estatísticas de TODAS elas — inclusive as já
+# exploradas na tentativa anterior. O cache guarda, por tabela, a contagem de
+# linhas e a linha formatada de cada coluna já explorada; só o que falta é
+# calculado. Fica no estado (strings/ints, serializável pelo checkpointer) e é
+# zerado a cada pergunta em `construir_estado_inicial`.
+#
+# Formato: {tabela: {"linhas": int, "colunas": {coluna: linha}, "completa": bool}}
+# "completa" indica que a tabela foi explorada sem filtro de colunas.
+# ---------------------------------------------------------------------------
+
+def _pendencias_exploracao(
+    table_names: list[str],
+    colunas_para_explorar: dict[str, list[str]] | None,
+    cache: dict[str, dict[str, Any]],
+) -> tuple[list[str], dict[str, list[str]]]:
+    """Separa o que ainda precisa ser explorado: tabelas inteiras e colunas faltantes."""
+    explorar_tudo: list[str] = []
+    explorar_parcial: dict[str, list[str]] = {}
+    for tabela in table_names:
+        pedidas = colunas_para_explorar.get(tabela) if colunas_para_explorar else None
+        entrada = cache.get(tabela)
+        if entrada and entrada["completa"]:
+            continue
+        if pedidas is None:
+            explorar_tudo.append(tabela)
+            continue
+        faltando = [c for c in pedidas if not entrada or c not in entrada["colunas"]]
+        if entrada is None or faltando:
+            explorar_parcial[tabela] = faltando
+    return explorar_tudo, explorar_parcial
+
+
+def _atualizar_cache(
+    cache: dict[str, dict[str, Any]],
+    resultados: dict[str, TableExplorationResult],
+    completas: set[str],
+) -> dict[str, dict[str, Any]]:
+    """Devolve um novo cache com os resultados mesclados (não altera o recebido)."""
+    novo = {
+        t: {"linhas": e["linhas"], "colunas": dict(e["colunas"]), "completa": e["completa"]}
+        for t, e in cache.items()
+    }
+    for tabela, resultado in resultados.items():
+        colunas = {}
+        for col, stats in resultado.columns.items():
+            linha = _formatar_coluna(col, stats)
+            if linha:
+                colunas[col] = linha
+        entrada = novo.get(tabela)
+        if tabela in completas or entrada is None:
+            # Exploração completa mantém a ordem original das colunas (PRAGMA).
+            anteriores = entrada["colunas"] if entrada else {}
+            novo[tabela] = {
+                "linhas": resultado.row_count_estimate,
+                "colunas": {**colunas, **{c: l for c, l in anteriores.items() if c not in colunas}},
+                "completa": tabela in completas,
+            }
+        else:
+            entrada["linhas"] = resultado.row_count_estimate
+            entrada["colunas"].update(colunas)
+    return novo
+
+
+def _formatar_do_cache(
+    table_names: list[str],
+    colunas_para_explorar: dict[str, list[str]] | None,
+    cache: dict[str, dict[str, Any]],
+) -> str:
+    """Monta o mesmo texto de `format_exploration_for_prompt`, a partir do cache."""
+    parts: list[str] = []
+    for tabela in table_names:
+        entrada = cache.get(tabela)
+        if entrada is None:  # exploração da tabela falhou
+            continue
+        pedidas = colunas_para_explorar.get(tabela) if colunas_para_explorar else None
+        parts.append(_formatar_tabela(tabela, entrada["linhas"]))
+        parts.extend(l for c, l in entrada["colunas"].items() if pedidas is None or c in pedidas)
+        parts.append("")
+    if not parts:
+        return ""
+    return "\n".join([_CABECALHO_EXPLORACAO, *parts])
 
 
 # ---------------------------------------------------------------------------
@@ -547,32 +657,42 @@ def nos_nodo_data_exploration(
         return {}
 
     # Extrair nomes de tabelas do contexto de schema (RAG ou completo)
-    table_names = _extract_table_names_from_rag_context(schema_alvo)
+    table_names = list(dict.fromkeys(_extract_table_names_from_rag_context(schema_alvo)))
     if not table_names:
         print("[DATA_EXPLORATION] Nenhuma tabela encontrada no contexto RAG.")
         return {}
 
-    print(f"[DATA_EXPLORATION] Explorando {len(table_names)} tabela(s): {table_names}")
-
     colunas_para_explorar = estado.get("colunas_para_explorar", None)
-    if engine is not None:
-        conn = engine.raw_connection()
-        try:
-            exploration_results = _explorar_tabelas(conn, table_names, colunas_para_explorar)
-        finally:
-            conn.close()
-    else:
-        exploration_results = explore_tables(db_path, table_names, colunas_para_explorar)
-
-    # Formatar para injeção no prompt
-    exploration_text = format_exploration_for_prompt(exploration_results)
+    cache = estado.get("cache_data_exploration") or {}
+    explorar_tudo, explorar_parcial = _pendencias_exploracao(table_names, colunas_para_explorar, cache)
+    alvos = explorar_tudo + list(explorar_parcial)
 
     print(
-        f"[DATA_EXPLORATION] Estatísticas computadas: "
+        f"[DATA_EXPLORATION] {len(table_names)} tabela(s): "
+        f"{len(table_names) - len(alvos)} do cache, explorando {alvos}"
+    )
+
+    if alvos:
+        known_row_counts = {t: cache[t]["linhas"] for t in alvos if t in cache}
+        if engine is not None:
+            conn = engine.raw_connection()
+            try:
+                exploration_results = _explorar_tabelas(conn, alvos, explorar_parcial, known_row_counts)
+            finally:
+                conn.close()
+        else:
+            exploration_results = explore_tables(db_path, alvos, explorar_parcial, known_row_counts)
+        cache = _atualizar_cache(cache, exploration_results, set(explorar_tudo))
+
+    # Formatar para injeção no prompt
+    exploration_text = _formatar_do_cache(table_names, colunas_para_explorar, cache)
+
+    print(
+        f"[DATA_EXPLORATION] Estatísticas prontas: "
         f"{len(exploration_text)} chars (~{len(exploration_text) // 4} tokens)"
     )
 
-    return {"contexto_data_exploration": exploration_text}
+    return {"contexto_data_exploration": exploration_text, "cache_data_exploration": cache}
 
 
 PROMPT_EXPLORATION_SELECTOR = """Você é um analista de dados especialista em bancos de dados SQL.

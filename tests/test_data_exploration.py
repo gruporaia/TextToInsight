@@ -407,6 +407,141 @@ class TestNodoDataExploration:
         assert "products" in result["contexto_data_exploration"]
 
 
+class TestCacheDataExploration:
+    """Cache por pergunta: cada expansão do retriever só explora o que é novo."""
+
+    @pytest.fixture
+    def espiao(self, monkeypatch):
+        import text_to_insight.nodes.data_exploration as de
+
+        chamadas = []
+        original = de.explore_table
+
+        def _espiao(conn, table_name, columns_to_explore=None, row_count=None):
+            chamadas.append((table_name, columns_to_explore))
+            return original(conn, table_name, columns_to_explore, row_count=row_count)
+
+        monkeypatch.setattr(de, "explore_table", _espiao)
+        return chamadas
+
+    @staticmethod
+    def _rodar(sample_db, tabelas, cache=None, colunas=None):
+        estado = {
+            "db_path": sample_db,
+            "contexto_rag_schema": "".join(f"Tabela: {t}\n- id: INTEGER\n" for t in tabelas),
+            "cache_data_exploration": cache or {},
+        }
+        if colunas is not None:
+            estado["colunas_para_explorar"] = colunas
+        return nos_nodo_data_exploration(estado)
+
+    @pytest.mark.parametrize("colunas", [None, {"products": ["price", "category"]}])
+    def test_texto_igual_ao_formatador_sem_cache(self, sample_db, colunas):
+        from text_to_insight.nodes.data_exploration import _atualizar_cache, _formatar_do_cache
+
+        resultados = explore_tables(sample_db, ["products", "orders"], colunas)
+        completas = {t for t in resultados if not colunas or t not in colunas}
+        cache = _atualizar_cache({}, resultados, completas)
+
+        assert _formatar_do_cache(["products", "orders"], colunas, cache) == format_exploration_for_prompt(resultados)
+
+    def test_repeticao_nao_reexplora(self, sample_db, espiao):
+        primeira = self._rodar(sample_db, ["products", "orders"])
+        espiao.clear()
+        segunda = self._rodar(sample_db, ["products", "orders"], cache=primeira["cache_data_exploration"])
+
+        assert espiao == []
+        assert segunda["contexto_data_exploration"] == primeira["contexto_data_exploration"]
+
+    def test_expansao_explora_so_tabelas_novas(self, sample_db, espiao):
+        primeira = self._rodar(sample_db, ["products"])
+        espiao.clear()
+        segunda = self._rodar(sample_db, ["products", "orders"], cache=primeira["cache_data_exploration"])
+
+        assert [t for t, _ in espiao] == ["orders"]
+        texto = segunda["contexto_data_exploration"]
+        assert "Tabela: products" in texto and "Tabela: orders" in texto
+
+    def test_explora_so_colunas_faltantes(self, sample_db, espiao):
+        primeira = self._rodar(sample_db, ["products"], colunas={"products": ["price"]})
+        espiao.clear()
+        segunda = self._rodar(
+            sample_db, ["products"],
+            cache=primeira["cache_data_exploration"],
+            colunas={"products": ["price", "category"]},
+        )
+
+        assert espiao == [("products", ["category"])]
+        texto = segunda["contexto_data_exploration"]
+        assert "price [numeric]" in texto and "category [categorical]" in texto
+        assert "name [" not in texto
+
+    def test_exploracao_completa_apos_parcial_mantem_ordem_original(self, sample_db):
+        parcial = self._rodar(sample_db, ["products"], colunas={"products": ["price"]})
+        completa = self._rodar(sample_db, ["products"], cache=parcial["cache_data_exploration"])
+
+        cache = completa["cache_data_exploration"]["products"]
+        assert cache["completa"] is True
+        assert list(cache["colunas"]) == [
+            "id", "name", "price", "category", "is_active", "created_at", "stock_count"
+        ]
+
+    def test_nao_altera_cache_recebido_e_e_serializavel(self, sample_db):
+        import json
+
+        primeira = self._rodar(sample_db, ["products"])
+        cache_original = primeira["cache_data_exploration"]
+        copia = json.loads(json.dumps(cache_original))
+
+        self._rodar(sample_db, ["products", "orders"], cache=cache_original)
+
+        assert cache_original == copia
+
+    def test_estado_inicial_zera_cache(self):
+        from text_to_insight.runtime import construir_estado_inicial
+
+        assert construir_estado_inicial("pergunta", db_path="x.db")["cache_data_exploration"] == {}
+
+    def test_nao_reexecuta_count_quando_linhas_no_cache(self, sample_db, monkeypatch):
+        import sqlite3
+        import text_to_insight.nodes.data_exploration as de
+
+        row_counts_recebidos = []
+        original = de.explore_table
+
+        def _espiao_row_count(conn, table_name, columns_to_explore=None, row_count=None):
+            row_counts_recebidos.append((table_name, row_count))
+            return original(conn, table_name, columns_to_explore, row_count=row_count)
+
+        monkeypatch.setattr(de, "explore_table", _espiao_row_count)
+
+        # 1ª passada parcial: não está no cache -> row_count é None (roda SELECT COUNT(*))
+        primeira = self._rodar(sample_db, ["products"], colunas={"products": ["price"]})
+        assert row_counts_recebidos == [("products", None)]
+        linhas_cacheadas = primeira["cache_data_exploration"]["products"]["linhas"]
+
+        # 2ª passada parcial: já está no cache -> reaproveita row_count do cache
+        row_counts_recebidos.clear()
+        self._rodar(
+            sample_db,
+            ["products"],
+            cache=primeira["cache_data_exploration"],
+            colunas={"products": ["price", "category"]},
+        )
+        assert row_counts_recebidos == [("products", linhas_cacheadas)]
+
+        # Garante que explore_table com row_count preenchido não dispara SELECT COUNT(*)
+        queries_executadas = []
+        conn = sqlite3.connect(sample_db)
+        conn.set_trace_callback(queries_executadas.append)
+        try:
+            original(conn, "products", columns_to_explore=["category"], row_count=linhas_cacheadas)
+        finally:
+            conn.close()
+
+        assert 'SELECT COUNT(*) FROM "products"' not in queries_executadas
+
+
 class MockLLMResponse:
     def __init__(self, content):
         self.content = content
