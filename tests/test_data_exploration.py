@@ -417,9 +417,9 @@ class TestCacheDataExploration:
         chamadas = []
         original = de.explore_table
 
-        def _espiao(conn, table_name, columns_to_explore=None):
+        def _espiao(conn, table_name, columns_to_explore=None, row_count=None):
             chamadas.append((table_name, columns_to_explore))
-            return original(conn, table_name, columns_to_explore)
+            return original(conn, table_name, columns_to_explore, row_count=row_count)
 
         monkeypatch.setattr(de, "explore_table", _espiao)
         return chamadas
@@ -501,6 +501,45 @@ class TestCacheDataExploration:
         from text_to_insight.runtime import construir_estado_inicial
 
         assert construir_estado_inicial("pergunta", db_path="x.db")["cache_data_exploration"] == {}
+
+    def test_nao_reexecuta_count_quando_linhas_no_cache(self, sample_db, monkeypatch):
+        import sqlite3
+        import text_to_insight.nodes.data_exploration as de
+
+        row_counts_recebidos = []
+        original = de.explore_table
+
+        def _espiao_row_count(conn, table_name, columns_to_explore=None, row_count=None):
+            row_counts_recebidos.append((table_name, row_count))
+            return original(conn, table_name, columns_to_explore, row_count=row_count)
+
+        monkeypatch.setattr(de, "explore_table", _espiao_row_count)
+
+        # 1ª passada parcial: não está no cache -> row_count é None (roda SELECT COUNT(*))
+        primeira = self._rodar(sample_db, ["products"], colunas={"products": ["price"]})
+        assert row_counts_recebidos == [("products", None)]
+        linhas_cacheadas = primeira["cache_data_exploration"]["products"]["linhas"]
+
+        # 2ª passada parcial: já está no cache -> reaproveita row_count do cache
+        row_counts_recebidos.clear()
+        self._rodar(
+            sample_db,
+            ["products"],
+            cache=primeira["cache_data_exploration"],
+            colunas={"products": ["price", "category"]},
+        )
+        assert row_counts_recebidos == [("products", linhas_cacheadas)]
+
+        # Garante que explore_table com row_count preenchido não dispara SELECT COUNT(*)
+        queries_executadas = []
+        conn = sqlite3.connect(sample_db)
+        conn.set_trace_callback(queries_executadas.append)
+        try:
+            original(conn, "products", columns_to_explore=["category"], row_count=linhas_cacheadas)
+        finally:
+            conn.close()
+
+        assert 'SELECT COUNT(*) FROM "products"' not in queries_executadas
 
 
 class MockLLMResponse:

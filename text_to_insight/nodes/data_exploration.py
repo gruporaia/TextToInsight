@@ -319,6 +319,7 @@ def explore_table(
     conn: sqlite3.Connection,
     table_name: str,
     columns_to_explore: list[str] | None = None,
+    row_count: int | None = None,
 ) -> TableExplorationResult:
     """
     Calcula estatísticas por coluna para uma tabela SQLite.
@@ -327,16 +328,20 @@ def explore_table(
         conn: Conexão SQLite (preferencialmente read-only).
         table_name: Nome da tabela a explorar.
         columns_to_explore: Lista opcional de colunas a explorar. Se omitida (ou None), explora todas.
+        row_count: Contagem de linhas já conhecida (ex: vinda do cache) para evitar SELECT COUNT(*).
 
     Returns:
         TableExplorationResult com stats por coluna.
     """
     cursor = conn.cursor()
 
-    # Contagem total de linhas (estimativa rápida)
+    # Contagem total de linhas (reaproveita do cache se já conhecida)
     safe_tbl = f'"{table_name}"'
-    cursor.execute(f"SELECT COUNT(*) FROM {safe_tbl}")
-    total_rows = cursor.fetchone()[0]
+    if row_count is None:
+        cursor.execute(f"SELECT COUNT(*) FROM {safe_tbl}")
+        total_rows = cursor.fetchone()[0]
+    else:
+        total_rows = row_count
 
     # Introspect colunas
     cursor.execute(f"PRAGMA table_info({safe_tbl})")
@@ -372,6 +377,7 @@ def explore_tables(
     db_path: str,
     table_names: list[str],
     colunas_para_explorar: dict[str, list[str]] | None = None,
+    known_row_counts: dict[str, int] | None = None,
 ) -> dict[str, TableExplorationResult]:
     """
     Explora múltiplas tabelas e retorna dict indexado por nome de tabela.
@@ -380,6 +386,7 @@ def explore_tables(
         db_path: Caminho para o arquivo SQLite.
         table_names: Lista de nomes de tabelas a explorar.
         colunas_para_explorar: Dicionário opcional mapeando tabela para lista de colunas a explorar.
+        known_row_counts: Dicionário opcional mapeando tabela para contagem de linhas já conhecida.
 
     Returns:
         Dict[table_name, TableExplorationResult]
@@ -391,7 +398,7 @@ def explore_tables(
 
     conn = sqlite3.connect(f"file:{caminho}?mode=ro", uri=True)
     try:
-        return _explorar_tabelas(conn, table_names, colunas_para_explorar)
+        return _explorar_tabelas(conn, table_names, colunas_para_explorar, known_row_counts)
     finally:
         conn.close()
 
@@ -400,6 +407,7 @@ def _explorar_tabelas(
     conn: Any,
     table_names: list[str],
     colunas_para_explorar: dict[str, list[str]] | None,
+    known_row_counts: dict[str, int] | None = None,
 ) -> dict[str, TableExplorationResult]:
     results: dict[str, TableExplorationResult] = {}
     for table_name in table_names:
@@ -407,7 +415,8 @@ def _explorar_tabelas(
             cols_to_explore = None
             if colunas_para_explorar and table_name in colunas_para_explorar:
                 cols_to_explore = colunas_para_explorar[table_name]
-            results[table_name] = explore_table(conn, table_name, cols_to_explore)
+            row_count = known_row_counts.get(table_name) if known_row_counts else None
+            results[table_name] = explore_table(conn, table_name, cols_to_explore, row_count=row_count)
         except Exception as e:
             print(f"[DATA_EXPLORATION] Erro ao explorar tabela '{table_name}': {e}")
             continue
@@ -664,14 +673,15 @@ def nos_nodo_data_exploration(
     )
 
     if alvos:
+        known_row_counts = {t: cache[t]["linhas"] for t in alvos if t in cache}
         if engine is not None:
             conn = engine.raw_connection()
             try:
-                exploration_results = _explorar_tabelas(conn, alvos, explorar_parcial)
+                exploration_results = _explorar_tabelas(conn, alvos, explorar_parcial, known_row_counts)
             finally:
                 conn.close()
         else:
-            exploration_results = explore_tables(db_path, alvos, explorar_parcial)
+            exploration_results = explore_tables(db_path, alvos, explorar_parcial, known_row_counts)
         cache = _atualizar_cache(cache, exploration_results, set(explorar_tudo))
 
     # Formatar para injeção no prompt
