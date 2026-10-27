@@ -78,7 +78,7 @@ text-to-insight --hitl off "Quais categorias vendem mais?"
 
 # com modelo OpenAI
 set -a && source .env && set +a
-python main.py --hitl off --model gpt-4o-mini --api-key-env OPENAI_API_KEY "Quantos pedidos existem?"
+python main.py --hitl off --model openai/gpt-4o-mini --api-key-env OPENAI_API_KEY "Quantos pedidos existem?"
 
 # testes locais com bancos do Spider 2 (SQLite sem FK explícita e PRAGMA nativo)
 python main.py --hitl off --infer-fks on --use-schemacrawler off "Qual a soma dos resultados?"

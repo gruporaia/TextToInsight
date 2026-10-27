@@ -6,7 +6,7 @@ para decidir a próxima etapa do fluxo (status de roteamento).
 """
 
 import json
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.chat_models import BaseChatModel
 
 from ..state import EstadoTextToInsight
 # Importando a função de extração de tokens
@@ -31,7 +31,7 @@ Contexto atual:
 """
 
 
-def nos_nodo_planejador(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI, hitl: bool) -> dict:
+def nos_nodo_planejador(estado: EstadoTextToInsight, llm: BaseChatModel, hitl: bool) -> dict:
     """
     Nó Planejador: decide a próxima etapa do fluxo.
 

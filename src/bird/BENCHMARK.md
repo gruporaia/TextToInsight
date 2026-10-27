@@ -16,11 +16,13 @@ flowchart TD
     CLI -->|"Cache de Grafo"| Engine["InsightEngine (Planner + Code Agent + Sandbox)"]
     Engine -->|"SQL Candidato"| Executor["src/bird/query_executor.py (SQLite Read-Only)"]
     Data -->|"SQL de Referencia (Gold)"| Executor
-    Executor -->|"Resultados de Execucao"| Metrics["src/bird/metrics.py (EX Multiset / Counter)"]
+    Executor -->|"Resultados de Execucao"| Metrics["src/bird/metrics.py (EX Multiset / Counter + F1/Recall)"]
     Metrics -->|"Linhas Canonicas"| Reporter["src/bird/csv_reporter.py"]
-    Reporter -->|"16 colunas"| CSV["reports/bird/.../*.csv"]
+    CLI -->|"Captura Tee & Traço"| Logger["src/bird/logger.py (BirdExecutionLogger)"]
+    Reporter -->|"19 colunas"| CSV["reports/bird/.../*.csv"]
     Reporter -->|"Relatorio Sintetico"| MD["reports/bird/.../*.md"]
     Reporter -->|"Formato Oficial BIRD"| JSON["reports/bird/.../*.json (predict_dev.json)"]
+    Logger -->|"Trilha Completa de Execucao"| LOG["reports/bird/.../*.log"]
 ```
 
 ---
@@ -81,7 +83,7 @@ pytest tests/test_bird_eval.py -v
 Caracteristicas da suite:
 - Nao consome chamadas de rede nem tokens de LLM.
 - Executa em menos de 1 segundo utilizando fixtures sinteticas isoladas.
-- Cobre data loader, executor seguro SQLite com timeout, metricas de comparacao de dados (Execution Accuracy agnostica a ordem e aliases) e geracao de CSV/relatorios.
+- Cobre data loader, executor seguro SQLite com timeout, metricas de comparacao de dados (Execution Accuracy agnostica a ordem e aliases, metricas de coluna Precision/Recall/F1) e geracao de CSV (19 colunas) e relatorios.
 
 ### 3.2. Smoke Test com Custo Zero (Modo Simulado)
 Para testar o encadeamento de ponta a ponta sem consumir credito de APIs:
@@ -106,15 +108,20 @@ O orquestrador de avaliacao e acionado via `scripts/test_bird_eval.py`.
 | `--db-filter` | Texto | `None` | Restringe a avaliacao a um banco especifico (ex: `financial`). |
 | `--difficulty` | `simple`, `moderate`, `challenging` | `None` | Filtra perguntas por nivel de complexidade. |
 | `--stratify` | Flag | Desativado | Mantem a proporcao original de dificuldades na amostra. |
-| `--model` | Texto | Variável `OPENAI_MODEL` ou `gpt-4o-mini` | Identificador do modelo LLM a ser utilizado. |
+| `--model` | Texto | Variável `OPENAI_MODEL` ou `gpt-4o-mini` | Identificador do modelo LLM a ser utilizado. Suporta o formato `<provedor>/<modelo>` (ex.: `openai/gpt-4o`, `google/gemini-2.5-flash`, `openai/gpt-6-luna`) ou nomes padrão. |
+| `--model-kwargs` | `KEY=VALUE ...` | `[]` | Kwargs adicionais repassados ao construtor do LLM (ex.: `temperature=0`, `max_tokens=512`, `base_url="..."`). |
 | `--use-evidence` | `on`, `off` | `on` | Controla injecao de formulas e dicas de negocio no prompt. |
 | `--rag` | `on`, `off` | `on` | Ativa selecao dinamica de tabelas via SchemaGraphRAG. |
 | `--enrich-rag` | `on`, `off` | `off` | Ativa enriquecimento de colunas relevantes no RAG. |
 | `--infer-fks` | Flag | Desativado | Habilita inferencia heuristica de chaves estrangeiras virtuais. |
 | `--cot` | `on`, `off` | `on` | Ativa raciocinio explicito passo a passo (Chain of Thought). |
 | `--data-exploration` | `on`, `off` | `on` | Permite que o agente consulte amostras de valores nas tabelas. |
+| `--exploration-selector` | `off`, `heuristic`, `llm` | `off` | Modo de selecao de colunas para exploracao de dados. |
+| `--schemacrawler` | `on`, `off` | `off` | Ativa/desativa introspeccao via SchemaCrawler (padrao: `off`, usa PRAGMA nativo do SQLite). |
 | `--timeout` | Inteiro | `30` | Tempo limite em segundos para execucao de queries no SQLite. |
 | `--dry-run` | Flag | Desativado | Simula a geracao de SQL sem custo de API. |
+| `--log` | `on`, `off` | `on` | Controla geracao do arquivo de log detalhado de execucao (`.log`). |
+| `--log-file` | Caminho | `None` | Define caminho customizado para o arquivo de log (padrao: gerado na pasta de saida). |
 | `--output` | Caminho | `None` (gera timestamp) | Define o arquivo CSV ou a pasta de destino dos relatorios. |
 
 ### 4.2. Cenarios Comuns de Execucao
@@ -149,25 +156,33 @@ python scripts/test_bird_eval.py --sample-size 20 --seed 42 --rag off --output r
 
 ---
 
-## 5. Gerenciamento e Personalizacao dos Relatorios (`reports/bird/`)
+## 5. Gerenciamento e Personalizacao dos Relatorios e Logs (`reports/bird/`)
 
-### 5.1. Os Tres Artefatos Gerados por Bateria
-A cada bateria de testes, o sistema consolida as saidas em tres formatos complementares:
+### 5.1. Os Quatro Artefatos Gerados por Bateria
+A cada bateria de testes, o sistema consolida as saidas em quatro formatos complementares:
 
 1. **Arquivo Detalhado (`.csv`):**
-   Registra linha a linha cada tentativa de cada pergunta avaliada. Quando o agente aciona o loop de auto-correcao, cada tentativa e registrada como uma linha individual contendo o mesmo `question_id` e o respectivo `attempt_number` (1, 2, 3...), garantindo ordenacao estrita e contigua por `(question_id, attempt_number)`. Contem 16 colunas tecnicas com SQL gerada, SQL gabarito, status de sandbox, mensagens de erro capturadas, tempo de resposta e tokens consumidos.
+   Registra linha a linha cada tentativa de cada pergunta avaliada. Quando o agente aciona o loop de auto-correcao, cada tentativa e registrada como uma linha individual contendo o mesmo `question_id` e o respectivo `attempt_number` (1, 2, 3...), garantindo ordenacao estrita e contigua por `(question_id, attempt_number)`. Contem 19 colunas tecnicas com SQL gerada, SQL gabarito, status de sandbox, mensagens de erro capturadas, metricas de coluna (precision, recall, f1), tempo de resposta e tokens consumidos.
 2. **Relatorio Sintetico e Diagnostico (`.md`):**
    Documento executivo e tecnico em Markdown. Alem das metricas globais consolidadas e consumo de recursos, inclui:
    - **Secao 5 (Casos de Auto-Correcao Bem-Sucedida):** destaca perguntas que falharam na primeira tentativa mas convergiram nas tentativas seguintes, exibindo a evolucao das queries, o feedback recebido e a tabela Markdown com amostra do resultado conferido.
-   - **Secao 6 (Analise Detalhada de Falhas):** diagnostico minucioso de cada divergencia de dados ou erro de sandbox, apresentando a query gabarito, o historico de tentativas do agente e **tabelas comparativas Markdown com as primeiras 10 linhas de dados retornadas por cada consulta** (Ouro vs. Agente) e o total de linhas.
+   - **Secao 6 (Analise Detalhada de Falhas):** diagnostico minucioso de cada divergencia de dados ou erro de sandbox, apresentando a query gabarito, o historico de tentativas do agente, metricas de coluna (`Recall`, `Precision`, `F1`) e **tabelas comparativas Markdown com as primeiras 10 linhas de dados retornadas por cada consulta** (Ouro vs. Agente) e o total de linhas.
 3. **Predicoes Oficiais BIRD (`.json`):**
    Arquivo formatado no padrao canonico do benchmark (`predict_dev.json`), contendo sempre a consulta final candidata gerada, pronto para ser submetido diretamente ao script oficial de validacao do BIRD.
+4. **Log Estruturado de Execucao (`.log`):**
+   Criado pelo `BirdExecutionLogger` (`src/bird/logger.py`), registra cronologicamente a trilha completa de auditoria para cada pergunta avaliada:
+   - **Delimitadores Claros:** blocos individuais delimitados por `=== [START QID: ... | DB: ... | Difficulty: ...] ===` e `=== [END QID: ...] ===`.
+   - **Contexto de Esquema (RAG):** schema recuperado via SchemaGraphRAG ou schema integral do banco, alem de estatisticas de exploracao de dados.
+   - **Fluxo de Execucao dos Nos (Tee):** captura em tempo real todas as mensagens de console emitidas durante o ciclo de resolucao (`[PLANEJADOR]`, `[RETRIEVER]`, `[SCHEMA]`, `[DATA_EXPLORATION]`, `[EXECUTOR]`, `[CRITICO]`), sem bloquear a visualizacao ao vivo no terminal.
+   - **Historico Completo de Tentativas:** registra o prompt completo enviado ao LLM, o raciocinio Chain-of-Thought / thoughts emitido pelo modelo, a consulta SQL candidata e erros de sandbox encontrados.
+   - **Comparacao com a Referencia (Gold):** quantidade de linhas retornadas (Gold vs. Agente), status de equivalencia `EX MATCH`, metricas de coluna (`Recall`, `Precision`, `F1`), similaridade de texto, latencia em ms e contagem detalhada de tokens (input/output/total).
+   - **Sumario Executivo no Rodape:** consolida a acuracia final de execucao (EX), Pass@1, medias finais de Recall, Precision e F1, taxa de recuperacao por auto-correcao, consumo de tokens e tempo total de execucao.
 
 ### 5.2. Personalizacao do Diretorio e Nome de Destino via `--output`
 O parametro `--output` aceita duas abordagens:
 
 #### Opcao A: Especificar o Nome da Pasta de Destino (Recomendado)
-Ao passar o caminho de um diretorio, os tres arquivos serao gerados dentro dele mantendo o timestamp da execucao:
+Ao passar o caminho de um diretorio, os quatro arquivos serao gerados dentro dele mantendo o timestamp da execucao:
 ```bash
 python scripts/test_bird_eval.py --sample-size 20 --output reports/bird/bateria_validacao_inicial
 ```
@@ -176,11 +191,12 @@ Estrutura gerada:
 reports/bird/bateria_validacao_inicial/
 ├── bird_eval_2026-09-29_21-30-00.csv
 ├── bird_eval_2026-09-29_21-30-00.md
-└── bird_eval_2026-09-29_21-30-00.json
+├── bird_eval_2026-09-29_21-30-00.json
+└── bird_eval_2026-09-29_21-30-00.log
 ```
 
 #### Opcao B: Especificar o Nome Exato do Arquivo Base
-Ao passar um caminho terminando em `.csv`, o sistema utilizara o mesmo nome base para gerar o `.md` e o `.json` correspondentes:
+Ao passar um caminho terminando em `.csv`, o sistema utilizara o mesmo nome base para gerar o `.md`, o `.json` e o `.log` correspondentes:
 ```bash
 python scripts/test_bird_eval.py --sample-size 20 --output reports/bird/benchmark_v1.csv
 ```
@@ -189,16 +205,18 @@ Estrutura gerada:
 reports/bird/
 ├── benchmark_v1.csv
 ├── benchmark_v1.md
-└── benchmark_v1.json
+├── benchmark_v1.json
+└── benchmark_v1.log
 ```
 
 #### Comportamento Padrao (Sem `--output`)
-Quando o parametro `--output` for omitido, o sistema cria automaticamente uma subpasta com data e hora:
+Quando o parametro `--output` for omitido, o sistema cria automaticamente uma subpasta com data e hora contendo todos os artefatos:
 ```text
 reports/bird/run_YYYY-MM-DD_HH-MM-SS/
 ├── bird_eval_YYYY-MM-DD_HH-MM-SS.csv
 ├── bird_eval_YYYY-MM-DD_HH-MM-SS.md
-└── bird_eval_YYYY-MM-DD_HH-MM-SS.json
+├── bird_eval_YYYY-MM-DD_HH-MM-SS.json
+└── bird_eval_YYYY-MM-DD_HH-MM-SS.log
 ```
 
 ---
@@ -212,6 +230,9 @@ As metricas sao calculadas em `src/bird/metrics.py` e agregadas em `src/bird/csv
 | Metrica | Identificador Tecnico | O que Avalia | Metodo de Calculo / Criterio |
 |---|---|---|---|
 | **Execution Accuracy (EX Final)** | `execution_match` / `ex_final_rate` | Acuracia real do resultado de dados. | Executa a SQL gerada pelo agente e a SQL gabarito no banco. Normaliza os tipos primitivos e compara o multiset de tuplas (`Counter`). Retorna verdadeiro quando os dados retornados sao identicos, independentemente da sintaxe SQL adotada. |
+| **Column-Level Recall** | `recall` / `avg_recall` | Cobertura de informacao em relacao ao gabarito. | Proporcao de colunas do resultado de referencia que foram recuperadas com sucesso na consulta gerada pelo agente (alinhamento elemento a elemento com tolerancia de ponto flutuante `1e-2`). |
+| **Column-Level Precision** | `precision` / `avg_precision` | Especificidade das colunas retornadas. | Proporcao de colunas retornadas pela query do agente que correspondem a colunas validas da consulta de referencia. |
+| **Column-Level F1 Score** | `f1` / `avg_f1` | Media harmonica de precisao e cobertura. | `2 * (Precision * Recall) / (Precision + Recall)`. Fornece uma pontuacao continua e balanceada da fidelidade do resultado. |
 | **Pass@1 (First Attempt EX)** | `ex_pass_at_1_rate` | Precisao direta na primeira tentativa. | Percentual de perguntas resolvidas corretamente na tentativa 1, antes de qualquer iteracao do loop de auto-correcao. |
 | **Taxa de Sucesso no Sandbox** | `sandbox_success_rate` | Validade sintatica e consistencia com o schema. | Percentual de consultas que executam no banco sem disparar erro de sintaxe, coluna inexistente ou tabela invalida (`status == 'exec_ok'` ou `'aprovado'`). |
 | **Taxa de Auto-Correcao (Self-Correction)** | `self_correction_rate` | Eficacia do feedback de erro. | Entre as perguntas que falharam na primeira tentativa, indica quantas foram corrigidas com sucesso nas tentativas subsequentes apos receberem a mensagem de erro do sandbox. |
@@ -219,11 +240,22 @@ As metricas sao calculadas em `src/bird/metrics.py` e agregadas em `src/bird/csv
 | **Consumo de Tokens** | `tokens_input`, `tokens_output`, `tokens_total` | Custo computacional de contexto e resposta. | Quantidade exata de tokens processados pelo provedor LLM. Permite mensurar a eficiencia de tecnicas de reducao de contexto. |
 | **Latencia por Pergunta** | `time_ms` / `avg_time_ms_per_question` | Tempo de resposta total. | Duracao em milissegundos para concluir todo o ciclo de geracao e execucao da pergunta. |
 
+### 6.2. Complementaridade entre Execution Accuracy (EX) e Metricas de Coluna (Recall, Precision, F1)
+
+A metrica academica padrao do benchmark BIRD e a **Execution Accuracy (EX)**, que opera de forma estritamente binaria (0 ou 1): se os resultados de dados retornados pela query do agente divergirem em numero de colunas, ordenacao requerida ou contagem de tuplas, a consulta e pontuada como `False` (0.0%).
+
+No entanto, em cenarios praticos de engenharia Text-to-SQL, ocorrem frequentemente casos em que:
+- **Colunas Adicionais com Informacao Completa (`EX = False`, `Recall = 1.0`):** O usuario pergunta "Qual o nome do cliente mais antigo?" (o gabarito retorna apenas `[("Alice",)]`), mas o agente projeta `[(1, "Alice", "SP")]` trazendo IDs ou atributos contextuais adicionais. Sob o EX estrito, o agente e reprovado (0%), ocultando o fato de que a resposta essencial foi recuperada integralmente. Sob as metricas de coluna, o resultado e `Recall = 1.0000`, `Precision = 0.3333` e `F1 = 0.5000`.
+- **Recuperacao Parcial (`Recall = 0.67`, `Precision = 1.0`):** Quando a consulta de referencia solicita 3 colunas e o modelo projeta apenas 2 corretas, o agente retem `Recall = 0.6667`, `Precision = 1.0000` e `F1 = 0.8000`.
+- **Falha de Execucao no Sandbox (`status == 'exec_erro'`):** Se a query gerar erro de sintaxe ou tabela inexistente no SQLite, todas as tres metricas sao fixadas em `0.0`.
+
+Essa granularidade permite aos desenvolvedores distinguir se as falhas do modelo derivam de alucinacao conceitual (filtros/tabelas erradas gerando `Recall = 0.0`) ou de pequenas variacoes na projecao de atributos (`Recall = 1.0`, `Precision < 1.0`).
+
 ---
 
 ## 7. Guia de Diagnostico e Analise de Falhas
 
-### 7.1. Estrutura das 16 Colunas do CSV
+### 7.1. Estrutura das 19 Colunas do CSV
 
 | Coluna | Descricao e Utilidade de Analise |
 |---|---|
@@ -238,7 +270,10 @@ As metricas sao calculadas em `src/bird/metrics.py` e agregadas em `src/bird/csv
 | `time_ms` | Tempo de execucao da tentativa em milissegundos. |
 | `execution_status` | Estado final retornado pelo executor (`exec_ok`, `exec_erro`, `aprovado`). |
 | `similarity_score` | Indice de similaridade de texto com o gabarito (0.0 a 1.0). |
-| `execution_match` | Booleano indicando equivalencia de dados com o gabarito (`True`/`False`). |
+| `execution_match` | Booleano indicando equivalencia exata de dados com o gabarito (`True`/`False`). |
+| `precision` | Precisao a nivel de coluna (proporcao de colunas do agente compativeis com o gabarito, 0.0 a 1.0). |
+| `recall` | Cobertura/Recall a nivel de coluna (proporcao de colunas do gabarito recuperadas pelo agente, 0.0 a 1.0). |
+| `f1` | Media harmonica entre Precision e Recall a nivel de coluna (0.0 a 1.0). |
 | `error` | Descricao detalhada do erro retornado pelo SQLite quando a query falha. |
 | `tokens_input` | Quantidade de tokens no prompt de entrada. |
 | `tokens_output` | Quantidade de tokens na resposta gerada. |
@@ -257,6 +292,10 @@ As metricas sao calculadas em `src/bird/metrics.py` e agregadas em `src/bird/csv
    - **Perguntas incorretas:** filtre por `execution_match == False` na ultima tentativa de cada `question_id`.
    - **Erros de sintaxe ou schema:** filtre por `execution_status == 'exec_erro'` e examine a coluna `error`.
    - **Efetividade da auto-correcao:** filtre por `attempt_number > 1` para observar se a query final convergiu para `execution_match == True`.
+4. **Auditoria Profunda no Arquivo de Log (`.log`):**
+   - **Inspecao de Prompts e Raciocinio:** busque por `=== [START QID: <id>] ===` para ler o prompt exato fornecido ao LLM e os pensamentos (`[RACIOCÍNIO DO AGENTE (CoT / THOUGHT)]`), entendendo *por que* o modelo tomou determinada decisao.
+   - **Depuracao de Schema Recuperado:** examine a secao `[SCHEMA / RAG CONTEXT]` para verificar se tabelas ou colunas criticas foram podadas indevidamente pelo RAG.
+   - **Rastreamento de Execucao (Tee):** visualize os prints internos dos nos em `[EXECUTION TRACE / FLUXO DE NÓS (TEE)]` para auditar a ordem e tempo de ativacao de cada componente.
 
 ### 7.3. Matriz de Diagnostico de Falhas
 

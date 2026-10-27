@@ -43,11 +43,11 @@ from text_to_insight import InsightEngine
 
 engine = InsightEngine(
     api_key="...",
-    model="gemini-2.5-flash",
+    model="google/gemini-2.5-flash",
     db_path="data/olist_relational.db",
     hitl=True,
     inferir_fks_virtuais=False, # (Opcional) Infere FKs baseadas em colunas _id (ex: tabelas do Spider 2)
-    usar_schemacrawler=True,    # (Opcional) Desative para forçar o fallback ao PRAGMA do SQLite
+    usar_schemacrawler=False,   # (Opcional) Ative caso queira introspecção via SchemaCrawler (default: False)
 )
 
 resultado = engine.run(

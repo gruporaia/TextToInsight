@@ -45,7 +45,7 @@ def construir_estado_inicial(
     pergunta: str,
     db_path: str,
     inferir_fks_virtuais: bool = False,
-    usar_schemacrawler: bool = True,
+    usar_schemacrawler: bool = False,
     db_url: str = "",
 ) -> dict[str, Any]:
     """Cria o estado inicial padrão para uma execução do grafo."""
