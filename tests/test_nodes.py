@@ -12,7 +12,6 @@ import os
 import sys
 import time
 import csv
-import subprocess
 from pathlib import Path
 import pytest
 from dotenv import load_dotenv
@@ -264,10 +263,10 @@ def test_extrair_codigo_python_sem_markdown():
 def test_construir_script_inclui_csv_e_saida():
     from text_to_insight.nodes import graph_generator as gg
 
-    # Validate that the script includes the CSV load, plotting code, and output path.
-    script = gg._construir_script("/tmp/dados.csv", "/tmp/saida.png", "plt.plot([1],[2])")
-    assert "pd.read_csv(\"/tmp/dados.csv\")" in script
-    assert "plt.savefig(\"/tmp/saida.png\"" in script
+    # Validate that the script includes the CSV load, plotting code.
+    script = gg._construir_script("plt.plot([1],[2])")
+    assert 'pd.read_csv("dados.csv")' in script
+    assert 'plt.savefig("grafico.png"' in script
     assert "plt.plot([1],[2])" in script
     assert "matplotlib.use('Agg')" in script
 
@@ -410,77 +409,22 @@ def test_roteador_grafico_decisao_nao():
     assert roteador_grafico(estado, llm) == "resposta"
     assert llm.called is True
 
-
-# ============================================================
-# GRAFICOS — executador de script (subprocesso)
-# ============================================================
-
-def test_executar_script_sucesso():
+def test_grafico_real_gera_png(tmp_path):
     from text_to_insight.nodes import graph_generator as gg
+    from text_to_insight.execucao_python import executar_python_isolado
 
-    # Minimal script that signals success via GRAPH_OK.
-    ok, saida = gg._executar_script("print('GRAPH_OK')")
-    assert ok is True
-    assert "GRAPH_OK" in saida
+    csv = tmp_path / "resultado da query.csv"
+    csv.write_text("x,y\n1,2\n2,4\n3,6\n", encoding="utf-8")
+    destino = tmp_path / "saida.png"
 
+    script = gg._construir_script("plt.plot(df['x'], df['y'])")
+    resultado = executar_python_isolado(
+        script,
+        arquivos_entrada={gg.NOME_CSV: csv},
+        arquivos_saida={gg.NOME_GRAFICO: destino},
+        timeout_s=30,
+    )
 
-def test_executar_script_timeout(monkeypatch):
-    from text_to_insight.nodes import graph_generator as gg
-
-    # Simulate a subprocess timeout to validate the error path.
-    def _fake_run(*args, **kwargs):
-        raise subprocess.TimeoutExpired(cmd=args[0], timeout=30)
-
-    monkeypatch.setattr(gg.subprocess, "run", _fake_run)
-    ok, saida = gg._executar_script("print('GRAPH_OK')")
-
-    assert ok is False
-    assert "Timeout" in saida
-
-
-def test_executar_script_falha_retorno(monkeypatch):
-    from text_to_insight.nodes import graph_generator as gg
-
-    # Simulate a non-zero return code and stderr output.
-    def _fake_run(*args, **kwargs):
-        return subprocess.CompletedProcess(args=args[0], returncode=1, stdout="", stderr="erro")
-
-    monkeypatch.setattr(gg.subprocess, "run", _fake_run)
-    ok, saida = gg._executar_script("print('GRAPH_OK')")
-
-    assert ok is False
-    assert "erro" in saida
-
-
-def test_executar_script_limpa_temporario(monkeypatch, tmp_path):
-    from text_to_insight.nodes import graph_generator as gg
-
-    temp_path = tmp_path / "temp_script.py"
-
-    class _TempFile:
-        def __init__(self, path: Path):
-            self.name = str(path)
-            self._fh = open(self.name, "w", encoding="utf-8")
-
-        def write(self, data: str) -> None:
-            self._fh.write(data)
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            self._fh.close()
-
-    def _fake_named_tempfile(*args, **kwargs):
-        # Use a deterministic temp path to verify cleanup.
-        return _TempFile(temp_path)
-
-    def _fake_run(*args, **kwargs):
-        return subprocess.CompletedProcess(args=args[0], returncode=0, stdout="GRAPH_OK", stderr="")
-
-    monkeypatch.setattr(gg.tempfile, "NamedTemporaryFile", _fake_named_tempfile)
-    monkeypatch.setattr(gg.subprocess, "run", _fake_run)
-
-    ok, _ = gg._executar_script("print('GRAPH_OK')")
-    assert ok is True
-    assert temp_path.exists() is False
+    assert resultado["ok"] is True, resultado["erro_execucao"]
+    assert destino.exists()
+    assert destino.read_bytes().startswith(b"\x89PNG")

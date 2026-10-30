@@ -7,9 +7,6 @@ e armazenar o caminho da imagem resultante no estado.
 """
 
 import re
-import subprocess
-import sys
-import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -17,9 +14,13 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 from ..state import EstadoTextToInsight
 from ..utils import extrair_tokens
+from ..execucao_python import executar_python_isolado
 
 # Diretório padrão para salvar os gráficos gerados
 GRAPHS_DIR = Path(__file__).parent.parent.parent / "graphs"
+
+NOME_CSV = "dados.csv"
+NOME_GRAFICO = "grafico.png"
 
 PROMPT_GRAPH_GENERATOR = """Você é um especialista em visualização de dados com Python e matplotlib.
 
@@ -66,53 +67,21 @@ def _extrair_codigo_python(texto: str) -> str:
     return texto.strip()
 
 
-def _construir_script(csv_path: str, output_path: str, codigo_visualizacao: str) -> str:
+def _construir_script(codigo_visualizacao: str) -> str:
     """Monta o script Python completo que será executado."""
     return f'''import pandas as pd
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-df = pd.read_csv("{csv_path}")
+df = pd.read_csv("{NOME_CSV}")
 
 {codigo_visualizacao}
 
 plt.tight_layout()
-plt.savefig("{output_path}", dpi=150, bbox_inches='tight')
+plt.savefig("{NOME_GRAFICO}", dpi=150, bbox_inches='tight')
 plt.close()
-print("GRAPH_OK")
 '''
-
-
-def _executar_script(script: str) -> tuple[bool, str]:
-    """Executa o script Python em um subprocesso e retorna (sucesso, saída/erro)."""
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".py", delete=False, encoding="utf-8"
-    ) as tmp:
-        tmp.write(script)
-        tmp_path = tmp.name
-
-    try:
-        resultado = subprocess.run(
-            [sys.executable, tmp_path],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        stdout = resultado.stdout.strip()
-        stderr = resultado.stderr.strip()
-
-        if resultado.returncode == 0 and "GRAPH_OK" in stdout:
-            return True, stdout
-        else:
-            erro = stderr if stderr else stdout
-            return False, erro
-    except subprocess.TimeoutExpired:
-        return False, "Timeout: o script de geração do gráfico excedeu 30 segundos."
-    except Exception as e:
-        return False, f"Erro ao executar script: {e}"
-    finally:
-        Path(tmp_path).unlink(missing_ok=True)
 
 
 def nos_nodo_gerador_grafico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -> dict:
@@ -156,15 +125,15 @@ def nos_nodo_gerador_grafico(estado: EstadoTextToInsight, llm: ChatGoogleGenerat
     output_path = str((GRAPHS_DIR / f"grafico_{timestamp}.png").resolve())
 
     # Montar e executar o script completo
-    script = _construir_script(csv_path, output_path, codigo_visualizacao)
+    script = _construir_script(codigo_visualizacao)
     print(script)
     print(f"[GERADOR_GRAFICO] Executando script...")
 
-    sucesso, saida = _executar_script(script)
+    resultado = executar_python_isolado(script, arquivos_entrada={NOME_CSV: Path(csv_path)}, arquivos_saida={NOME_GRAFICO: Path(output_path)}, timeout_s=30)
 
     in_tokens, out_tokens, total_tokens = extrair_tokens(resposta)
 
-    if sucesso and Path(output_path).exists():
+    if resultado["ok"] and Path(output_path).exists():
         print(f"[GERADOR_GRAFICO] ✓ Gráfico salvo em: {output_path}")
         return {
             "grafico_gerado": True,
@@ -174,7 +143,7 @@ def nos_nodo_gerador_grafico(estado: EstadoTextToInsight, llm: ChatGoogleGenerat
             "tokens_total": total_tokens,
         }
     else:
-        print(f"[GERADOR_GRAFICO] ✗ Falha na geração do gráfico: {saida[:200]}")
+        print(f"[GERADOR_GRAFICO] ✗ Falha na geração do gráfico: {resultado["erro_execucao"][:200]}")
         return {
             "grafico_gerado": False,
             "caminho_grafico": "",
