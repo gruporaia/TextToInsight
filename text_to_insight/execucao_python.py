@@ -8,6 +8,7 @@ A devolução do resultado continua seguindo o padrão de formato do executor
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -22,6 +23,20 @@ def _resultado(ok: bool, erro: str, saida: str) -> dict[str, Any]:
     """Monta dicionário de retorno"""
     return {"ok": ok, "erro_execucao": erro, "saida_terminal": saida}
 
+def _ambiente_minimo(pasta: Path) -> dict[str, str]:
+    """
+    Monta do zero as variáveis de ambiente do processo filho (allowlist).
+    Nada do ambiente do processo pai é herdado além do que está aqui.
+    """
+    ambiente = {
+        "PATH": os.environ.get("PATH", ""),
+        "MPLCONFIGDIR": str(pasta),
+    }
+    if os.name == "nt":
+        # Pelo que sabemos, o Python no Windows pode falhar ao iniciar sem
+        # SYSTEMROOT. Não testado em Windows.
+        ambiente["SYSTEMROOT"] = os.environ.get("SYSTEMROOT", "")
+    return ambiente
 
 def executar_python_isolado(
         script: str,
@@ -46,6 +61,7 @@ def executar_python_isolado(
             processo = subprocess.run(
                 [sys.executable, NOME_SCRIPT],
                 cwd=pasta,
+                env = _ambiente_minimo(pasta),
                 capture_output=True,
                 text=True,
                 timeout=timeout_s,

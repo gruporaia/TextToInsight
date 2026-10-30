@@ -55,3 +55,11 @@ def test_pasta_tmp_some():
     pasta_usada = Path(resultado["saida_terminal"])
     assert resultado["ok"] is True
     assert pasta_usada.exists() is False
+
+def test_script_ve_variaveis_do_ambiente(monkeypatch):
+    monkeypatch.setenv("CHAVE_FALSA", "segredo123")
+    resultado = executar_python_isolado('import os; print(os.environ.get("CHAVE_FALSA"))'
+    )
+
+    assert resultado["ok"] is True, resultado["erro_execucao"] 
+    assert "segredo123" not in resultado["saida_terminal"]
