@@ -143,7 +143,7 @@ def nos_nodo_gerador_grafico(estado: EstadoTextToInsight, llm: ChatGoogleGenerat
             "tokens_total": total_tokens,
         }
     else:
-        print(f"[GERADOR_GRAFICO] ✗ Falha na geração do gráfico: {resultado["erro_execucao"][:200]}")
+        print(f"[GERADOR_GRAFICO] ✗ Falha na geração do gráfico: {resultado['erro_execucao'][:200]}")
         return {
             "grafico_gerado": False,
             "caminho_grafico": "",
