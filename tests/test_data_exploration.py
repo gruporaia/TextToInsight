@@ -603,4 +603,5 @@ class TestNodoExplorationSelector:
 
         result = nos_nodo_exploration_selector(estado, llm=mock_llm, exploration_selector_mode="llm")
         assert result["colunas_para_explorar"] == {}
-        assert result["tokens_total"] == 0
+        # Preserva os tokens faturados pela chamada ao LLM mesmo em caso de JSON inválido
+        assert result["tokens_total"] == 15
