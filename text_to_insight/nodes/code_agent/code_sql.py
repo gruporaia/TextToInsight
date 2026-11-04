@@ -42,13 +42,62 @@ BLOQUEIOS_REGEX = re.compile(
     re.IGNORECASE,
 )
 
+_AMBIGUOS_FORA_DE_LITERAL = "`$#["
+_ESPACOS_APOS_TRACOS = " \t\n"
+
+
+def _tem_multiplas_statements(sql: str) -> bool:
+    if "\\" in sql or "\x00" in sql:
+        return True
+
+    n = len(sql)
+    i = 0
+    while i < n:
+        c = sql[i]
+        if c in "'\"":
+            j = i + 1
+            while True:
+                j = sql.find(c, j)
+                if j == -1:
+                    return True
+                if sql.startswith(c, j + 1):
+                    j += 2
+                    continue
+                break
+            i = j + 1
+        elif sql.startswith("--", i):
+            seguinte = sql[i + 2:i + 3]
+            if seguinte and seguinte not in _ESPACOS_APOS_TRACOS:
+                return True
+            fim = sql.find("\n", i)
+            if fim == -1:
+                fim = n
+            if "\r" in sql[i:fim].removesuffix("\r"):
+                return True
+            i = fim
+        elif sql.startswith("/*", i):
+            if sql.startswith("!", i + 2) or sql[i + 2:i + 4].upper() == "M!":
+                return True
+            fim = sql.find("*/", i + 2)
+            if fim == -1 or "/*" in sql[i + 2:fim]:
+                return True
+            i = fim + 2
+        elif c in _AMBIGUOS_FORA_DE_LITERAL:
+            return True
+        elif c == ";" and i != n - 1:
+            return True
+        else:
+            i += 1
+    return False
+
+
 def validar_sql_segura(sql: str) -> tuple[bool, str]:
     """
     Valida SQL para uso seguro no executor.
 
     Regras:
     - permite apenas consultas iniciadas por SELECT ou WITH
-    - bloqueia multiplas statements (mais de um ';')
+    - bloqueia multiplas statements (';' fora de literais e comentarios)
     - bloqueia comandos de escrita/DDL/administracao
 
     Retorno:
@@ -64,7 +113,7 @@ def validar_sql_segura(sql: str) -> tuple[bool, str]:
     # Remove ';' final opcional para facilitar regras.
     sql_sem_final = sql_limpa[:-1] if sql_limpa.endswith(";") else sql_limpa
 
-    if ";" in sql_sem_final:
+    if ";" in sql_sem_final and _tem_multiplas_statements(sql_limpa):
         return False, "Multiplas statements nao sao permitidas."
 
     inicio = sql_sem_final.lstrip().lower()
