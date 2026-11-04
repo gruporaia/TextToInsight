@@ -54,11 +54,8 @@ class Graph:
         # closure/partial diretamente para os nos que precisam dela, então
         # nunca e persistida pelo checkpointer (MemorySaver).
         self.db_engine = db_engine
-        # Verificador depois da SQL: "off" (fora do grafo) ou "avisar".
         self.verificador = verificador
-        # O Jev é o verificador principal (as regras rodam em segundo plano e são o plano B sem chave).
         self.verificador_jev = verificador_jev
-        # Colunas a mais: "nota" (observação, uso real) ou "erro" (alerta, benchmarks como o BIRD).
         self.verificador_colunas = verificador_colunas
         self.grafo_text_to_insight = self._compilar_grafo(hitl, enrich_rag)
 
@@ -87,8 +84,6 @@ class Graph:
         construtor_grafo.add_node("salvar_csv", nos_nodo_salvar_csv)
         construtor_grafo.add_node("gerador_grafico", partial(nos_nodo_gerador_grafico, llm=self.llm))
         construtor_grafo.add_node("resposta", partial(nos_nodo_resposta, llm=self.llm))
-        # Depois de uma execução, o sandbox vai para salvar_csv/resposta. Com o verificador ligado,
-        # ele passa antes pelo verificador, que segue para o mesmo destino.
         destino_apos_sandbox = "salvar_csv" if self.enable_graphs else "resposta"
         mapa_sandbox = {"salvar_csv": "salvar_csv", "resposta": "resposta", "planejador": "planejador"}
         if self.verificador != "off":

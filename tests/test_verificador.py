@@ -1,12 +1,12 @@
-"""
-Testes do nó verificador (depois da SQL). Nenhum teste chama a API.
-"""
 import sqlite3
 import time
+from datetime import date, timedelta
 
 import pytest
 
 from text_to_insight.nodes import verificador as ver
+
+DATA_FUTURA = (date.today() + timedelta(days=730)).isoformat()
 
 
 @pytest.fixture
@@ -39,10 +39,8 @@ def test_pede_um_numero_e_devolve_varias_colunas():
 def test_colunas_nao_pedidas_mas_respeita_pedidos_multiplos():
     linhas = [{"superhero_name": "Jean", "gender": "Female"}]
     assert _regras(ver.checar("Identify the gender of the superhero.", "SELECT a, b FROM t", linhas)) == ["colunas_nao_pedidas"]
-    # a pergunta pede duas coisas (Q522 do BIRD: o pedido está na segunda frase)
     q522 = "Which cards are ranked 1st on EDHRec? List all of the cards name and its banned play format."
     assert ver.checar(q522, "SELECT name, format FROM t", [{"name": "x", "format": "y"}]) == []
-    # duas perguntas na mesma frase (Q173)
     assert ver.checar("How often? What was the aim?", "SELECT a, b FROM t", [{"a": 1, "b": 2}]) == []
 
 
@@ -61,7 +59,6 @@ def test_valor_inexistente_no_banco(banco):
         alertas = ver.checar("How many of them are male?", sql, [{"n": 0}], existe)
         assert "valor_inexistente" in _regras(alertas)
         assert "CENTROMEA = '-'" in next(a["mensagem"] for a in alertas if a["regra"] == "valor_inexistente")
-        # valor que existe não acusa; coluna desconhecida não acusa
         assert existe("SEX", "M", False) is True
         assert existe("coluna_que_nao_existe", "x", False) is None
         assert existe("CENTROMEA", "neg%", True) is True
@@ -73,7 +70,6 @@ def test_valor_com_aspas_e_nome_estranho_nao_quebram(banco):
     conn, fechar = ver._abrir_sqlite({"db_path": banco})
     try:
         existe = ver._checador_de_valores(conn)
-        # o valor vai como parâmetro: aspas e tentativa de injeção não executam nada
         assert existe("SEX", "M' OR '1'='1", False) is False
         assert existe("SEX", "x'); DROP TABLE Patient; --", False) is False
         assert existe("First Name", "Ana", False) is True
@@ -85,7 +81,6 @@ def test_valor_com_aspas_e_nome_estranho_nao_quebram(banco):
 def test_no_so_roda_em_execucao_ok_e_fecha_sem_banco():
     assert ver.nos_nodo_verificador({"status": "exec_erro"}) == {"alertas_verificador": [], "verificacao": {}}
     assert ver.nos_nodo_verificador({"status": "exec_ok"}, modo="off") == {"alertas_verificador": [], "verificacao": {}}
-    # sem db_path: roda as regras que não precisam do banco
     out = ver.nos_nodo_verificador({"status": "exec_ok", "pergunta_atual": "How many?", "sql_gerada": "SELECT 1", "linhas_resultado_completo": []})
     assert _regras(out["alertas_verificador"]) == ["resultado_vazio"]
 
@@ -143,16 +138,11 @@ def test_grafo_inclui_o_verificador_so_quando_ligado(modo, graficos):
 
 
 def test_colunas_com_nome_repetido_contam_pelo_select():
-    # Q206 do BIRD: duas colunas "element"; no dict do resultado elas viram uma só
     sql = "SELECT a.element, b.element FROM connected c JOIN atom a ON a.atom_id = c.atom_id JOIN atom b ON b.atom_id = c.atom_id2"
     regras = _regras(ver.checar("What elements are in the TR004_8_9 bond atoms?", sql, [{"element": "cl"}]))
     assert regras == ["colunas_nao_pedidas"]
     assert ver.checar("How many?", "SELECT * FROM t", [{"n": 2}]) == []
 
-
-# ---------------------------------------------------------------------------
-# Níveis (regras + Jev). O Jev é simulado: nenhum teste chama a API.
-# ---------------------------------------------------------------------------
 
 class _Resp:
     def __init__(self, dados):
@@ -166,7 +156,6 @@ class _Resp:
 
 
 def _respostas_jev(probs, probs_inv=None):
-    """Probabilidades da escolha nas duas ordens (se probs_inv não vier, as duas iguais)."""
     def escolha(p):
         return {"type": "choice", "choice": max(p, key=p.get), "confidence": 0.5, "probabilities": p}
     return {"answers": {"grupo": escolha(probs), "grupo_inv": escolha(probs_inv or probs)}}
@@ -185,7 +174,7 @@ def test_niveis_so_pelas_regras():
     alertas = [{"regra": "resultado_zero", "mensagem": "zero"}, {"regra": "valor_inexistente", "mensagem": "valor"}]
     v = ver.combinar(alertas, None)
     assert v["alerta"] is True and v["niveis_regras"] == ["alta", "media"] and v["origem"] == "regras"
-    assert v["nivel"] == "alta"  # sem Jev, o nível vem da regra mais forte (plano B)
+    assert v["nivel"] == "alta"
 
 
 def test_jev_principal_e_regras_em_segundo_plano():
@@ -194,12 +183,10 @@ def test_jev_principal_e_regras_em_segundo_plano():
     assert ver.combinar([], nenhum)["alerta"] is False
     v = ver.combinar([], baixa)
     assert v["alerta"] is True and v["nivel"] == "baixa" and v["origem"] == "jev"
-    # o Jev não viu nada, mas a regra viu: o alerta continua (as regras completam o Jev)
     v = ver.combinar([{"regra": "resultado_vazio", "mensagem": "vazio"}], nenhum)
     assert v["alerta"] is True and v["origem"] == "regras" and v["nivel"] == "alta"
     v = ver.combinar([{"regra": "colunas_nao_pedidas", "mensagem": "colunas"}], baixa)
     assert v["origem"] == "jev e regras" and v["niveis_regras"] == ["baixa"]
-    # quando os dois apontam níveis diferentes, o nível principal é o do Jev
     v = ver.combinar([{"regra": "resultado_vazio", "mensagem": "vazio"}], baixa)
     assert v["nivel"] == "baixa" and v["niveis_regras"] == ["alta"]
 
@@ -227,7 +214,7 @@ def test_no_com_jev_manda_o_estado_certo_sem_alertas_e_a_chave_so_no_cabecalho(m
     assert estado_jev["question"] == "Which school has the lowest rate?" and estado_jev["hint"] == "rate = a / b"
     assert estado_jev["result"].startswith("1 row(s); columns: School")
     assert "schools: School, a, b" in estado_jev["schema"]
-    assert "alerts" not in estado_jev  # o Jev julga sem ver o que as regras acharam
+    assert "alerts" not in estado_jev
     assert set(enviado["json"]["questions"]) == {"grupo", "grupo_inv"}
     assert "chave-de-teste" not in str(enviado["json"]) and enviado["headers"]["Authorization"] == "Bearer chave-de-teste"
     assert out["verificacao"]["alerta"] is True and out["verificacao"]["nivel_jev"] == "baixa"
@@ -262,7 +249,6 @@ def test_aviso_comeca_pelo_jev_e_regras_viram_detalhe():
     alertas = [{"regra": "colunas_nao_pedidas", "mensagem": "a resposta tem colunas que a pergunta não pediu (a, b)"}]
     aviso = ver.texto_do_aviso(alertas, verif | {"niveis_regras": ["baixa"], "origem": "jev e regras"})
     assert aviso.index("A checagem automática") < aviso.index("Detalhes: a resposta tem colunas que a pergunta não pediu (a, b)")
-    # sem Jev (plano B), o aviso vem só das regras
     aviso = ver.texto_do_aviso(alertas, {"alerta": True, "nivel": "baixa", "nivel_jev": "", "niveis_regras": ["baixa"]})
     assert aviso == "\n\nAtenção: esta resposta pode estar errada, porque a resposta tem colunas que a pergunta não pediu (a, b)."
     assert ver.texto_do_aviso([], {"alerta": False, "nivel_jev": "nenhum"}) == ""
@@ -289,16 +275,10 @@ def test_dica_colada_na_pergunta_nao_esconde_coluna_a_mais():
     assert regras == ["colunas_nao_pedidas"]
 
 
-# ---------------------------------------------------------------------------
-# Colunas juntadas (regra firme) e filtros não pedidos (dúvida).
-# ---------------------------------------------------------------------------
-
 def test_colunas_juntadas_no_select_final():
-    # Q1375 do BIRD: nome e sobrenome numa coluna só
     alertas = ver.checar("List all the members.", "SELECT first_name || ' ' || last_name AS full_name FROM member", [{"full_name": "a b"}])
     assert "colunas_juntadas" in _regras(alertas)
     assert "colunas_juntadas" in _regras(ver.checar("Names?", "SELECT CONCAT(a, b) FROM t", [{"x": "ab"}]))
-    # concatenar só no filtro não conta
     assert ver.checar("Who?", "SELECT name FROM t WHERE first || last = 'ab'", [{"name": "x"}]) == []
 
 
@@ -313,21 +293,16 @@ def test_filtros_que_a_pergunta_nao_pediu():
 
 
 def test_filtro_citado_pelo_valor_ou_pela_coluna_nao_e_duvida():
-    # Q1514: a data e a hora estão na pergunta/dica, só os nomes das colunas não
     q = "What kind of currency did the customer paid at 16:25:00 in 2012/8/24?\nHint: '2012/8/24' can be represented by '2012-08-24';"
     assert ver.checar_duvidas(q, "SELECT c.Currency FROM t WHERE t.Date = '2012-08-24' AND t.Time = '16:25:00'") == []
-    # Q1078: o valor (nome do jogador) está na pergunta
     q = "Which player is older, Aaron Lennon or Abdelaziz Barrada?"
     assert ver.checar_duvidas(q, "SELECT player_name FROM Player WHERE player_name IN ('Aaron Lennon', 'Abdelaziz Barrada')") == []
-    # Q1323: "not fundraisers" cobre type <> 'Fundraiser'
     q = "List all the names of events that had an attendance of over 20 students but were not fundraisers."
     assert ver.checar_duvidas(q, "SELECT event_name FROM event e WHERE e.type <> 'Fundraiser'") == []
-    # a coluna está na pergunta (Gender ~ gender) e o valor curto 'F' não é acusado só por existir a letra f no texto
     assert ver.checar_duvidas("How many female clients?\nHint: female refers to gender = 'F'", "SELECT COUNT(*) FROM client WHERE gender = 'F'") == []
 
 
 def test_valor_curto_so_conta_como_palavra_inteira():
-    # 'S' não pode ser "citado" só porque a letra s aparece em "schools"
     assert ver.checar_duvidas("How many schools are there?", "SELECT COUNT(*) FROM satscores WHERE rtype = 'S'") == ["rtype = 'S'"]
 
 
@@ -354,10 +329,6 @@ def test_aviso_de_erro_vem_antes_da_duvida():
     assert aviso.index("pode estar errada") < aviso.index("Confira se é isso que você quer")
 
 
-# ---------------------------------------------------------------------------
-# Colunas a mais: "nota" (uso real) x "erro" (benchmark).
-# ---------------------------------------------------------------------------
-
 def test_colunas_a_mais_viram_observacao_no_modo_nota():
     estado = {"status": "exec_ok", "pergunta_atual": "Identify the gender of the superhero.", "sql_gerada": "SELECT a, b FROM t",
               "linhas_resultado_completo": [{"a": 1, "b": 2}]}
@@ -375,7 +346,6 @@ def test_nivel_baixa_do_jev_nao_liga_o_alerta_no_modo_nota():
     baixa = _respostas_jev({"alta": 0.02, "media": 0.03, "baixa": 0.8, "nenhum": 0.15})["answers"]
     assert ver.combinar([], baixa, "nota")["alerta"] is False
     assert ver.combinar([], baixa, "erro")["alerta"] is True
-    # o alerta de outra regra continua e o aviso não fala em colunas
     vazio = [{"regra": "resultado_vazio", "mensagem": "a consulta não devolveu nenhuma linha"}]
     v = ver.combinar(vazio, baixa, "nota")
     assert v["alerta"] is True and v["origem"] == "regras" and v["nivel"] == "alta" and v["nivel_jev"] == "baixa"
@@ -398,10 +368,6 @@ def test_grafo_repassa_o_modo_das_colunas():
     assert g.grafo_text_to_insight.builder.nodes["verificador"].runnable.func.keywords["colunas_extras"] == "nota"
 
 
-# ---------------------------------------------------------------------------
-# Regras que só olham a pergunta, a SQL e o resultado.
-# ---------------------------------------------------------------------------
-
 @pytest.mark.parametrize("pergunta", ["Quantos ingressos teve cada conferência?", "Quantos materiais por categoria?", "How many tickets for each event?"])
 def test_pede_um_numero_nao_dispara_em_pergunta_por_grupo(pergunta):
     linhas = [{"nome": "a", "total": 3}, {"nome": "b", "total": 5}]
@@ -414,7 +380,6 @@ def test_coluna_zerada():
     assert "coluna_zerada" in _regras(alertas)
     assert "presentes" in next(a["mensagem"] for a in alertas if a["regra"] == "coluna_zerada")
     assert "coluna_zerada" in _regras(ver.checar("Quem?", "SELECT a, b FROM t", [{"a": 1, "b": None}, {"a": 2, "b": None}]))
-    # uma linha só é a regra do resultado zero; um valor diferente de zero ou booleano não conta
     assert "coluna_zerada" not in _regras(ver.checar("Quem?", "SELECT a FROM t", [{"a": 0}]))
     assert "coluna_zerada" not in _regras(ver.checar("Quem?", "SELECT a, b FROM t", [{"a": 0, "b": 1}, {"a": 1, "b": 2}]))
     assert "coluna_zerada" not in _regras(ver.checar("Quem?", "SELECT a, b FROM t", [{"a": False, "b": 1}, {"a": False, "b": 2}]))
@@ -423,7 +388,6 @@ def test_coluna_zerada():
 def test_um_grupo_so_exige_group_by_sem_limit():
     sql = "SELECT track, COUNT(*) AS n FROM a GROUP BY track"
     assert "um_grupo_so" in _regras(ver.checar("Quantas candidaturas em cada trilha?", sql, [{"track": "GENERAL", "n": 403}]))
-    # mais de um grupo, pergunta sem "cada", ou o "for each" é só método e a resposta é um valor (Spider local007)
     assert "um_grupo_so" not in _regras(ver.checar("Quantas em cada trilha?", sql, [{"track": "A", "n": 1}, {"track": "B", "n": 2}]))
     assert "um_grupo_so" not in _regras(ver.checar("Quantas candidaturas?", sql, [{"track": "A", "n": 1}]))
     assert "um_grupo_so" not in _regras(ver.checar("For each player, average the span.", "SELECT AVG(s) AS m FROM p", [{"m": 4.2}]))
@@ -438,19 +402,17 @@ def test_duvida_ignora_a_mecanica_da_propria_sql():
     assert ver.checar_duvidas("Sales?", "SELECT a FROM t WHERE dia >= '2020-01-01'") == ["dia >= '2020-01-01'"]
 
 
-# ---------------------------------------------------------------------------
-# Regras que consultam o banco.
-# ---------------------------------------------------------------------------
-
 @pytest.fixture
 def portal(tmp_path):
     caminho = tmp_path / "portal.sqlite"
     c = sqlite3.connect(caminho)
-    c.executescript("""
+    c.executescript(f"""
         CREATE TABLE evento (id INTEGER, nome TEXT, inicio TEXT);
-        INSERT INTO evento VALUES (1, 'Antigo', '2020-04-01T08:00:00'), (2, 'Recente', '2024-04-01T08:00:00'), (3, 'Futuro', '2999-04-01T08:00:00');
+        INSERT INTO evento VALUES (1, 'Antigo', '2020-04-01T08:00:00'), (2, 'Recente', '2024-04-01T08:00:00'), (3, 'Futuro', '{DATA_FUTURA}T08:00:00');
         CREATE TABLE sessao (id INTEGER, evento_id INTEGER, inicio TEXT);
-        INSERT INTO sessao VALUES (1, 2, '2024-04-01T09:00:00'), (2, 3, '2999-04-01T09:00:00');
+        INSERT INTO sessao VALUES (1, 2, '2024-04-01T09:00:00'), (2, 3, '{DATA_FUTURA}T09:00:00');
+        CREATE TABLE contrato (id INTEGER, nome TEXT, fim TEXT);
+        INSERT INTO contrato VALUES (1, 'Sem fim', '9999-12-31T00:00:00'), (2, 'Marcador', '2999-01-01T00:00:00'), (3, 'Encerrado', '2020-01-01T00:00:00');
         CREATE TABLE cargo (id INTEGER, nome TEXT, level TEXT, descricao TEXT);
         INSERT INTO cargo VALUES (1, 'Diretor de TI', 'DIRECTOR', 'x'), (2, 'Head de Marketing', 'DIRECTOR', 'y'), (3, 'Analista', 'ANALYST', 'z');
         CREATE TABLE membro (id INTEGER, grupo INTEGER, is_bl_account BOOLEAN, is_international BOOLEAN);
@@ -472,23 +434,24 @@ def test_data_futura_em_cte_e_cte_dentro_de_cte(sonda):
     direta = "WITH e AS (SELECT id FROM evento ORDER BY inicio DESC LIMIT 1) SELECT COUNT(*) AS n FROM e"
     alertas = ver.checar(pergunta, direta, [{"n": 1}], sonda=sonda)
     assert "data_futura" in _regras(alertas)
-    assert "2999-04-01" in next(a["mensagem"] for a in alertas if a["regra"] == "data_futura")
-    # P27 da BRASA: a ordenação usa uma coluna que vem de outra CTE
+    assert DATA_FUTURA in next(a["mensagem"] for a in alertas if a["regra"] == "data_futura")
     encadeada = ("WITH x AS (SELECT evento_id, MAX(inicio) AS ultimo FROM sessao GROUP BY evento_id), "
                  "y AS (SELECT evento_id FROM x ORDER BY ultimo DESC LIMIT 1) SELECT COUNT(*) AS n FROM y")
     assert "data_futura" in _regras(ver.checar(pergunta, encadeada, [{"n": 1}], sonda=sonda))
-    # apelido do SELECT e posição no ORDER BY
     assert "data_futura" in _regras(ver.checar(pergunta, "SELECT nome, inicio AS d FROM evento ORDER BY d DESC LIMIT 1", [{"nome": "Futuro", "d": "x"}], sonda=sonda))
     assert "data_futura" in _regras(ver.checar(pergunta, "SELECT nome, inicio FROM evento ORDER BY 2 DESC LIMIT 1", [{"nome": "Futuro", "inicio": "x"}], sonda=sonda))
+
+
+def test_data_futura_ignora_data_que_marca_sem_data(sonda):
+    sql = "SELECT nome FROM contrato ORDER BY fim DESC LIMIT 2"
+    assert "data_futura" not in _regras(ver.checar("Quais os contratos mais recentes?", sql, [{"nome": "Sem fim"}, {"nome": "Marcador"}], sonda=sonda))
 
 
 def test_data_futura_nao_acusa_o_que_esta_certo(sonda):
     certa = "SELECT nome FROM evento WHERE inicio <= '2026-01-01' ORDER BY inicio DESC LIMIT 1"
     assert "data_futura" not in _regras(ver.checar("Qual o evento mais recente?", certa, [{"nome": "Recente"}], sonda=sonda))
-    # a pergunta fala em futuro
     futuro = "SELECT nome FROM evento ORDER BY inicio DESC LIMIT 1"
     assert "data_futura" not in _regras(ver.checar("Qual o próximo evento?", futuro, [{"nome": "Futuro"}], sonda=sonda))
-    # ordem crescente, ou coluna que não é data
     assert "data_futura" not in _regras(ver.checar("Qual o primeiro evento?", "SELECT nome FROM evento ORDER BY inicio ASC LIMIT 1", [{"nome": "Antigo"}], sonda=sonda))
     assert "data_futura" not in _regras(ver.checar("Qual o maior id?", "SELECT nome FROM evento ORDER BY id DESC LIMIT 1", [{"nome": "Futuro"}], sonda=sonda))
 
@@ -499,11 +462,9 @@ def test_coluna_irma(sonda):
     assert "coluna_irma" in _regras(alertas)
     texto = next(a["mensagem"] for a in alertas if a["regra"] == "coluna_irma")
     assert "level" in texto and "'DIRECTOR'" in texto and "pega 1 linhas" in texto and "pega 2" in texto
-    # a SQL já usa a coluna irmã; ou o termo não parece com nenhum valor de categoria
     junto = "SELECT COUNT(*) AS n FROM cargo WHERE nome LIKE '%diretor%' OR level = 'DIRECTOR'"
     assert "coluna_irma" not in _regras(ver.checar("Quantos diretores?", junto, [{"n": 2}], sonda=sonda))
     assert "coluna_irma" not in _regras(ver.checar("Quantos?", "SELECT COUNT(*) AS n FROM cargo WHERE nome LIKE '%marketing%'", [{"n": 1}], sonda=sonda))
-    # o valor parecido pega o mesmo número de linhas: nada a avisar
     igual = "SELECT COUNT(*) AS n FROM cargo WHERE nome LIKE '%analista%'"
     assert "coluna_irma" not in _regras(ver.checar("Quantos analistas?", igual, [{"n": 1}], sonda=sonda))
 
@@ -514,11 +475,9 @@ def test_linhas_que_nao_sao_pessoas(sonda):
     alertas = ver.checar(pergunta, sql, [{"grupo": 1, "n": 2}, {"grupo": 2, "n": 1}], sonda=sonda)
     assert "linhas_que_nao_sao_pessoas" in _regras(alertas)
     assert "is_bl_account em membro (1)" in next(a["mensagem"] for a in alertas if a["regra"] == "linhas_que_nao_sao_pessoas")
-    # a marca já foi filtrada, ou a consulta não conta nada
     filtrada = "SELECT grupo, COUNT(*) AS n FROM membro WHERE NOT is_bl_account GROUP BY grupo"
     assert "linhas_que_nao_sao_pessoas" not in _regras(ver.checar(pergunta, filtrada, [{"grupo": 1, "n": 1}, {"grupo": 2, "n": 1}], sonda=sonda))
     assert "linhas_que_nao_sao_pessoas" not in _regras(ver.checar("Quais membros?", "SELECT id FROM membro", [{"id": 1}], sonda=sonda))
-    # "internal" é marca, "international" não é (a checagem é por parte do nome, não por pedaço de texto)
     assert ver.MARCAS_NAO_PESSOA & set("is_international".split("_")) == set()
 
 
@@ -536,10 +495,9 @@ def test_chave_json_inexistente_no_postgres():
     sonda = SondaPg("postgres", executar)
     arvore = ver._parse("SELECT institution_info->>'country' AS pais, COUNT(*) FROM network_bl GROUP BY 1", "postgres")
     assert ver._chave_json_inexistente(arvore, sonda) == "institution_info->>'country'"
-    assert pedidos[0][1] == {"k": "country"} and "country" not in pedidos[0][0]  # a chave vai como parâmetro
+    assert pedidos[0][1] == {"k": "country"} and "country" not in pedidos[0][0]
     arvore = ver._parse("SELECT institution_info->>'institution_country' AS pais FROM network_bl", "postgres")
     assert ver._chave_json_inexistente(arvore, sonda) == ""
-    # banco fora do ar: não acusa
     sonda_falha = SondaPg("postgres", lambda *a: None)
     assert ver._chave_json_inexistente(ver._parse("SELECT institution_info->>'x' FROM t", "postgres"), sonda_falha) == ""
 
@@ -549,8 +507,7 @@ def test_duvida_diz_quanto_o_resultado_muda_sem_o_filtro(sonda):
     sql = "SELECT COUNT(*) AS n FROM membro WHERE is_international = 1"
     assert ver.checar_duvidas(pergunta, sql, sonda, [{"n": 1}]) == ["is_international = 1 (sem ele, o resultado mais que dobra)"]
     sql = "SELECT COUNT(*) AS n FROM membro WHERE grupo < 3"
-    assert ver.checar_duvidas(pergunta, sql, sonda, [{"n": 3}]) == ["grupo < 3"]  # não muda nada: fica só o filtro
-    # sem sonda continua só o filtro
+    assert ver.checar_duvidas(pergunta, sql, sonda, [{"n": 3}]) == ["grupo < 3"]
     assert ver.checar_duvidas(pergunta, "SELECT COUNT(*) AS n FROM membro WHERE is_international = 1") == ["is_international = 1"]
 
 
@@ -572,7 +529,7 @@ def test_sonda_nao_executa_o_que_nao_for_leitura_e_nao_quebra(sonda):
     assert sonda.consultar("SELECT coluna_que_nao_existe FROM evento") is None
     assert sonda.colunas("tabela_que_nao_existe") == []
     assert sonda.consultar("SELECT COUNT(*) FROM evento")[1] == [(3,)]
-    assert sonda.contar("evento", "nome = :v", {"v": "x' OR '1'='1"}) == 0  # valor vai como parâmetro
+    assert sonda.contar("evento", "nome = :v", {"v": "x' OR '1'='1"}) == 0
 
 
 def test_sonda_para_quando_acaba_o_tempo():
@@ -604,7 +561,7 @@ def test_checador_pela_sonda():
 
     assert ver._checador_pela_sonda(Falsa((["x"], [(1,)])))("status", "a", False) is True
     assert ver._checador_pela_sonda(Falsa((["x"], [])))("status", "a", False) is False
-    assert ver._checador_pela_sonda(Falsa(None))("status", "a", False) is None  # falhou: não dá para saber
+    assert ver._checador_pela_sonda(Falsa(None))("status", "a", False) is None
     assert ver._checador_pela_sonda(Falsa(None))("coluna_desconhecida", "a", False) is None
 
 

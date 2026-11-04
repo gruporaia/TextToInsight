@@ -1,11 +1,3 @@
-"""
-Chamada ao Jev (TypeSafe System One), usada pelo verificador.
-
-O Jev responde perguntas fechadas sobre um estado (texto) com probabilidades. Quem chama
-decide o que fazer quando não há chave ou a chamada falha: o verificador segue só com as regras.
-A chave vem de TYPESAFE_API_KEY e só vai no cabeçalho; nunca é impressa nem guardada no estado.
-"""
-
 from __future__ import annotations
 
 import os
@@ -23,7 +15,6 @@ def chave_jev() -> str:
 
 
 def perguntar(state: dict[str, Any], perguntas: dict[str, dict], chave: str, timeout: float = TIMEOUT_SEGUNDOS) -> dict:
-    """Manda o estado e as perguntas ao Jev e devolve o dicionário `answers`."""
     corpo = {"model": MODELO_JEV, "state": state, "questions": perguntas}
     resp = httpx.post(URL_JEV, json=corpo, headers={"Authorization": f"Bearer {chave}"}, timeout=timeout)
     resp.raise_for_status()
@@ -35,7 +26,6 @@ def escolha(instrucoes: str, opcoes: dict[str, str]) -> dict:
 
 
 def media_das_duas_ordens(respostas: dict, nome: str, opcoes: list[str]) -> dict[str, float]:
-    """O Jev tende a preferir a primeira opção; a escolha vai nas duas ordens e usamos a média."""
     a = respostas[nome]["probabilities"]
     b = respostas[nome + "_inv"]["probabilities"]
     probs = {o: (float(a.get(o, 0.0)) + float(b.get(o, 0.0))) / 2 for o in opcoes}
@@ -48,7 +38,6 @@ def _identificador(nome: str) -> str:
 
 
 def schema_compacto(contexto_schema: str) -> str:
-    """Schema do nó de schema em formato curto: uma linha "tabela: col1, col2" por tabela e as chaves estrangeiras."""
     tabelas: list[tuple[str, list[str]]] = []
     fks: list[str] = []
     for linha in contexto_schema.splitlines():
@@ -66,7 +55,6 @@ def schema_compacto(contexto_schema: str) -> str:
 
 
 def separar_dica(pergunta: str) -> tuple[str, str]:
-    """No BIRD a dica vem colada na pergunta ("...\\nHint: ..."); o Jev recebe as duas separadas."""
     for marcador in ("\nHint:", "\nhint:"):
         if marcador in pergunta:
             texto, dica = pergunta.split(marcador, 1)
