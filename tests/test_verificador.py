@@ -2,6 +2,7 @@
 Testes do nó verificador (depois da SQL). Nenhum teste chama a API.
 """
 import sqlite3
+import time
 
 import pytest
 
@@ -221,7 +222,7 @@ def test_no_com_jev_manda_o_estado_certo_sem_alertas_e_a_chave_so_no_cabecalho(m
         return _Resp(_respostas_jev({"alta": 0.1, "media": 0.1, "baixa": 0.7, "nenhum": 0.1}))
 
     monkeypatch.setattr(httpx, "post", falso_post)
-    out = ver.nos_nodo_verificador(_estado_ok(), usar_jev=True)
+    out = ver.nos_nodo_verificador(_estado_ok(), usar_jev=True, colunas_extras="erro")
     estado_jev = enviado["json"]["state"]
     assert estado_jev["question"] == "Which school has the lowest rate?" and estado_jev["hint"] == "rate = a / b"
     assert estado_jev["result"].startswith("1 row(s); columns: School")
@@ -351,3 +352,296 @@ def test_aviso_de_erro_vem_antes_da_duvida():
     verif = {"alerta": True, "nivel": "alta", "nivel_jev": "", "niveis_regras": ["alta"], "duvidas": ["x > 0"]}
     aviso = ver.texto_do_aviso([{"regra": "resultado_vazio", "mensagem": "a consulta não devolveu nenhuma linha"}], verif)
     assert aviso.index("pode estar errada") < aviso.index("Confira se é isso que você quer")
+
+
+# ---------------------------------------------------------------------------
+# Colunas a mais: "nota" (uso real) x "erro" (benchmark).
+# ---------------------------------------------------------------------------
+
+def test_colunas_a_mais_viram_observacao_no_modo_nota():
+    estado = {"status": "exec_ok", "pergunta_atual": "Identify the gender of the superhero.", "sql_gerada": "SELECT a, b FROM t",
+              "linhas_resultado_completo": [{"a": 1, "b": 2}]}
+    out = ver.nos_nodo_verificador(estado, usar_jev=False, colunas_extras="nota")
+    assert out["verificacao"]["alerta"] is False and out["alertas_verificador"] == []
+    assert out["verificacao"]["notas"] == ["a resposta tem colunas que a pergunta não pediu (a, b)"]
+    aviso = ver.texto_do_aviso(out["alertas_verificador"], out["verificacao"])
+    assert aviso == "\n\nObservação: a resposta tem colunas que a pergunta não pediu (a, b)."
+    out = ver.nos_nodo_verificador(estado, usar_jev=False, colunas_extras="erro")
+    assert out["verificacao"]["alerta"] is True and out["verificacao"]["notas"] == []
+    assert "pode estar errada" in ver.texto_do_aviso(out["alertas_verificador"], out["verificacao"])
+
+
+def test_nivel_baixa_do_jev_nao_liga_o_alerta_no_modo_nota():
+    baixa = _respostas_jev({"alta": 0.02, "media": 0.03, "baixa": 0.8, "nenhum": 0.15})["answers"]
+    assert ver.combinar([], baixa, "nota")["alerta"] is False
+    assert ver.combinar([], baixa, "erro")["alerta"] is True
+    # o alerta de outra regra continua e o aviso não fala em colunas
+    vazio = [{"regra": "resultado_vazio", "mensagem": "a consulta não devolveu nenhuma linha"}]
+    v = ver.combinar(vazio, baixa, "nota")
+    assert v["alerta"] is True and v["origem"] == "regras" and v["nivel"] == "alta" and v["nivel_jev"] == "baixa"
+    assert ver.texto_do_aviso(vazio, v) == "\n\nAtenção: esta resposta pode estar errada, porque a consulta não devolveu nenhuma linha."
+
+
+def test_jev_baixa_sem_regra_vira_observacao(monkeypatch):
+    baixa = _respostas_jev({"alta": 0.02, "media": 0.03, "baixa": 0.8, "nenhum": 0.15})["answers"]
+    monkeypatch.setattr(ver, "_julgar_com_jev", lambda estado: baixa)
+    out = ver.nos_nodo_verificador(_estado_ok(), usar_jev=True, colunas_extras="nota")
+    assert out["verificacao"]["alerta"] is False
+    assert out["verificacao"]["notas"] == ["a resposta pode ter colunas que a pergunta não pediu"]
+
+
+def test_grafo_repassa_o_modo_das_colunas():
+    from text_to_insight.graph import Graph
+    g = Graph("chave-falsa", "openai/gpt-4o-mini", hitl=False, enable_graphs=False, verificador="avisar", verificador_colunas="erro")
+    assert g.grafo_text_to_insight.builder.nodes["verificador"].runnable.func.keywords["colunas_extras"] == "erro"
+    g = Graph("chave-falsa", "openai/gpt-4o-mini", hitl=False, enable_graphs=False, verificador="avisar")
+    assert g.grafo_text_to_insight.builder.nodes["verificador"].runnable.func.keywords["colunas_extras"] == "nota"
+
+
+# ---------------------------------------------------------------------------
+# Regras que só olham a pergunta, a SQL e o resultado.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("pergunta", ["Quantos ingressos teve cada conferência?", "Quantos materiais por categoria?", "How many tickets for each event?"])
+def test_pede_um_numero_nao_dispara_em_pergunta_por_grupo(pergunta):
+    linhas = [{"nome": "a", "total": 3}, {"nome": "b", "total": 5}]
+    assert "numero_com_varias_colunas" not in _regras(ver.checar(pergunta, "SELECT nome, COUNT(*) AS total FROM t GROUP BY nome", linhas))
+
+
+def test_coluna_zerada():
+    linhas = [{"nome": "a", "presentes": 0}, {"nome": "b", "presentes": 0}]
+    alertas = ver.checar("Quem veio em cada sala?", "SELECT nome, presentes FROM t", linhas)
+    assert "coluna_zerada" in _regras(alertas)
+    assert "presentes" in next(a["mensagem"] for a in alertas if a["regra"] == "coluna_zerada")
+    assert "coluna_zerada" in _regras(ver.checar("Quem?", "SELECT a, b FROM t", [{"a": 1, "b": None}, {"a": 2, "b": None}]))
+    # uma linha só é a regra do resultado zero; um valor diferente de zero ou booleano não conta
+    assert "coluna_zerada" not in _regras(ver.checar("Quem?", "SELECT a FROM t", [{"a": 0}]))
+    assert "coluna_zerada" not in _regras(ver.checar("Quem?", "SELECT a, b FROM t", [{"a": 0, "b": 1}, {"a": 1, "b": 2}]))
+    assert "coluna_zerada" not in _regras(ver.checar("Quem?", "SELECT a, b FROM t", [{"a": False, "b": 1}, {"a": False, "b": 2}]))
+
+
+def test_um_grupo_so_exige_group_by_sem_limit():
+    sql = "SELECT track, COUNT(*) AS n FROM a GROUP BY track"
+    assert "um_grupo_so" in _regras(ver.checar("Quantas candidaturas em cada trilha?", sql, [{"track": "GENERAL", "n": 403}]))
+    # mais de um grupo, pergunta sem "cada", ou o "for each" é só método e a resposta é um valor (Spider local007)
+    assert "um_grupo_so" not in _regras(ver.checar("Quantas em cada trilha?", sql, [{"track": "A", "n": 1}, {"track": "B", "n": 2}]))
+    assert "um_grupo_so" not in _regras(ver.checar("Quantas candidaturas?", sql, [{"track": "A", "n": 1}]))
+    assert "um_grupo_so" not in _regras(ver.checar("For each player, average the span.", "SELECT AVG(s) AS m FROM p", [{"m": 4.2}]))
+    assert "um_grupo_so" not in _regras(ver.checar("Which state for each year has the most?", sql + " ORDER BY n DESC LIMIT 1", [{"track": "A", "n": 1}]))
+
+
+def test_duvida_ignora_a_mecanica_da_propria_sql():
+    sql = "WITH r AS (SELECT a, ROW_NUMBER() OVER (ORDER BY b) AS rn FROM t) SELECT a FROM r WHERE rn = 1"
+    assert ver.checar_duvidas("What is the top a?", sql) == []
+    assert ver.checar_duvidas("Who?", "SELECT a FROM t WHERE saldo > (SELECT AVG(saldo) FROM t)") == []
+    assert ver.checar_duvidas("Sales in 2020?", "SELECT a FROM t WHERE dia >= '2020-01-01'") == []
+    assert ver.checar_duvidas("Sales?", "SELECT a FROM t WHERE dia >= '2020-01-01'") == ["dia >= '2020-01-01'"]
+
+
+# ---------------------------------------------------------------------------
+# Regras que consultam o banco.
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def portal(tmp_path):
+    caminho = tmp_path / "portal.sqlite"
+    c = sqlite3.connect(caminho)
+    c.executescript("""
+        CREATE TABLE evento (id INTEGER, nome TEXT, inicio TEXT);
+        INSERT INTO evento VALUES (1, 'Antigo', '2020-04-01T08:00:00'), (2, 'Recente', '2024-04-01T08:00:00'), (3, 'Futuro', '2999-04-01T08:00:00');
+        CREATE TABLE sessao (id INTEGER, evento_id INTEGER, inicio TEXT);
+        INSERT INTO sessao VALUES (1, 2, '2024-04-01T09:00:00'), (2, 3, '2999-04-01T09:00:00');
+        CREATE TABLE cargo (id INTEGER, nome TEXT, level TEXT, descricao TEXT);
+        INSERT INTO cargo VALUES (1, 'Diretor de TI', 'DIRECTOR', 'x'), (2, 'Head de Marketing', 'DIRECTOR', 'y'), (3, 'Analista', 'ANALYST', 'z');
+        CREATE TABLE membro (id INTEGER, grupo INTEGER, is_bl_account BOOLEAN, is_international BOOLEAN);
+        INSERT INTO membro VALUES (1, 1, 1, 0), (2, 1, 0, 1), (3, 2, 0, 0);
+    """)
+    c.commit(); c.close()
+    return str(caminho)
+
+
+@pytest.fixture
+def sonda(portal):
+    conn = sqlite3.connect(f"file:{portal}?mode=ro", uri=True)
+    yield ver._Sonda("sqlite", ver._executor_sqlite(conn))
+    conn.close()
+
+
+def test_data_futura_em_cte_e_cte_dentro_de_cte(sonda):
+    pergunta = "Quantas pessoas foram ao evento mais recente?"
+    direta = "WITH e AS (SELECT id FROM evento ORDER BY inicio DESC LIMIT 1) SELECT COUNT(*) AS n FROM e"
+    alertas = ver.checar(pergunta, direta, [{"n": 1}], sonda=sonda)
+    assert "data_futura" in _regras(alertas)
+    assert "2999-04-01" in next(a["mensagem"] for a in alertas if a["regra"] == "data_futura")
+    # P27 da BRASA: a ordenação usa uma coluna que vem de outra CTE
+    encadeada = ("WITH x AS (SELECT evento_id, MAX(inicio) AS ultimo FROM sessao GROUP BY evento_id), "
+                 "y AS (SELECT evento_id FROM x ORDER BY ultimo DESC LIMIT 1) SELECT COUNT(*) AS n FROM y")
+    assert "data_futura" in _regras(ver.checar(pergunta, encadeada, [{"n": 1}], sonda=sonda))
+    # apelido do SELECT e posição no ORDER BY
+    assert "data_futura" in _regras(ver.checar(pergunta, "SELECT nome, inicio AS d FROM evento ORDER BY d DESC LIMIT 1", [{"nome": "Futuro", "d": "x"}], sonda=sonda))
+    assert "data_futura" in _regras(ver.checar(pergunta, "SELECT nome, inicio FROM evento ORDER BY 2 DESC LIMIT 1", [{"nome": "Futuro", "inicio": "x"}], sonda=sonda))
+
+
+def test_data_futura_nao_acusa_o_que_esta_certo(sonda):
+    certa = "SELECT nome FROM evento WHERE inicio <= '2026-01-01' ORDER BY inicio DESC LIMIT 1"
+    assert "data_futura" not in _regras(ver.checar("Qual o evento mais recente?", certa, [{"nome": "Recente"}], sonda=sonda))
+    # a pergunta fala em futuro
+    futuro = "SELECT nome FROM evento ORDER BY inicio DESC LIMIT 1"
+    assert "data_futura" not in _regras(ver.checar("Qual o próximo evento?", futuro, [{"nome": "Futuro"}], sonda=sonda))
+    # ordem crescente, ou coluna que não é data
+    assert "data_futura" not in _regras(ver.checar("Qual o primeiro evento?", "SELECT nome FROM evento ORDER BY inicio ASC LIMIT 1", [{"nome": "Antigo"}], sonda=sonda))
+    assert "data_futura" not in _regras(ver.checar("Qual o maior id?", "SELECT nome FROM evento ORDER BY id DESC LIMIT 1", [{"nome": "Futuro"}], sonda=sonda))
+
+
+def test_coluna_irma(sonda):
+    sql = "SELECT COUNT(*) AS n FROM cargo WHERE nome LIKE '%diretor%'"
+    alertas = ver.checar("Quantos diretores?", sql, [{"n": 1}], sonda=sonda)
+    assert "coluna_irma" in _regras(alertas)
+    texto = next(a["mensagem"] for a in alertas if a["regra"] == "coluna_irma")
+    assert "level" in texto and "'DIRECTOR'" in texto and "pega 1 linhas" in texto and "pega 2" in texto
+    # a SQL já usa a coluna irmã; ou o termo não parece com nenhum valor de categoria
+    junto = "SELECT COUNT(*) AS n FROM cargo WHERE nome LIKE '%diretor%' OR level = 'DIRECTOR'"
+    assert "coluna_irma" not in _regras(ver.checar("Quantos diretores?", junto, [{"n": 2}], sonda=sonda))
+    assert "coluna_irma" not in _regras(ver.checar("Quantos?", "SELECT COUNT(*) AS n FROM cargo WHERE nome LIKE '%marketing%'", [{"n": 1}], sonda=sonda))
+    # o valor parecido pega o mesmo número de linhas: nada a avisar
+    igual = "SELECT COUNT(*) AS n FROM cargo WHERE nome LIKE '%analista%'"
+    assert "coluna_irma" not in _regras(ver.checar("Quantos analistas?", igual, [{"n": 1}], sonda=sonda))
+
+
+def test_linhas_que_nao_sao_pessoas(sonda):
+    pergunta = "Quantos membros tem cada grupo?"
+    sql = "SELECT grupo, COUNT(*) AS n FROM membro GROUP BY grupo"
+    alertas = ver.checar(pergunta, sql, [{"grupo": 1, "n": 2}, {"grupo": 2, "n": 1}], sonda=sonda)
+    assert "linhas_que_nao_sao_pessoas" in _regras(alertas)
+    assert "is_bl_account em membro (1)" in next(a["mensagem"] for a in alertas if a["regra"] == "linhas_que_nao_sao_pessoas")
+    # a marca já foi filtrada, ou a consulta não conta nada
+    filtrada = "SELECT grupo, COUNT(*) AS n FROM membro WHERE NOT is_bl_account GROUP BY grupo"
+    assert "linhas_que_nao_sao_pessoas" not in _regras(ver.checar(pergunta, filtrada, [{"grupo": 1, "n": 1}, {"grupo": 2, "n": 1}], sonda=sonda))
+    assert "linhas_que_nao_sao_pessoas" not in _regras(ver.checar("Quais membros?", "SELECT id FROM membro", [{"id": 1}], sonda=sonda))
+    # "internal" é marca, "international" não é (a checagem é por parte do nome, não por pedaço de texto)
+    assert ver.MARCAS_NAO_PESSOA & set("is_international".split("_")) == set()
+
+
+def test_chave_json_inexistente_no_postgres():
+    class SondaPg(ver._Sonda):
+        def colunas(self, tabela):
+            return [("institution_info", "jsonb"), ("name", "text")]
+
+    pedidos = []
+
+    def executar(sql, parametros, limite):
+        pedidos.append((sql, parametros))
+        return ["count"], [(0 if parametros["k"] == "country" else 45,)]
+
+    sonda = SondaPg("postgres", executar)
+    arvore = ver._parse("SELECT institution_info->>'country' AS pais, COUNT(*) FROM network_bl GROUP BY 1", "postgres")
+    assert ver._chave_json_inexistente(arvore, sonda) == "institution_info->>'country'"
+    assert pedidos[0][1] == {"k": "country"} and "country" not in pedidos[0][0]  # a chave vai como parâmetro
+    arvore = ver._parse("SELECT institution_info->>'institution_country' AS pais FROM network_bl", "postgres")
+    assert ver._chave_json_inexistente(arvore, sonda) == ""
+    # banco fora do ar: não acusa
+    sonda_falha = SondaPg("postgres", lambda *a: None)
+    assert ver._chave_json_inexistente(ver._parse("SELECT institution_info->>'x' FROM t", "postgres"), sonda_falha) == ""
+
+
+def test_duvida_diz_quanto_o_resultado_muda_sem_o_filtro(sonda):
+    pergunta = "Quantos membros existem?"
+    sql = "SELECT COUNT(*) AS n FROM membro WHERE is_international = 1"
+    assert ver.checar_duvidas(pergunta, sql, sonda, [{"n": 1}]) == ["is_international = 1 (sem ele, o resultado mais que dobra)"]
+    sql = "SELECT COUNT(*) AS n FROM membro WHERE grupo < 3"
+    assert ver.checar_duvidas(pergunta, sql, sonda, [{"n": 3}]) == ["grupo < 3"]  # não muda nada: fica só o filtro
+    # sem sonda continua só o filtro
+    assert ver.checar_duvidas(pergunta, "SELECT COUNT(*) AS n FROM membro WHERE is_international = 1") == ["is_international = 1"]
+
+
+def test_impacto_nao_traz_a_tabela_inteira():
+    pedidos = []
+
+    def executar(sql, parametros, limite):
+        pedidos.append(sql)
+        return ["a"], [(1,)]
+
+    sonda = ver._Sonda("postgres", executar)
+    ver.checar_duvidas("Quais?", "SELECT a FROM t WHERE b = 'x'", sonda, [{"a": 1}])
+    assert pedidos and f"LIMIT {ver.MAX_LINHAS_SONDA}" in pedidos[-1] and "WHERE TRUE" in pedidos[-1]
+
+
+def test_sonda_nao_executa_o_que_nao_for_leitura_e_nao_quebra(sonda):
+    assert sonda.consultar("DROP TABLE evento") is None
+    assert sonda.consultar("SELECT 1; DROP TABLE evento") is None
+    assert sonda.consultar("SELECT coluna_que_nao_existe FROM evento") is None
+    assert sonda.colunas("tabela_que_nao_existe") == []
+    assert sonda.consultar("SELECT COUNT(*) FROM evento")[1] == [(3,)]
+    assert sonda.contar("evento", "nome = :v", {"v": "x' OR '1'='1"}) == 0  # valor vai como parâmetro
+
+
+def test_sonda_para_quando_acaba_o_tempo():
+    chamadas = []
+    sonda = ver._Sonda("sqlite", lambda *a: chamadas.append(a) or (["a"], []))
+    sonda._fim = time.monotonic() - 1
+    assert sonda.consultar("SELECT 1") is None and chamadas == []
+
+
+def test_nomes_estranhos_ficam_entre_aspas():
+    assert ver._Sonda("postgres", None).nome('a"b') == '"a""b"'
+    assert ver._Sonda("sqlite", None).nome("First Name") == '"First Name"'
+    assert ver._Sonda("mysql", None).nome("a`b") == "`a``b`"
+
+
+def test_checador_pela_sonda():
+    class Falsa:
+        def __init__(self, respostas):
+            self.respostas = respostas
+
+        def colunas_de_texto(self):
+            return {"status": [("t", "status")]}
+
+        def nome(self, n):
+            return f'"{n}"'
+
+        def consultar(self, sql, parametros=None):
+            return self.respostas
+
+    assert ver._checador_pela_sonda(Falsa((["x"], [(1,)])))("status", "a", False) is True
+    assert ver._checador_pela_sonda(Falsa((["x"], [])))("status", "a", False) is False
+    assert ver._checador_pela_sonda(Falsa(None))("status", "a", False) is None  # falhou: não dá para saber
+    assert ver._checador_pela_sonda(Falsa(None))("coluna_desconhecida", "a", False) is None
+
+
+def test_no_com_engine_sqlite(portal):
+    from sqlalchemy import create_engine
+    engine = create_engine(f"sqlite:///{portal}")
+    estado = {"status": "exec_ok", "pergunta_atual": "Quantos diretores?", "sql_gerada": "SELECT COUNT(*) AS n FROM cargo WHERE nome LIKE '%diretor%'",
+              "linhas_resultado_completo": [{"n": 1}]}
+    out = ver.nos_nodo_verificador(estado, engine=engine, usar_jev=False)
+    assert "coluna_irma" in _regras(out["alertas_verificador"]) and out["verificacao"]["alerta"] is True
+    engine.dispose()
+
+
+def test_no_com_engine_de_banco_sem_suporte_segue_sem_sonda():
+    class Dialeto:
+        name = "oracle"
+
+    class Engine:
+        dialect = Dialeto()
+
+    out = ver.nos_nodo_verificador({"status": "exec_ok", "pergunta_atual": "How many?", "sql_gerada": "SELECT 1", "linhas_resultado_completo": []},
+                                   engine=Engine(), usar_jev=False)
+    assert _regras(out["alertas_verificador"]) == ["resultado_vazio"]
+
+
+def test_regra_do_banco_que_quebra_nao_apaga_as_outras(monkeypatch, sonda):
+    def quebra(*a, **k):
+        raise RuntimeError("erro inesperado")
+    monkeypatch.setattr(ver, "_coluna_irma", quebra)
+    assert _regras(ver.checar("How many?", "SELECT 1", [], sonda=sonda)) == ["resultado_vazio"]
+
+
+def test_parametros_no_executor_via_engine(portal):
+    from sqlalchemy import create_engine
+    from text_to_insight.nodes.code_agent.code_sql import executar_sql_via_engine
+    engine = create_engine(f"sqlite:///{portal}")
+    r = executar_sql_via_engine(engine, "SELECT nome FROM evento WHERE nome = :v", parametros={"v": "Recente"})
+    assert r["ok"] and r["linhas_resultado_completo"] == [{"nome": "Recente"}]
+    assert executar_sql_via_engine(engine, "SELECT COUNT(*) AS n FROM evento")["linhas_resultado_completo"] == [{"n": 3}]
+    engine.dispose()

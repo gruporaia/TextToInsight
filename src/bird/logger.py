@@ -288,6 +288,8 @@ class BirdExecutionLogger:
                          + f" | regras: {', '.join(verif.get('niveis_regras') or []) or '-'} | origem: {verif.get('origem') or '-'}")
             if verif.get("duvidas"):
                 lines.append("[DUVIDA DO VERIFICADOR]: filtros não pedidos: " + " | ".join(verif["duvidas"]))
+            if verif.get("notas"):
+                lines.append("[OBSERVACAO DO VERIFICADOR]: " + " | ".join(verif["notas"]))
 
         # 6. Block Footer
         lines.append(f"=== [END QID: {question_id}] ===\n\n")

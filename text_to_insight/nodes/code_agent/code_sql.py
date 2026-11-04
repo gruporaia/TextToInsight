@@ -215,6 +215,7 @@ def executar_sql_via_engine(
     sql: str,
     limite_preview: int = 5,
     timeout_segundos: float = 15.0,
+    parametros: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Executa SQL usando uma Engine SQLAlchemy ja construida pelo chamador
@@ -224,6 +225,8 @@ def executar_sql_via_engine(
     Ao contrario de `executar_sql_via_url`, esta funcao NAO cria nem
     descarta (`dispose`) a engine: o ciclo de vida da conexao e
     responsabilidade de quem a construiu, nao desta biblioteca.
+
+    `parametros` preenche os `:nome` da SQL (valores nunca entram no texto).
     """
     ok, erro_validacao = validar_sql_segura(sql)
     if not ok:
@@ -261,7 +264,7 @@ def executar_sql_via_engine(
 
                     dbapi_conn.set_progress_handler(_progress_handler, 1000)
 
-                resultado = conn.execute(text(sql))
+                resultado = conn.execute(text(sql), parametros or {})
                 rows = [dict(linha) for linha in resultado.mappings().all()]
             finally:
                 if dbapi_conn is not None:

@@ -36,6 +36,7 @@ class InsightEngine:
         db_engine: Any = None,
         verificador: str = "off",
         verificador_jev: bool = True,
+        verificador_colunas: str = "nota",
     ):
         """
         `db_engine`, se informado, deve ser uma Engine do SQLAlchemy já
@@ -78,6 +79,7 @@ class InsightEngine:
             db_engine=self._db_engine,
             verificador=verificador,
             verificador_jev=verificador_jev,
+            verificador_colunas=verificador_colunas,
         )
 
         print(f"[CONFIG] HITL: {'ATIVADO' if self._hitl_ativado else 'DESATIVADO'}")

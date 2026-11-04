@@ -119,6 +119,7 @@ O orquestrador de avaliacao e acionado via `scripts/test_bird_eval.py`.
 | `--exploration-selector` | `off`, `heuristic`, `llm` | `off` | Modo de selecao de colunas para exploracao de dados. |
 | `--verificador` | `off`, `avisar` | `off` | Confere a SQL e o resultado depois da execucao (sem LLM). Em `avisar`, os alertas aparecem no log e no fim da resposta. Filtros que a pergunta nao pediu (coluna e valor nao citados, ou `IS NOT NULL`/`> 0` sem pedido) viram uma duvida ("confira se e isso que voce quer"), sem contar como erro. |
 | `--verificador-jev` | `on`, `off` | `on` | Com o verificador ligado, Com o verificador ligado, o Jev e o verificador principal: responde as 6 checagens agrupadas em niveis (alta = 1/2, media = 3/4, baixa = 5/6). As regras rodam em segundo plano. Precisa de `TYPESAFE_API_KEY`; sem ela, segue so com as regras. |
+| `--verificador-colunas` | `erro`, `nota` | `erro` | Colunas a mais na resposta. `erro` vira alerta (o BIRD exige exatamente as colunas pedidas). `nota` vira so uma observacao, como no uso real. |
 | `--schemacrawler` | `on`, `off` | `off` | Ativa/desativa introspeccao via SchemaCrawler (padrao: `off`, usa PRAGMA nativo do SQLite). |
 | `--timeout` | Inteiro | `30` | Tempo limite em segundos para execucao de queries no SQLite. |
 | `--dry-run` | Flag | Desativado | Simula a geracao de SQL sem custo de API. |

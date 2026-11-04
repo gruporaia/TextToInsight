@@ -203,6 +203,12 @@ def parse_arguments() -> argparse.Namespace:
         help="Jev como verificador principal, regras em segundo plano; precisa de TYPESAFE_API_KEY, sem ela só as regras (default: on)",
     )
     parser.add_argument(
+        "--verificador-colunas",
+        choices=["erro", "nota"],
+        default="erro",
+        help="Colunas a mais: erro (alerta; o BIRD exige exatamente as colunas pedidas) ou nota (default: erro)",
+    )
+    parser.add_argument(
         "--timeout",
         type=int,
         default=30,
@@ -517,6 +523,7 @@ def main() -> None:
                             model_kwargs=model_kwargs,
                             verificador=args.verificador,
                             verificador_jev=(args.verificador_jev == "on"),
+                            verificador_colunas=args.verificador_colunas,
                         )
                     except Exception as e:
                         print(f"     ❌ Failed to instantiate InsightEngine for db '{db_id}': {e}")
