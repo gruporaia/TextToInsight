@@ -418,6 +418,18 @@ def main():
         default="off",
         help="Ativa/desativa o enriquecimento RAG. Padrão: off.",
     )
+    parser.add_argument(
+        "--verificador",
+        choices=["off", "avisar"],
+        default="off",
+        help="Verificador depois da SQL: off ou avisar(com default off)"
+    )
+    parser.add_argument(
+        "--verificador-jev",
+        choices=["on", "off"],
+        default ="on",
+        help = "Jev como verificador principal, precisando colocar API KEY, se nao fica so as regras(default: on)"
+    )
 
     args = parser.parse_args()
 
@@ -462,6 +474,10 @@ def main():
 
     csv_path = args.output if args.output else f"reports/{CSVReporter.generate_timestamped_filename('spider2_eval')}"
     reporter = CSVReporter(csv_path)
+    verif_path = Path(csv_path).with_suffix(".verificador.jsonl")
+    if args.verificador != "off":
+        verif_path.write_text("", encoding="utf-8") #recomeça vazio
+        print(f"📝 Saída do verificador: {verif_path}")
     print(f"✓ CSV reporter inicializado: {csv_path}")
 
     print(f"\n🚀 Iniciando avaliação com {len(exemplos)} perguntas...\n")
@@ -542,8 +558,10 @@ def main():
                     inferir_fks_virtuais=args.infer_fks,
                     usar_schemacrawler=not args.no_schemacrawler,
                     enrich_rag=(args.enrich_rag == "on"),
+                    verificador=args.verificador,
+                    verificador_jev=(args.verificador_jev == "on"),
                 )
-                print(f"     ✓ InsightEngine inicializado para db={db_id} (CoT={args.cot}, DataExploration={args.data_exploration}, ExplorationSelector={args.exploration_selector}, RAG={args.rag}, EnrichRAG={args.enrich_rag})")
+                print(f"     ✓ InsightEngine inicializado para db={db_id} (CoT={args.cot}, DataExploration={args.data_exploration}, ExplorationSelector={args.exploration_selector}, RAG={args.rag}, EnrichRAG={args.enrich_rag}, Verificador={args.verificador}, (Jev = {args.verificador_jev}))")
             except Exception as e:
                 print(f"     ❌ Erro ao inicializar InsightEngine: {e}")
                 continue
@@ -680,6 +698,33 @@ def main():
 
         reporter.append_row(row)
         all_rows.append(row)
+
+        if args.verificador != "off":
+            verif = resultado.get("verificacao") or {}
+            alertas = resultado.get("alertas_verificador") or []
+            registro = {
+                "instance_id": instance_id,
+                "db_id": db_id,
+                "pergunta": pergunta,
+                "sql_agente": query_agente,
+                "status_final": veredito,
+                "erro_execucao": erro_exec,
+                "exato_match": resultado_exato_match,
+                "f1": f1_scores["f1"] if f1_scores else 0.0,
+                "verificador_rodou": bool(verif),
+                "alerta": verif.get("alerta"),
+                "nivel": verif.get("nivel"),
+                "nivel_jev": verif.get("nivel_jev"),
+                "probs_jev": verif.get("probs_jev"),
+                "niveis_regras": verif.get("niveis_regras"),
+                "origem": verif.get("origem"),
+                "duvidas": verif.get("duvidas"),
+                "regras_disparadas": [a.get("regra") for a in alertas],
+                "linhas_resultado": (resultado.get("linhas_resultado_completo")
+                                     or resultado.get("linhas_resultado_preview") or [])[:50],
+            }
+            with open(verif_path, "a", encoding="utf-8") as fv:
+                fv.write(json.dumps(registro, ensure_ascii=False, default=str) + "\n")
 
         print(f"     ✓ Concluído após {tentativas} tentativa(s)")
 
