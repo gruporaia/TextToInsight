@@ -40,6 +40,7 @@ from src.bird import (
     sample_examples,
     sql_similarity_score,
 )
+from src.bird.metrics import is_sensitive_key, sanitize_model_kwargs
 
 
 @pytest.fixture
@@ -391,19 +392,21 @@ def test_results_f1_score_edge_cases_and_dict_support() -> None:
 # ==============================================================================
 
 def test_csv_reporter_and_predict_json(tmp_path: Path) -> None:
-    """Validates 19-column CSV output, summary aggregation, and official BIRD predict_dev.json."""
+    """Validates 20-column CSV output, summary aggregation, and official BIRD predict_dev.json."""
     csv_file = tmp_path / "reports" / "eval.csv"
     reporter = BirdCSVReporter(filepath=csv_file)
 
-    # Verify header (19 columns)
-    assert len(reporter.HEADERS) == 19
+    # Verify header (20 columns)
+    assert len(reporter.HEADERS) == 20
+    assert reporter.HEADERS[-1] == "tokens_by_node"
     with open(csv_file, "r", encoding="utf-8") as f:
         header = f.readline().strip().split(",")
-        assert len(header) == 19
+        assert len(header) == 20
         assert "execution_status" in header
         assert "precision" in header
         assert "recall" in header
         assert "f1" in header
+        assert "tokens_by_node" in header
         assert "critic_verdict" not in header
 
     # Add sample rows:
@@ -413,14 +416,20 @@ def test_csv_reporter_and_predict_json(tmp_path: Path) -> None:
         question="Count students", evidence="", gold_sql="SELECT count(*) FROM students",
         agent_sql="SELECT count(id) FROM students", time_ms=500.0,
         execution_status="exec_erro", error="Syntax error near id", similarity_score=0.9,
-        execution_match=False, precision=0.0, recall=0.0, f1=0.0, tokens_input=300, tokens_output=30
+        execution_match=False, precision=0.0, recall=0.0, f1=0.0, tokens_input=300, tokens_output=30,
+        tokens_by_node="{}",
     )
+    tbn_att2 = {
+        "exploration_selector": {"input": 100, "output": 10, "total": 110, "calls": 1},
+        "code_agent": {"input": 300, "output": 15, "total": 315, "calls": 1},
+    }
     row_1_att2 = build_bird_comparison_row(
         question_id=1, attempt_number=2, db_id="school", difficulty="simple",
         question="Count students", evidence="", gold_sql="SELECT count(*) FROM students",
         agent_sql="SELECT count(*) FROM students", time_ms=400.0,
         execution_status="exec_ok", error="", similarity_score=1.0,
-        execution_match=True, precision=1.0, recall=1.0, f1=1.0, tokens_input=400, tokens_output=25
+        execution_match=True, precision=1.0, recall=1.0, f1=1.0, tokens_input=400, tokens_output=25,
+        tokens_by_node=tbn_att2,
     )
     reporter.append_row(row_1_att1)
     reporter.append_row(row_1_att2)
@@ -441,6 +450,15 @@ def test_csv_reporter_and_predict_json(tmp_path: Path) -> None:
     assert summary["avg_recall"] == 1.0
     assert summary["avg_f1"] == 1.0
     assert summary["by_difficulty"]["simple"]["avg_recall"] == 1.0
+
+    # Node-level token summary verification
+    assert "node_tokens" in summary
+    assert "exploration_selector" in summary["node_tokens"]
+    assert "code_agent" in summary["node_tokens"]
+    assert summary["node_tokens"]["exploration_selector"]["calls"] == 1
+    assert summary["node_tokens"]["exploration_selector"]["total_input"] == 100
+    assert summary["node_tokens"]["code_agent"]["calls"] == 1
+    assert summary["node_tokens"]["code_agent"]["total_input"] == 300
 
 
     # Official predict_dev.json export verification
@@ -982,12 +1000,13 @@ def test_cli_orchestrator_schemacrawler_and_selector_flags(mock_bird_env: Path, 
     result = subprocess.run(cmd, capture_output=True, text=True)
     assert result.returncode == 0, f"CLI command failed:\n{result.stderr}"
     assert "SchemaCrawler: on" in result.stdout
-    assert "Exploration Selector: heuristic" in result.stdout
+    # 'heuristic' is cleanly mapped to 'rag' for full parity
+    assert "Exploration Selector: rag" in result.stdout
     assert "Enrich RAG: on" in result.stdout
 
     log_content = out_csv.with_suffix(".log").read_text(encoding="utf-8")
     assert "SchemaCrawler: ON" in log_content
-    assert "Selector: heuristic" in log_content
+    assert "Selector: rag" in log_content
     assert "EnrichRAG: ON" in log_content
 
 
@@ -1091,4 +1110,325 @@ def test_setup_bird_data_parse_arguments(monkeypatch) -> None:
     args = parse_arguments()
     assert args.full is True
     assert args.mini is False
+
+
+# ==============================================================================
+# 7. Node-Level Token Tracking (tokens_by_node) & Parity Tests (TICKET-03)
+# ==============================================================================
+
+def test_build_bird_comparison_row_tokens_by_node() -> None:
+    """Verifies that build_bird_comparison_row formats tokens_by_node as sorted JSON and defaults to '{}'."""
+    # 1. Default (None)
+    row_default = build_bird_comparison_row(
+        question_id=1, attempt_number=1, db_id="test", difficulty="simple",
+        question="Q", evidence="", gold_sql="SELECT 1", agent_sql="SELECT 1", time_ms=10.0,
+    )
+    assert len(row_default) == 20
+    assert row_default["tokens_by_node"] == "{}"
+
+    # 2. Dictionary input
+    tbn = {
+        "response": {"calls": 1, "input": 50, "output": 10, "total": 60},
+        "code_agent": {"calls": 1, "input": 200, "output": 25, "total": 225},
+    }
+    row_dict = build_bird_comparison_row(
+        question_id=2, attempt_number=1, db_id="test", difficulty="simple",
+        question="Q", evidence="", gold_sql="SELECT 1", agent_sql="SELECT 1", time_ms=10.0,
+        tokens_by_node=tbn,
+    )
+    parsed = json.loads(row_dict["tokens_by_node"])
+    assert parsed == tbn
+    assert row_dict["tokens_by_node"] == json.dumps(tbn, ensure_ascii=False, sort_keys=True)
+
+    # 3. String input
+    row_str = build_bird_comparison_row(
+        question_id=3, attempt_number=1, db_id="test", difficulty="simple",
+        question="Q", evidence="", gold_sql="SELECT 1", agent_sql="SELECT 1", time_ms=10.0,
+        tokens_by_node='{"b": 2, "a": 1}',
+    )
+    assert row_str["tokens_by_node"] == '{"a": 1, "b": 2}'
+
+
+def test_csv_reporter_node_tokens_aggregation_multi_question(tmp_path: Path) -> None:
+    """Verifies node_tokens aggregation from final attempts across multiple questions."""
+    csv_file = tmp_path / "multi_q.csv"
+    reporter = BirdCSVReporter(filepath=csv_file)
+
+    # Question 1: attempt 1 (failed) + attempt 2 (fixed)
+    q1_a1 = build_bird_comparison_row(
+        question_id=1, attempt_number=1, db_id="db", difficulty="simple",
+        question="Q1", evidence="", gold_sql="SELECT 1", agent_sql="SELECT 0", time_ms=10.0,
+        tokens_input=100, tokens_output=10, tokens_total=110,
+        tokens_by_node={"code_agent": {"calls": 1, "input": 100, "output": 10, "total": 110}},
+    )
+    q1_a2 = build_bird_comparison_row(
+        question_id=1, attempt_number=2, db_id="db", difficulty="simple",
+        question="Q1", evidence="", gold_sql="SELECT 1", agent_sql="SELECT 1", time_ms=10.0,
+        tokens_input=200, tokens_output=20, tokens_total=220,
+        tokens_by_node={
+            "exploration_selector": {"calls": 1, "input": 50, "output": 5, "total": 55},
+            "code_agent": {"calls": 2, "input": 300, "output": 30, "total": 330},
+        },
+    )
+
+    # Question 2: attempt 1 (success)
+    q2_a1 = build_bird_comparison_row(
+        question_id=2, attempt_number=1, db_id="db", difficulty="moderate",
+        question="Q2", evidence="", gold_sql="SELECT 2", agent_sql="SELECT 2", time_ms=10.0,
+        tokens_input=150, tokens_output=15, tokens_total=165,
+        tokens_by_node={
+            "exploration_selector": {"calls": 1, "input": 50, "output": 5, "total": 55},
+            "code_agent": {"calls": 1, "input": 100, "output": 10, "total": 110},
+            "response": {"calls": 1, "input": 40, "output": 5, "total": 45},
+        },
+    )
+
+    reporter.append_row(q1_a1)
+    reporter.append_row(q1_a2)
+    reporter.append_row(q2_a1)
+
+    summary = reporter.generate_summary()
+    assert summary["total_questions"] == 2
+    assert summary["total_attempts"] == 3
+
+    node_tokens = summary["node_tokens"]
+    # exploration_selector: 1 call from Q1, 1 call from Q2 -> 2 calls, 100 in, 10 out, 110 total
+    assert node_tokens["exploration_selector"]["calls"] == 2
+    assert node_tokens["exploration_selector"]["total_input"] == 100
+    assert node_tokens["exploration_selector"]["total_output"] == 10
+    assert node_tokens["exploration_selector"]["total_all"] == 110
+    assert node_tokens["exploration_selector"]["avg_input_per_question"] == 50.0
+    assert node_tokens["exploration_selector"]["avg_output_per_question"] == 5.0
+    assert node_tokens["exploration_selector"]["avg_total_per_question"] == 55.0
+
+    # code_agent: 2 calls from Q1 (final attempt), 1 call from Q2 -> 3 calls, 400 in, 40 out, 440 total
+    assert node_tokens["code_agent"]["calls"] == 3
+    assert node_tokens["code_agent"]["total_input"] == 400
+    assert node_tokens["code_agent"]["total_output"] == 40
+    assert node_tokens["code_agent"]["total_all"] == 440
+    assert node_tokens["code_agent"]["avg_input_per_question"] == 200.0
+    assert node_tokens["code_agent"]["avg_total_per_question"] == 220.0
+
+    # response: 1 call from Q2 -> 1 call, 40 in, 5 out, 45 total
+    assert node_tokens["response"]["calls"] == 1
+    assert node_tokens["response"]["total_all"] == 45
+    assert node_tokens["response"]["avg_total_per_question"] == 22.5
+
+    # Check pct_of_total_tokens
+    total_run_tokens = summary["tokens"]["total_all"]
+    expected_pct = round((440 / total_run_tokens) * 100, 2)
+    assert node_tokens["code_agent"]["pct_of_total_tokens"] == expected_pct
+
+
+def test_csv_reporter_markdown_node_tokens_table_and_redaction(tmp_path: Path) -> None:
+    """Verifies that format_markdown_report renders Section 4.1 table and redacts sensitive model kwargs."""
+    reporter = BirdCSVReporter(filepath=tmp_path / "rep.csv")
+    summary = {
+        "total_questions": 1,
+        "tokens": {"total_input": 500, "total_output": 50, "total_all": 550},
+        "node_tokens": {
+            "exploration_selector": {
+                "calls": 1, "avg_input_per_question": 100.0, "avg_output_per_question": 10.0,
+                "avg_total_per_question": 110.0, "total_input": 100, "total_output": 10,
+                "total_all": 110, "pct_of_total_tokens": 20.0,
+            },
+            "code_agent": {
+                "calls": 2, "avg_input_per_question": 400.0, "avg_output_per_question": 40.0,
+                "avg_total_per_question": 440.0, "total_input": 400, "total_output": 40,
+                "total_all": 440, "pct_of_total_tokens": 80.0,
+            },
+        },
+    }
+    config = {
+        "model": "gpt-4o",
+        "model_kwargs": {"temperature": 0.2, "api_key": "sk-secret123", "password": "secret_pass_123"},
+        "with_graphs": True,
+        "question_filter": "enrolled",
+    }
+    md = reporter.format_markdown_report(summary, config_info=config)
+
+    # 1. Section 4.1 Table presence
+    assert "### 4.1. Node-Level Token Consumption (Average per Question & Run Total)" in md
+    assert "| Node | Total Calls | Avg Input / Q | Avg Output / Q | Avg Total / Q | Total Input | Total Output | Total Tokens | % of Total |" in md
+    assert "| `exploration_selector` | 1 | 100.0 | 10.0 | 110.0 | 100 | 10 | **110** | 20.0% |" in md
+    assert "| `code_agent` | 2 | 400.0 | 40.0 | 440.0 | 400 | 40 | **440** | 80.0% |" in md
+
+    # 2. Secret Redaction
+    assert "***REDACTED***" in md
+    assert "sk-secret123" not in md
+    assert "secret_pass_123" not in md
+    assert "0.2" in md
+
+    # 3. New config fields
+    assert "| **With Graphs** | `Enabled` |" in md
+    assert "| **Question Filter** | `enrolled` |" in md
+
+
+def test_bird_execution_logger_tokens_by_node_and_redaction(tmp_path: Path) -> None:
+    """Verifies that BirdExecutionLogger records [TOKENS BY NODE], footer breakdown, and redacts kwargs."""
+    log_file = tmp_path / "test_tokens.log"
+    with BirdExecutionLogger(output_dir=tmp_path, log_file=log_file, enabled=True) as logger:
+        logger.log_run_header({
+            "timestamp": "2026-11-03",
+            "model": "gpt-4o",
+            "model_kwargs": {"temperature": 0.0, "api_key": "secret-12345", "token": "abc"},
+            "with_graphs": True,
+            "question_filter": "students",
+        })
+        logger.log_query(
+            question_id=1,
+            db_id="school",
+            difficulty="simple",
+            question="Count students",
+            evidence="",
+            gold_sql="SELECT count(*) FROM students",
+            agent_result={
+                "sql_gerada": "SELECT count(*) FROM students",
+                "tokens_input": 500,
+                "tokens_output": 50,
+                "tokens_total": 550,
+                "tokens_by_node": {
+                    "code_agent": {"calls": 1, "input": 450, "output": 45, "total": 495},
+                    "response": {"calls": 1, "input": 50, "output": 5, "total": 55},
+                },
+            },
+            match_success=True,
+            similarity_score=1.0,
+            time_ms=100.0,
+        )
+        logger.log_run_footer(
+            summary={
+                "total_questions": 1,
+                "tokens": {"total_all": 550, "total_input": 500, "total_output": 50},
+                "node_tokens": {
+                    "code_agent": {
+                        "calls": 1, "total_all": 495, "total_input": 450, "total_output": 45,
+                        "pct_of_total_tokens": 90.0, "avg_total_per_question": 495.0,
+                    },
+                    "response": {
+                        "calls": 1, "total_all": 55, "total_input": 50, "total_output": 5,
+                        "pct_of_total_tokens": 10.0, "avg_total_per_question": 55.0,
+                    },
+                },
+            },
+            total_elapsed=1.2,
+        )
+
+    content = log_file.read_text(encoding="utf-8")
+
+    # Header redaction
+    assert "***REDACTED***" in content
+    assert "secret-12345" not in content
+    assert "WithGraphs: ON" in content
+    assert "Question: students" in content
+
+    # Query block node token tracking
+    assert "[TOKENS BY NODE]:" in content
+    assert "code_agent: Input: 450 | Output: 45 | Total: 495 | Calls: 1" in content
+    assert "response: Input: 50 | Output: 5 | Total: 55 | Calls: 1" in content
+
+    # Footer breakdown
+    assert "Node-Level Token Breakdown:" in content
+    assert "code_agent" in content
+    assert "495 ( 90.0%)" in content
+
+
+def test_cli_orchestrator_unified_arguments(monkeypatch) -> None:
+    """Verifies parsing and validation of --temperature, --max-tokens, --api-key-env, --with-graphs, --infer-fks, and secret leak prevention."""
+    from scripts.test_bird_eval import parse_arguments
+
+    # 1. Temperature & Max Tokens shortcuts
+    monkeypatch.setattr("sys.argv", ["test_bird_eval.py", "--temperature", "0.7", "--max-tokens", "1024"])
+    args = parse_arguments()
+    assert args.temperature == 0.7
+    assert args.max_tokens == 1024
+
+    # 2. Standalone flags for --with-graphs and --infer-fks
+    monkeypatch.setattr("sys.argv", ["test_bird_eval.py", "--with-graphs", "--infer-fks"])
+    args = parse_arguments()
+    assert args.with_graphs == "on"
+    assert args.infer_fks == "on"
+
+    # Explicit [on|off]
+    monkeypatch.setattr("sys.argv", ["test_bird_eval.py", "--with-graphs", "off", "--infer-fks", "off"])
+    args = parse_arguments()
+    assert args.with_graphs == "off"
+    assert args.infer_fks == "off"
+
+    # 3. Question filter
+    monkeypatch.setattr("sys.argv", ["test_bird_eval.py", "--question-filter", "how many"])
+    args = parse_arguments()
+    assert args.question_filter == "how many"
+
+    # 4. Valid --api-key-env
+    monkeypatch.setattr("sys.argv", ["test_bird_eval.py", "--api-key-env", "MY_OPENAI_KEY"])
+    args = parse_arguments()
+    assert args.api_key_env == "MY_OPENAI_KEY"
+
+    # 5. Invalid --api-key-env (pasted raw key rejected without echoing)
+    monkeypatch.setattr("sys.argv", ["test_bird_eval.py", "--api-key-env", "sk-proj-1234567890"])
+    with pytest.raises(SystemExit):
+        parse_arguments()
+
+    # 6. Sensitive key in --model-kwargs rejected without echoing raw value
+    monkeypatch.setattr("sys.argv", ["test_bird_eval.py", "--model-kwargs", "api_key=sk-secret"])
+    with pytest.raises(SystemExit):
+        parse_arguments()
+
+
+def test_cli_orchestrator_dry_run_tokens_by_node_full_pipeline(mock_bird_env: Path, tmp_path: Path) -> None:
+    """Verifies that a complete dry-run evaluation outputs 20-column CSV with tokens_by_node and Section 4.1 in Markdown."""
+    out_csv = tmp_path / "full_pipeline.csv"
+    cmd = [
+        sys.executable,
+        "scripts/test_bird_eval.py",
+        "--data-dir", str(mock_bird_env),
+        "--sample-size", "2",
+        "--seed", "42",
+        "--dry-run",
+        "--temperature", "0.2",
+        "--max-tokens", "512",
+        "--with-graphs",
+        "--question-filter", "students",
+        "--output", str(out_csv),
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    assert result.returncode == 0, f"CLI command failed:\n{result.stderr}"
+
+    # 1. Verify CSV has 20 columns and tokens_by_node contains valid JSON
+    with open(out_csv, "r", encoding="utf-8") as f:
+        reader = list(f.readlines())
+    assert len(reader) >= 2  # header + at least 1 row
+    headers = reader[0].strip().split(",")
+    assert len(headers) == 20
+    assert headers[-1] == "tokens_by_node"
+
+    # Row 1 JSON verification using csv.DictReader
+    import csv
+    with open(out_csv, "r", encoding="utf-8") as f:
+        csv_reader = csv.DictReader(f)
+        rows = list(csv_reader)
+    assert len(rows) > 0
+    for r in rows:
+        assert "tokens_by_node" in r
+        tbn = json.loads(r["tokens_by_node"])
+        assert "exploration_selector" in tbn
+        assert "code_agent" in tbn
+        assert "response" in tbn
+        assert tbn["code_agent"]["calls"] >= 1
+
+    # 2. Verify Markdown report contains Section 4.1
+    md_content = out_csv.with_suffix(".md").read_text(encoding="utf-8")
+    assert "### 4.1. Node-Level Token Consumption (Average per Question & Run Total)" in md_content
+    assert "| `exploration_selector` |" in md_content
+    assert "| `code_agent` |" in md_content
+    assert "| `response` |" in md_content
+    assert "| **With Graphs** | `Enabled` |" in md_content
+
+    # 3. Verify Log file contains [TOKENS BY NODE] and breakdown
+    log_content = out_csv.with_suffix(".log").read_text(encoding="utf-8")
+    assert "[TOKENS BY NODE]:" in log_content
+    assert "Node-Level Token Breakdown:" in log_content
+    assert "WithGraphs: ON" in log_content
+
 

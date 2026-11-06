@@ -70,6 +70,7 @@ def construir_estado_inicial(
         "schemacrawler_bin": os.getenv("SCHEMACRAWLER_BIN", ""),
         "inferir_fks_virtuais": inferir_fks_virtuais,
         "usar_schemacrawler": usar_schemacrawler,
+        "tokens_by_node": {},
     }
 
 

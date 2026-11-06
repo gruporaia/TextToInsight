@@ -45,6 +45,8 @@ def nos_nodo_sandbox(estado: EstadoTextToInsight, engine: Any = None) -> dict:
         else:
             resultado = executar_sql_sqlite(db_path=db_path, sql=sql)
 
+    attempt_tokens = estado.get("last_attempt_tokens") or {}
+
     if resultado["ok"]:
         print(f"[EXECUTOR] SQL executada com sucesso — {resultado['total_linhas_resultado']} linhas.")
         attempt_info = {
@@ -53,6 +55,9 @@ def nos_nodo_sandbox(estado: EstadoTextToInsight, engine: Any = None) -> dict:
             "prompt": estado.get("ultimo_prompt", ""),
             "contexto": estado.get("contexto_prompt_agente", ""),
             "raciocinio": estado.get("raciocinio_agente", ""),
+            "tokens_input": int(attempt_tokens.get("input", 0)),
+            "tokens_output": int(attempt_tokens.get("output", 0)),
+            "tokens_total": int(attempt_tokens.get("total", 0)),
         }
         return {
             "linhas_resultado_preview": resultado["linhas_resultado_preview"],
@@ -71,6 +76,9 @@ def nos_nodo_sandbox(estado: EstadoTextToInsight, engine: Any = None) -> dict:
             "prompt": estado.get("ultimo_prompt", ""),
             "contexto": estado.get("contexto_prompt_agente", ""),
             "raciocinio": estado.get("raciocinio_agente", ""),
+            "tokens_input": int(attempt_tokens.get("input", 0)),
+            "tokens_output": int(attempt_tokens.get("output", 0)),
+            "tokens_total": int(attempt_tokens.get("total", 0)),
         }
         return {
             "linhas_resultado_preview": [],

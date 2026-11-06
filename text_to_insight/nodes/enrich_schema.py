@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 from langchain_google_genai import ChatGoogleGenerativeAI
 from ..state import EstadoTextToInsight
+from ..token_tracking import build_batch_token_usage_update
 
 
 def nos_nodo_enrich(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI, engine=None) -> dict:
@@ -38,7 +39,8 @@ def nos_nodo_enrich(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI, en
     print(f"[SCHEMA-ENRICHMENT] Processando {len(table_chunks)} tabelas divididas em {len(lotes)} lotes...")
 
     llm_temp = llm.bind(temperature=0)
-    respostas = llm_temp.batch(prompts, config={"max_concurrency": 3})
+    respostas = llm_temp.batch(prompts, config={"max_concurrency": 3}) if prompts else []
+    token_update = build_batch_token_usage_update("rag_enrichment", respostas)
 
     dicionario_descricoes = {}
     for resp in respostas:
@@ -98,4 +100,5 @@ def nos_nodo_enrich(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI, en
     return {
         "tem_descricao": True,
         "contexto_schema": contexto_enriquecido,
+        **token_update,
     }

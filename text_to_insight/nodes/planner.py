@@ -9,6 +9,7 @@ import json
 from langchain.chat_models import BaseChatModel
 
 from ..state import EstadoTextToInsight
+from ..token_tracking import build_token_usage_update
 # Importando a função de extração de tokens
 from ..utils import extrair_tokens
 
@@ -48,11 +49,6 @@ def nos_nodo_planejador(estado: EstadoTextToInsight, llm: BaseChatModel, hitl: b
     tentativas = estado.get("tentativas_loop", 0)
     status = estado.get("status", "iniciado")
     erro = estado.get("erro_execucao", "")
-    # Contrato estável para métricas: sempre retornamos esses campos,
-    # mesmo quando o nó não chama LLM (valor zero).
-    in_tokens = 0
-    out_tokens = 0
-    total_tokens = 0
 
     print(f"[PLANEJADOR] Pergunta: {pergunta[:50]}... | Status: {status}")
 
@@ -63,9 +59,10 @@ def nos_nodo_planejador(estado: EstadoTextToInsight, llm: BaseChatModel, hitl: b
         return {
             "status": "aguardando_schema",
             "tentativas_loop": tentativas,
-            "tokens_input": in_tokens,
-            "tokens_output": out_tokens,
-            "tokens_total": total_tokens,
+            "tokens_input": 0,
+            "tokens_output": 0,
+            "tokens_total": 0,
+            "tokens_by_node": {},
         }
 
     # Se já foi aprovado, mantém
@@ -75,9 +72,10 @@ def nos_nodo_planejador(estado: EstadoTextToInsight, llm: BaseChatModel, hitl: b
         return {
             "status": "aprovado",
             "tentativas_loop": tentativas,
-            "tokens_input": in_tokens,
-            "tokens_output": out_tokens,
-            "tokens_total": total_tokens,
+            "tokens_input": 0,
+            "tokens_output": 0,
+            "tokens_total": 0,
+            "tokens_by_node": {},
         }
     
     diretrizes = """Responda EXATAMENTE no formato JSON abaixo, sem formatação markdown (```json):
@@ -117,8 +115,7 @@ Opções válidas para 'decisão':
     )
 
     resposta_llm = llm.invoke(prompt)
-    # A partir daqui houve chamada ao LLM; registramos tokens reais da resposta.
-    in_tokens, out_tokens, total_tokens = extrair_tokens(resposta_llm)
+    token_update = build_token_usage_update("planner", resposta_llm)
     conteudo_bruto = resposta_llm.content.strip()
 
     # Limpeza caso o LLM retorne blocos de código markdown (```json ... ```)
@@ -147,9 +144,7 @@ Opções válidas para 'decisão':
             "espera_humana": True,            # Flag que o router vai ler
             "pergunta_ao_usuario": pergunta_agente, # A pergunta que vai aparecer no terminal
             "tentativas_loop": tentativas,
-            "tokens_input": in_tokens,
-            "tokens_output": out_tokens,
-            "tokens_total": total_tokens,
+            **token_update,
         }
 
     # Mapeia resposta para status válido
@@ -164,7 +159,5 @@ Opções válidas para 'decisão':
         "status": decisao,
         "espera_humana": False,  
         "tentativas_loop": tentativas,
-        "tokens_input": in_tokens,
-        "tokens_output": out_tokens,
-        "tokens_total": total_tokens,       
+        **token_update,
     }

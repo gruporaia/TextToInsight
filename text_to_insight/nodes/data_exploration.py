@@ -21,6 +21,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from ..state import EstadoTextToInsight
+from ..token_tracking import build_token_usage_update
 from ..utils import extrair_tokens
 
 # ---------------------------------------------------------------------------
@@ -740,9 +741,15 @@ def _exploration_selector_llm(
     )
 
     print("[EXPLORATION_SELECTOR] Solicitando seleção de colunas ao LLM...")
+    token_update: dict[str, Any] = {
+        "tokens_input": 0,
+        "tokens_output": 0,
+        "tokens_total": 0,
+        "tokens_by_node": {},
+    }
     try:
         resposta_llm = llm.invoke(prompt)
-        in_tokens, out_tokens, total_tokens = extrair_tokens(resposta_llm)
+        token_update = build_token_usage_update("exploration_selector", resposta_llm)
         conteudo_bruto = resposta_llm.content.strip()
 
         if conteudo_bruto.startswith("```json"):
@@ -766,17 +773,13 @@ def _exploration_selector_llm(
 
         return {
             "colunas_para_explorar": cleaned_dict,
-            "tokens_input": in_tokens,
-            "tokens_output": out_tokens,
-            "tokens_total": total_tokens,
+            **token_update,
         }
     except Exception as e:
         print(f"[EXPLORATION_SELECTOR] Erro durante seleção de colunas (LLM): {e}")
         return {
             "colunas_para_explorar": {},
-            "tokens_input": 0,
-            "tokens_output": 0,
-            "tokens_total": 0,
+            **token_update,
         }
 
 

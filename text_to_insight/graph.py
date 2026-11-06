@@ -12,6 +12,7 @@ Fluxo MVP:
 8. Resposta: Gera resposta em linguagem natural (LLM)
 """
 
+import inspect
 from functools import partial
 
 from langgraph.graph import StateGraph, START, END
@@ -134,13 +135,27 @@ class Graph:
 
 
         # Após salvar CSV, o roteador de gráfico decide se gera visualização
+        def _graph_router_node(estado: EstadoTextToInsight) -> dict:
+            token_sink: dict = {}
+            params = inspect.signature(roteador_grafico).parameters
+            if "token_sink" in params:
+                decision = roteador_grafico(estado, llm=self.llm, token_sink=token_sink)
+            else:
+                decision = roteador_grafico(estado, llm=self.llm)
+            return {
+                "graph_route_decision": decision,
+                **token_sink,
+            }
+
+        construtor_grafo.add_node("graph_router", _graph_router_node)
+        construtor_grafo.add_edge("salvar_csv", "graph_router")
         construtor_grafo.add_conditional_edges(
-            "salvar_csv",
-            partial(roteador_grafico, llm=self.llm),
+            "graph_router",
+            lambda s: s.get("graph_route_decision", "resposta"),
             {
                 "gerador_grafico": "gerador_grafico",
                 "resposta": "resposta",
-            }
+            },
         )
 
         # Após gerar a resposta final, encerrar o grafo
