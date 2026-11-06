@@ -103,49 +103,49 @@ Opções válidas para 'decisão':
 - "necessita_ajuda" → a pergunta não é clara, não faz sentido, falta contexto ou não há dados no schema para responder."""
 
       # Usa LLM para decidir estratégia
-      prompt = PROMPT_PLANNER.format(
-          pergunta=pergunta,
-          schema_disponivel="Sim" if schema else "Não",
-          tentativas=tentativas,
-          status_atual=status,
-          erro=erro if erro else "Nenhum",
-          schema=contexto_rag_schema if contexto_rag_schema else schema,
-          conversa_previa=conversa_previa if conversa_previa else "Nenhuma",
-          diretrizes=diretrizes,
-      )
+        prompt = PROMPT_PLANNER.format(
+            pergunta=pergunta,
+            schema_disponivel="Sim" if schema else "Não",
+            tentativas=tentativas,
+            status_atual=status,
+            erro=erro if erro else "Nenhum",
+            schema=contexto_rag_schema if contexto_rag_schema else schema,
+            conversa_previa=conversa_previa if conversa_previa else "Nenhuma",
+            diretrizes=diretrizes,
+        )
 
-      resposta_llm = llm.invoke(prompt)
-      token_update = build_token_usage_update("planner", resposta_llm)
-      conteudo_bruto = resposta_llm.content.strip()
+        resposta_llm = llm.invoke(prompt)
+        token_update = build_token_usage_update("planner", resposta_llm)
+        conteudo_bruto = resposta_llm.content.strip()
 
-      # Limpeza caso o LLM retorne blocos de código markdown (```json ... ```)
-      if conteudo_bruto.startswith("```json"):
-          conteudo_bruto = conteudo_bruto[7:-3].strip()
-      elif conteudo_bruto.startswith("```"):
-          conteudo_bruto = conteudo_bruto[3:-3].strip()
+        # Limpeza caso o LLM retorne blocos de código markdown (```json ... ```)
+        if conteudo_bruto.startswith("```json"):
+            conteudo_bruto = conteudo_bruto[7:-3].strip()
+        elif conteudo_bruto.startswith("```"):
+            conteudo_bruto = conteudo_bruto[3:-3].strip()
 
-      try:
-          dados_resposta = json.loads(conteudo_bruto)
-          decisao = dados_resposta.get("decisao", "").lower()
-          pergunta_agente = dados_resposta.get("pergunta_ao_usuario", "").strip()
-      except json.JSONDecodeError:
-          print(f"[PLANEJADOR] Erro ao parsear JSON: {conteudo_bruto}")
-          # Fallback de segurança
-          decisao = "revisando_estrategia" if erro else "pronto_codificacao"
-          pergunta_agente = ""
+        try:
+            dados_resposta = json.loads(conteudo_bruto)
+            decisao = dados_resposta.get("decisao", "").lower()
+            pergunta_agente = dados_resposta.get("pergunta_ao_usuario", "").strip()
+        except json.JSONDecodeError:
+            print(f"[PLANEJADOR] Erro ao parsear JSON: {conteudo_bruto}")
+            # Fallback de segurança
+            decisao = "revisando_estrategia" if erro else "pronto_codificacao"
+            pergunta_agente = ""
 
-      # Mapeia para os estados do grafo e levanta a flag de HITL se necessário
-      if decisao == "necessita_ajuda":
-          print(f"[PLANEJADOR] Solicitando ajuda: {pergunta_agente}")
-          # Mesmo no fluxo HITL, retornamos tokens para manter consistência
-          # para CSV, dashboards e testes que consomem o estado.
-          return {
-              "status": "aguardando_input", 
-              "espera_humana": True,            # Flag que o router vai ler
-              "pergunta_ao_usuario": pergunta_agente, # A pergunta que vai aparecer no terminal
-              "tentativas_loop": tentativas,
-              **token_update,
-          }
+        # Mapeia para os estados do grafo e levanta a flag de HITL se necessário
+        if decisao == "necessita_ajuda":
+            print(f"[PLANEJADOR] Solicitando ajuda: {pergunta_agente}")
+            # Mesmo no fluxo HITL, retornamos tokens para manter consistência
+            # para CSV, dashboards e testes que consomem o estado.
+            return {
+                "status": "aguardando_input", 
+                "espera_humana": True,            # Flag que o router vai ler
+                "pergunta_ao_usuario": pergunta_agente, # A pergunta que vai aparecer no terminal
+                "tentativas_loop": tentativas,
+                **token_update,
+            }
 
     # Mapeia resposta para status válido
     if not decisao:
