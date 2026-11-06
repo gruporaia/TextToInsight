@@ -16,6 +16,7 @@ from pathlib import Path
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from ..state import EstadoTextToInsight
+from ..token_tracking import build_token_usage_update
 from ..utils import extrair_tokens
 
 # Diretório padrão para salvar os gráficos gerados
@@ -162,23 +163,19 @@ def nos_nodo_gerador_grafico(estado: EstadoTextToInsight, llm: ChatGoogleGenerat
 
     sucesso, saida = _executar_script(script)
 
-    in_tokens, out_tokens, total_tokens = extrair_tokens(resposta)
+    token_update = build_token_usage_update("graph_generator", resposta)
 
     if sucesso and Path(output_path).exists():
         print(f"[GERADOR_GRAFICO] ✓ Gráfico salvo em: {output_path}")
         return {
             "grafico_gerado": True,
             "caminho_grafico": output_path,
-            "tokens_input": in_tokens,
-            "tokens_output": out_tokens,
-            "tokens_total": total_tokens,
+            **token_update,
         }
     else:
         print(f"[GERADOR_GRAFICO] ✗ Falha na geração do gráfico: {saida[:200]}")
         return {
             "grafico_gerado": False,
             "caminho_grafico": "",
-            "tokens_input": in_tokens,
-            "tokens_output": out_tokens,
-            "tokens_total": total_tokens,
+            **token_update,
         }

@@ -11,6 +11,7 @@ contendo todas as informações necessárias para o fluxo de execução.
 # --> Adição dos imports de Annotated e operator para possibilitar o tracking dos tokens.
 from typing import Any, Literal, TypedDict, Annotated
 import operator
+from .token_tracking import NodeTokenUsage, merge_tokens_by_node
 # Uso de Literal para reduzir erro de digitação e inconsistências de roteamento
 StatusExecucao = Literal[
 "iniciado",
@@ -58,6 +59,7 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     contexto_rag_schema: str
     contexto_data_exploration: str
     colunas_para_explorar: dict[str, list[str]]
+    cache_data_exploration: dict[str, dict[str, Any]]
     raciocinio_agente: str  # CoT <thought> extraído do agente de código
     contexto_prompt_agente: str  # schema + data exploration enviados ao agente
     tem_descricao : bool
@@ -91,3 +93,8 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     tokens_input: Annotated[int, operator.add]
     tokens_output: Annotated[int, operator.add]
     tokens_total: Annotated[int, operator.add]
+
+    # Node-level token tracking & graph routing decision
+    tokens_by_node: Annotated[dict[str, NodeTokenUsage], merge_tokens_by_node]
+    last_attempt_tokens: NodeTokenUsage
+    graph_route_decision: str

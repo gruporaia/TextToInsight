@@ -27,6 +27,7 @@ from datetime import datetime
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import time
 from typing import Any
@@ -52,8 +53,33 @@ from src.bird import (
     sample_examples,
     sql_similarity_score,
 )
+from src.bird.metrics import is_sensitive_key, sanitize_model_kwargs
 
 load_dotenv()
+
+API_KEY_ENV_PATTERN = re.compile(r"^[A-Z_][A-Z0-9_]*$")
+
+
+def _validate_api_key_env(val: str) -> str:
+    """Validates that the provided string is an environment variable name, rejecting raw API keys."""
+    s = str(val).strip()
+    if not API_KEY_ENV_PATTERN.match(s):
+        raise argparse.ArgumentTypeError(
+            "Invalid --api-key-env: expected an environment variable NAME "
+            "matching '^[A-Z_][A-Z0-9_]*$' (e.g. 'OPENAI_API_KEY'). "
+            "Do not pass raw API keys."
+        )
+    return s
+
+
+def _exploration_selector_type(val: str) -> str:
+    """Maps legacy 'heuristic' to 'rag', while supporting 'off', 'llm', 'rag'."""
+    v = str(val).lower().strip()
+    if v == "heuristic":
+        return "rag"
+    if v in ("off", "llm", "rag"):
+        return v
+    raise argparse.ArgumentTypeError(f"invalid choice: '{val}' (choose from 'off', 'llm', 'rag')")
 
 
 def _model_kwarg(item: str) -> tuple[str, Any]:
@@ -61,11 +87,19 @@ def _model_kwarg(item: str) -> tuple[str, Any]:
 
     VALUE is decoded as JSON when possible (``0`` -> int, ``0.2`` -> float,
     ``true`` -> bool, ``null`` -> None); otherwise it is kept as a string.
+
+    Hardened against secret credential leaks: rejects keys containing sensitive tokens
+    without echoing the input value.
     """
     key, sep, raw_value = item.partition("=")
     key = key.strip()
     if not sep or not key:
         raise argparse.ArgumentTypeError(f"expected KEY=VALUE, got '{item}'")
+    if is_sensitive_key(key):
+        raise argparse.ArgumentTypeError(
+            f"Sensitive parameter '{key}' cannot be passed via --model-kwargs. "
+            "Use environment variables instead."
+        )
     try:
         value = json.loads(raw_value)
     except json.JSONDecodeError:
@@ -105,6 +139,12 @@ def parse_arguments() -> argparse.Namespace:
         help="Filter evaluation to a single database ID (e.g., financial)",
     )
     parser.add_argument(
+        "--question-filter",
+        type=str,
+        default=None,
+        help="Filter evaluation to questions containing this substring (case-insensitive)",
+    )
+    parser.add_argument(
         "--difficulty",
         type=str,
         choices=["simple", "moderate", "challenging"],
@@ -133,6 +173,12 @@ def parse_arguments() -> argparse.Namespace:
         help="LLM model name (default: from OPENAI_MODEL or gpt-4o-mini)",
     )
     parser.add_argument(
+        "--api-key-env",
+        type=_validate_api_key_env,
+        default=None,
+        help="Environment variable name holding the API key (e.g. OPENAI_API_KEY)",
+    )
+    parser.add_argument(
         "--model-kwargs",
         type=_model_kwarg,
         nargs="+",
@@ -142,6 +188,18 @@ def parse_arguments() -> argparse.Namespace:
             "Extra kwargs passed to the LLM constructor, e.g. "
             "--model-kwargs temperature=0 max_tokens=512 (default: provider defaults)"
         ),
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=None,
+        help="Sampling temperature shortcut (merged into model_kwargs)",
+    )
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=None,
+        help="Max tokens shortcut (merged into model_kwargs)",
     )
     parser.add_argument(
         "--use-evidence",
@@ -163,8 +221,19 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--infer-fks",
-        action="store_true",
-        help="Infer virtual foreign keys heuristically (default: False)",
+        nargs="?",
+        const="on",
+        choices=["on", "off"],
+        default="off",
+        help="Infer virtual foreign keys heuristically (default: off, supports standalone --infer-fks)",
+    )
+    parser.add_argument(
+        "--with-graphs",
+        nargs="?",
+        const="on",
+        choices=["on", "off"],
+        default="off",
+        help="Enable graph generation and CSV export (default: off, supports standalone --with-graphs)",
     )
     parser.add_argument(
         "--cot",
@@ -180,9 +249,10 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--exploration-selector",
-        choices=["off", "heuristic", "llm"],
+        type=_exploration_selector_type,
+        choices=["off", "llm", "rag"],
         default="off",
-        help="Column exploration selector mode: off, heuristic, llm (default: off)",
+        help="Column exploration selector mode: off, llm, rag (default: off, accepts legacy 'heuristic')",
     )
     parser.add_argument(
         "--schemacrawler",
@@ -224,24 +294,50 @@ def simulate_agent_run(
     """
     Simulates an agent response for dry-run testing.
     Alternates between correct, self-correcting, and slightly varied queries to test metrics calculation.
+    Includes realistic node-level token breakdown across exploration_selector, code_agent, and response.
     """
     gold_sql = example.get("SQL", "")
-    qid = example.get("question_id", 0)
+    qid = int(example.get("question_id", 0))
 
-    # Simulate realistic token usage
     prompt_tokens = 600 + (qid % 200)
     completion_tokens = 60 + (qid % 30)
+    is_retry = (qid % 4 == 0)
+
+    tokens_by_node = {
+        "exploration_selector": {
+            "input": 350 + (qid % 50),
+            "output": 35 + (qid % 10),
+            "total": 385 + (qid % 60),
+            "calls": 1,
+        },
+        "code_agent": {
+            "input": prompt_tokens * (2 if is_retry else 1),
+            "output": completion_tokens * (2 if is_retry else 1),
+            "total": (prompt_tokens + completion_tokens) * (2 if is_retry else 1),
+            "calls": 2 if is_retry else 1,
+        },
+        "response": {
+            "input": 200 + (qid % 40),
+            "output": 25 + (qid % 10),
+            "total": 225 + (qid % 50),
+            "calls": 1,
+        },
+    }
+    calc_in = sum(n["input"] for n in tokens_by_node.values())
+    calc_out = sum(n["output"] for n in tokens_by_node.values())
+    calc_tot = sum(n["total"] for n in tokens_by_node.values())
 
     # Simulate self-correction scenario (attempt 1 failed syntax, attempt 2 fixed)
-    if qid % 4 == 0:
+    if is_retry:
         return {
             "sql_gerada": gold_sql,
             "status": "aprovado",
             "erro_execucao": "",
             "tentativas_loop": 2,
-            "tokens_input": prompt_tokens * 2,
-            "tokens_output": completion_tokens * 2,
-            "tokens_total": (prompt_tokens + completion_tokens) * 2,
+            "tokens_input": calc_in,
+            "tokens_output": calc_out,
+            "tokens_total": calc_tot,
+            "tokens_by_node": tokens_by_node,
             "historico_tentativas": [
                 {
                     "sql": "SELECT * FROM non_existent_table WHERE id = 1",
@@ -268,9 +364,10 @@ def simulate_agent_run(
             "status": "exec_ok",
             "erro_execucao": "",
             "tentativas_loop": 1,
-            "tokens_input": prompt_tokens,
-            "tokens_output": completion_tokens,
-            "tokens_total": prompt_tokens + completion_tokens,
+            "tokens_input": calc_in,
+            "tokens_output": calc_out,
+            "tokens_total": calc_tot,
+            "tokens_by_node": tokens_by_node,
             "historico_tentativas": [
                 {
                     "sql": simulated_sql,
@@ -288,9 +385,10 @@ def simulate_agent_run(
         "status": "aprovado",
         "erro_execucao": "",
         "tentativas_loop": 1,
-        "tokens_input": prompt_tokens,
-        "tokens_output": completion_tokens,
-        "tokens_total": prompt_tokens + completion_tokens,
+        "tokens_input": calc_in,
+        "tokens_output": calc_out,
+        "tokens_total": calc_tot,
+        "tokens_by_node": tokens_by_node,
         "historico_tentativas": [
             {
                 "sql": gold_sql,
@@ -314,17 +412,23 @@ def main() -> None:
     # 1. Validate environment / API keys (if not in dry-run mode)
     api_key = ""
     if not args.dry_run:
-        model_name = args.model.lower()
-        if "gemini" in model_name:
-            api_key = os.getenv("GOOGLE_API_KEY", "")
+        if args.api_key_env:
+            api_key = os.getenv(args.api_key_env, "")
             if not api_key:
-                print("❌ Error: GOOGLE_API_KEY is not set in environment or .env file.")
+                print(f"❌ Error: Environment variable '{args.api_key_env}' is not set or empty.")
                 sys.exit(1)
         else:
-            api_key = os.getenv("OPENAI_API_KEY", "")
-            if not api_key:
-                print("❌ Error: OPENAI_API_KEY is not set in environment or .env file.")
-                sys.exit(1)
+            model_name = args.model.lower()
+            if "gemini" in model_name:
+                api_key = os.getenv("GOOGLE_API_KEY", "")
+                if not api_key:
+                    print("❌ Error: GOOGLE_API_KEY is not set in environment or .env file.")
+                    sys.exit(1)
+            else:
+                api_key = os.getenv("OPENAI_API_KEY", "")
+                if not api_key:
+                    print("❌ Error: OPENAI_API_KEY is not set in environment or .env file.")
+                    sys.exit(1)
     else:
         print("⚡ [DRY-RUN MODE ACTIVE] Simulating LLM agent responses. No API calls or costs incurred.")
 
@@ -342,6 +446,12 @@ def main() -> None:
     except Exception as e:
         print(f"❌ Failed to load BIRD dataset: {e}")
         sys.exit(1)
+
+    # 2.1 Apply question filter if specified
+    if args.question_filter:
+        q_filter = args.question_filter.lower().strip()
+        examples = [e for e in examples if q_filter in str(e.get("question", "")).lower()]
+        print(f"✓ Filtered to {len(examples)} examples matching question filter '{args.question_filter}'.")
 
     # 3. Apply sample size and stratification
     if args.sample_size is not None and args.sample_size < len(examples):
@@ -396,11 +506,24 @@ def main() -> None:
 
     # LLM constructor kwargs (empty -> provider defaults apply)
     model_kwargs: dict[str, Any] = dict(args.model_kwargs)
+    if args.temperature is not None:
+        if args.temperature < 0:
+            print("❌ Error: --temperature must be >= 0.")
+            sys.exit(1)
+        model_kwargs["temperature"] = args.temperature
+    if args.max_tokens is not None:
+        if args.max_tokens <= 0:
+            print("❌ Error: --max-tokens must be > 0.")
+            sys.exit(1)
+        model_kwargs["max_tokens"] = args.max_tokens
+
+    infer_fks_enabled = (args.infer_fks == "on" or args.infer_fks is True)
+    with_graphs_enabled = (args.with_graphs == "on")
 
     # Print Configuration Summary
     print("\n Execution Configuration:")
     print(f"   - Model: {args.model} {'(Dry-run)' if args.dry_run else ''}")
-    print(f"   - Model kwargs: {model_kwargs or 'provider defaults'}")
+    print(f"   - Model kwargs: {sanitize_model_kwargs(model_kwargs) or 'provider defaults'}")
     print(f"   - Evidence (Hints): {args.use_evidence}")
     print(f"   - Schema RAG: {args.rag}")
     print(f"   - Enrich RAG: {args.enrich_rag}")
@@ -408,7 +531,11 @@ def main() -> None:
     print(f"   - Data Exploration: {args.data_exploration}")
     print(f"   - Exploration Selector: {args.exploration_selector}")
     print(f"   - SchemaCrawler: {args.schemacrawler}")
+    print(f"   - Infer FKs: {'on' if infer_fks_enabled else 'off'}")
+    print(f"   - With Graphs: {'on' if with_graphs_enabled else 'off'}")
     print(f"   - Logging: {args.log}")
+    if args.question_filter:
+        print(f"   - Question Filter: {args.question_filter}")
     print(f"   - Total Questions to Run: {len(examples)}")
     print("-" * 80 + "\n")
 
@@ -427,9 +554,11 @@ def main() -> None:
         "use_data_exploration": (args.data_exploration == "on"),
         "exploration_selector": args.exploration_selector,
         "schemacrawler": (args.schemacrawler == "on"),
-        "infer_fks": args.infer_fks,
+        "infer_fks": infer_fks_enabled,
+        "with_graphs": with_graphs_enabled,
         "db_filter": args.db_filter,
         "difficulty_filter": args.difficulty,
+        "question_filter": args.question_filter,
     })
 
     # 6. Evaluation Loop
@@ -492,13 +621,13 @@ def main() -> None:
                             db_path=str(db_path_obj),
                             hitl=False,
                             show_output=False,
-                            enable_graphs=False,
+                            enable_graphs=with_graphs_enabled,
                             use_cot=(args.cot == "on"),
                             use_data_exploration=(args.data_exploration == "on"),
                             use_exploration_selector=args.exploration_selector,
                             use_rag=(args.rag == "on"),
                             enrich_rag=(args.enrich_rag == "on"),
-                            inferir_fks_virtuais=args.infer_fks,
+                            inferir_fks_virtuais=infer_fks_enabled,
                             usar_schemacrawler=(args.schemacrawler == "on"),
                             model_kwargs=model_kwargs,
                         )
@@ -589,6 +718,7 @@ def main() -> None:
                     tokens_input=0,
                     tokens_output=0,
                     tokens_total=0,
+                    tokens_by_node="{}",
                 )
                 reporter.append_row(inter_row)
 
@@ -640,6 +770,7 @@ def main() -> None:
             tokens_input=tokens_in,
             tokens_output=tokens_out,
             tokens_total=tokens_tot,
+            tokens_by_node=agent_result.get("tokens_by_node", {}),
         )
         reporter.append_row(final_row)
 
@@ -740,11 +871,16 @@ def main() -> None:
         "seed": args.seed,
         "use_rag": (args.rag == "on"),
         "enrich_rag": (args.enrich_rag == "on"),
+        "use_cot": (args.cot == "on"),
+        "use_data_exploration": (args.data_exploration == "on"),
         "exploration_selector": args.exploration_selector,
         "schemacrawler": (args.schemacrawler == "on"),
+        "infer_fks": infer_fks_enabled,
+        "with_graphs": with_graphs_enabled,
         "use_evidence": (args.use_evidence == "on"),
         "db_filter": args.db_filter,
         "difficulty_filter": args.difficulty,
+        "question_filter": args.question_filter,
     }
     md_path = reporter.save_markdown_report(
         summary,

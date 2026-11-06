@@ -9,6 +9,7 @@ import re
 from langchain.chat_models import BaseChatModel
 
 from ...state import EstadoTextToInsight
+from ...token_tracking import build_token_usage_update
 from ...utils import extrair_tokens
 
 # Nome de exibição e observações de sintaxe por dialeto, injetados no prompt do
@@ -222,7 +223,7 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: BaseChatModel, use_
 
     print(f"[AGENTE_CODIGO] SQL gerada: {sql[:100]}...")
 
-    in_tokens, out_tokens, total_tokens = extrair_tokens(resposta)
+    token_update = build_token_usage_update("code_agent", resposta)
 
     # Montar contexto compacto para diagnóstico (schema + data exploration usados)
     contexto_usado = schema_rag if schema_rag else schema
@@ -235,9 +236,7 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: BaseChatModel, use_
         "raciocinio_agente": raciocinio,
         "contexto_prompt_agente": contexto_prompt,
         "ultimo_prompt": prompt,
-        # Retornando o número de tokens nessa chamada do Gemini
-        "tokens_input": in_tokens,
-        "tokens_output": out_tokens,
-        "tokens_total": total_tokens,
+        "last_attempt_tokens": token_update["tokens_by_node"]["code_agent"],
+        **token_update,
     }
 
