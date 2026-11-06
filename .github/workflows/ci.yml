@@ -33,7 +33,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt && pip install -e .
+          pip install -r requirements.txt && pip install -e ".[postgres,mysql]"
       - name: Download test database
         run: |
           mkdir -p data
@@ -47,7 +47,7 @@ jobs:
             tests/test_biblioteca_integracao.py tests/test_data_exploration.py \
             tests/test_model_selection.py tests/test_token_tracking.py \
             tests/test_bird_eval.py tests/test_spider2_eval.py \
-            -v -s --record-mode=none -m "not real_api and not schemacrawler"
+            -v -s --record-mode=none -m "not real_api"
 
   record-vcr-cassettes:
     name: Record VCR cassettes - ${{ matrix.provider }} / ${{ matrix.model }}
@@ -74,7 +74,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt && pip install -e .
+          pip install -r requirements.txt && pip install -e ".[postgres,mysql]"
 
       #  Mesmo setup de banco dos outros jobs
       - name: Download test database
@@ -140,7 +140,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt && pip install -e .
+          pip install -r requirements.txt && pip install -e ".[postgres,mysql]"
 
       # ✅ Banco de dados presente aqui também
       - name: Download test database

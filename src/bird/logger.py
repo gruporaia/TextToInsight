@@ -127,7 +127,6 @@ class BirdExecutionLogger:
         use_cot = "ON" if config_info.get("use_cot") else "OFF"
         use_exploration = "ON" if config_info.get("use_data_exploration") else "OFF"
         exploration_selector = config_info.get("exploration_selector") or "off"
-        schemacrawler = "ON" if config_info.get("schemacrawler") else "OFF"
         infer_fks = "ON" if config_info.get("infer_fks") else "OFF"
         with_graphs_str = f" | WithGraphs: {'ON' if config_info.get('with_graphs') else 'OFF'}" if "with_graphs" in config_info else ""
         raw_kwargs = config_info.get("model_kwargs") or {}
@@ -152,7 +151,7 @@ class BirdExecutionLogger:
             f"Seed:               {seed}",
             f"Configuration:      RAG: {use_rag} | EnrichRAG: {enrich_rag} | Evidence: {use_evidence} | CoT: {use_cot} | "
             f"DataExploration: {use_exploration} (Selector: {exploration_selector}) | "
-            f"SchemaCrawler: {schemacrawler} | InferFKs: {infer_fks}{with_graphs_str}{kwargs_str}",
+            f"InferFKs: {infer_fks}{with_graphs_str}{kwargs_str}",
             filter_line,
             f"Output Directory:   {self.output_dir}",
             f"Log File:           {self.log_path.name}",

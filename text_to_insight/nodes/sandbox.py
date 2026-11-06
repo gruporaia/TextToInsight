@@ -8,17 +8,14 @@ retornando resultado estruturado.
 from typing import Any
 
 from ..state import EstadoTextToInsight
-from .code_agent.code_sql import executar_sql_sqlite, executar_sql_via_engine, executar_sql_via_url
+from .code_agent.code_sql import executar_sql_via_engine
 
 
-def nos_nodo_sandbox(estado: EstadoTextToInsight, engine: Any = None) -> dict:
+def nos_nodo_sandbox(estado: EstadoTextToInsight, engine: Any) -> dict:
     """
-    Nó Executor: executa a SQL gerada contra o banco real (SQLite, PostgreSQL ou MySQL).
-
-    Se uma Engine SQLAlchemy foi injetada pelo chamador (`engine`), executa
-    diretamente nela via `executar_sql_via_engine` — nada de db_path/db_url precisa estar no estado (nem, portanto, no checkpoint do
-    grafo). Agora, a lógica utiliza uma engine, se ela existir. Caso não exista, verifica 
-    se existe url. Novamente, se não existir, roda SQlite por padrão com db_path.
+    Nó Executor: executa a SQL gerada na Engine SQLAlchemy injetada pelo
+    chamador (SQLite, PostgreSQL, MySQL...). A engine nunca entra no estado,
+    então nada sobre a conexão vai para o checkpoint do grafo.
     """
     sql = estado.get("sql_gerada", "").strip()
 
@@ -30,20 +27,8 @@ def nos_nodo_sandbox(estado: EstadoTextToInsight, engine: Any = None) -> dict:
             "status": "exec_erro",
         }
 
-    if engine is not None:
-        print(f"[EXECUTOR] Executando SQL contra banco via engine ({engine.dialect.name})...")
-        resultado = executar_sql_via_engine(engine, sql)
-    else:
-        db_path = estado.get("db_path", "")
-        db_url = estado.get("db_url", "").strip()
-
-        alvo = "banco via db_url (dialeto auto-detectado)" if db_url else db_path
-        print(f"[EXECUTOR] Executando SQL contra {alvo}...")
-
-        if db_url:
-            resultado = executar_sql_via_url(db_url, sql)
-        else:
-            resultado = executar_sql_sqlite(db_path=db_path, sql=sql)
+    print(f"[EXECUTOR] Executando SQL contra banco via engine ({engine.dialect.name})...")
+    resultado = executar_sql_via_engine(engine, sql)
 
     attempt_tokens = estado.get("last_attempt_tokens") or {}
 

@@ -8,8 +8,7 @@ Ele expõe funções utilitárias para validar e executar SQL em modo seguro
 from __future__ import annotations
 
 import re
-import sqlite3
-from pathlib import Path
+import time
 from typing import Any
 
 # Expressão regular para detectar comandos SQL potencialmente perigosos.
@@ -76,99 +75,6 @@ def validar_sql_segura(sql: str) -> tuple[bool, str]:
 
     return True, ""
 
-import time
-
-def executar_sql_sqlite(
-    db_path: str,
-    sql: str,
-    limite_preview: int = 5,
-    timeout_segundos: float = 15.0,
-) -> dict[str, Any]:
-    """
-    Executa SQL validada em SQLite modo read-only e retorna resultado estruturado.
-    Possui um timeout embutido para evitar queries infinitas (ex: cross joins enormes).
-    """
-    ok, erro_validacao = validar_sql_segura(sql)
-    if not ok:
-        return {
-            "ok": False,
-            "erro_execucao": erro_validacao,
-            "linhas_resultado_preview": [],
-            "linhas_resultado_completo": [],
-            "total_linhas_resultado": 0,
-            "saida_terminal": f"[SANDBOX] SQL invalida: {erro_validacao}",
-        }
-
-    caminho = Path(db_path)
-    if not caminho.exists():
-        msg = f"Arquivo de banco nao encontrado: {db_path}"
-        return {
-            "ok": False,
-            "erro_execucao": msg,
-            "linhas_resultado_preview": [],
-            "linhas_resultado_completo": [],
-            "total_linhas_resultado": 0,
-            "saida_terminal": f"[SANDBOX] {msg}",
-        }
-
-    try:
-        conn = sqlite3.connect(f"file:{caminho}?mode=ro", uri=True)
-        conn.row_factory = sqlite3.Row
-        
-        # Define um handler para monitorar o tempo de execução e abortar se passar do limite
-        start_time = time.time()
-        def _progress_handler():
-            if time.time() - start_time > timeout_segundos:
-                return 1 # abortar query
-            return 0
-            
-        # Invoca a cada 1000 instruções da máquina virtual do SQLite
-        conn.set_progress_handler(_progress_handler, 1000)
-        
-        try:
-            cur = conn.cursor()
-            cur.execute(sql)
-            rows = cur.fetchall()
-            total = len(rows)
-            preview_rows = [dict(r) for r in rows[:limite_preview]]
-            all_rows = [dict(r) for r in rows]
-
-            return {
-                "ok": True,
-                "erro_execucao": "",
-                "linhas_resultado_preview": preview_rows,
-                "linhas_resultado_completo": all_rows,
-                "total_linhas_resultado": total,
-                "saida_terminal": (
-                    f"[SANDBOX] Execucao OK | linhas_total={total} "
-                    f"| preview={min(total, limite_preview)}"
-                ),
-            }
-        finally:
-            conn.close()
-    except sqlite3.OperationalError as e:
-        erro_msg = str(e)
-        if "interrupted" in erro_msg.lower():
-            erro_msg = f"Query abortada por timeout (> {timeout_segundos}s)."
-        return {
-            "ok": False,
-            "erro_execucao": f"Falha ao executar SQL: {erro_msg}",
-            "linhas_resultado_preview": [],
-            "linhas_resultado_completo": [],
-            "total_linhas_resultado": 0,
-            "saida_terminal": f"[SANDBOX] Erro de execucao: {erro_msg}",
-        }
-    except Exception as e:
-        return {
-            "ok": False,
-            "erro_execucao": f"Falha ao executar SQL: {e}",
-            "linhas_resultado_preview": [],
-            "linhas_resultado_completo": [],
-            "total_linhas_resultado": 0,
-            "saida_terminal": f"[SANDBOX] Erro de execucao: {e}",
-        }
-
-
 def _erro_execucao(msg: str) -> dict[str, Any]:
     """Monta a estrutura de retorno padrao para uma falha de execucao."""
     return {
@@ -181,35 +87,6 @@ def _erro_execucao(msg: str) -> dict[str, Any]:
     }
 
 
-def _normalizar_db_url(db_url: str) -> str:
-    """
-    Garante que "postgresql://" e "mysql://" sem driver explicito usem os
-    drivers que este projeto de fato instala (psycopg2 e pymysql). Sem isso,
-    o SQLAlchemy tenta o driver padrao dele (ex: psycopg v3 para postgres),
-    que nao esta instalado aqui, e a conexao falha com "No module named ...".
-    """
-    if db_url.startswith("postgresql://"):
-        return "postgresql+psycopg2://" + db_url[len("postgresql://"):]
-    if db_url.startswith("mysql://"):
-        return "mysql+pymysql://" + db_url[len("mysql://"):]
-    return db_url
-
-def _criar_engine_de_url(db_url: str, timeout_segundos=15.0):
-    """ Cria uma engine com timeout de conexão pra evitar problema de 
-    runtime com URL"""
-    from sqlalchemy import create_engine
-    from sqlalchemy.engine import make_url
-    url =_normalizar_db_url(db_url=db_url)
-    dialeto = make_url(db_url).get_backend_name()
-    segundos = max(1, int(timeout_segundos))
-    connect_args = {}
-    if dialeto == "postgresql":
-        connect_args = {"connect_timeout": segundos}
-    elif dialeto == "mysql":
-        connect_args = {"connect_timeout": segundos, "read_timeout": segundos}
-    return create_engine(url, connect_args=connect_args)
-
-
 def executar_sql_via_engine(
     engine: Any,
     sql: str,
@@ -218,12 +95,10 @@ def executar_sql_via_engine(
 ) -> dict[str, Any]:
     """
     Executa SQL usando uma Engine SQLAlchemy ja construida pelo chamador
-    (o dialeto e lido de `engine.dialect.name`, sem precisar de
-    `db_url` no estado do grafo).
+    (o dialeto e lido de `engine.dialect.name`).
 
-    Ao contrario de `executar_sql_via_url`, esta funcao NAO cria nem
-    descarta (`dispose`) a engine: o ciclo de vida da conexao e
-    responsabilidade de quem a construiu, nao desta biblioteca.
+    Esta funcao NAO cria nem descarta (`dispose`) a engine: o ciclo de vida
+    da conexao e responsabilidade de quem a construiu, nao desta biblioteca.
     """
     ok, erro_validacao = validar_sql_segura(sql)
     if not ok:
@@ -291,28 +166,3 @@ def executar_sql_via_engine(
         ),
     }
 
-
-def executar_sql_via_url(
-    db_url: str,
-    sql: str,
-    limite_preview: int = 5,
-    timeout_segundos: float = 15.0,
-) -> dict[str, Any]:
-    """
-    Executa SQL usando uma unica URL de conexao (SQLAlchemy detecta o
-    dialeto sozinho a partir do prefixo da URL: sqlite:///, postgresql://,
-    mysql+pymysql://, etc).
-
-    Cria e descarta a engine internamente. Se o chamador ja possui uma
-    Engine (e quer controlar seu ciclo de vida/pool), use
-    `executar_sql_via_engine` em vez desta funcao.
-    """
-    try:
-        engine = _criar_engine_de_url(db_url, timeout_segundos)
-    except Exception as e:
-        return _erro_execucao(f"URL de conexao invalida: {e}")
-
-    try:
-        return executar_sql_via_engine(engine, sql, limite_preview, timeout_segundos)
-    finally:
-        engine.dispose()

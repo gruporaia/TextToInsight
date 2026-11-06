@@ -222,3 +222,39 @@ def default_cassette_name(request, llm_profile):
         base_name = _default_cassette_name(request.cls, request.node.name)
 
     return f"{base_name}{llm_profile.cassette_suffix}"
+
+# ============================================================
+# Banco de teste e cache
+# ============================================================
+
+DB_OLIST = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "olist_relational.db")
+
+
+def criar_engine_sqlite(caminho: str):
+    """Engine SQLAlchemy somente leitura para um arquivo SQLite (como os scripts de avaliação)."""
+    from pathlib import Path
+    from sqlalchemy import create_engine
+
+    return create_engine(f"sqlite:///file:{Path(caminho).resolve()}?mode=ro&uri=true")
+
+
+@pytest.fixture(scope="session")
+def olist_engine():
+    """Engine somente leitura do banco olist (baixado da release `dados-teste`)."""
+    engine = criar_engine_sqlite(DB_OLIST)
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture(scope="session")
+def _cache_dir_testes(tmp_path_factory):
+    return tmp_path_factory.mktemp("text_to_insight_cache")
+
+
+@pytest.fixture(autouse=True)
+def cache_dir_isolado(monkeypatch, _cache_dir_testes):
+    """Nenhum teste grava na pasta de cache real do usuário (schema enriquecido, ChromaDB)."""
+    import text_to_insight.cache as cache_mod
+
+    monkeypatch.setattr(cache_mod, "user_cache_dir", lambda *_a, **_k: str(_cache_dir_testes))
+    return _cache_dir_testes

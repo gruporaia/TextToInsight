@@ -201,19 +201,6 @@ def parse_arguments() -> argparse.Namespace:
         help="Column selection mode for exploration: off, llm, rag (default: off)",
     )
     parser.add_argument(
-        "--schemacrawler",
-        choices=["on", "off"],
-        nargs="?",
-        const="on",
-        default="off",
-        help="Enable SchemaCrawler introspection (default: off)",
-    )
-    parser.add_argument(
-        "--no-schemacrawler",
-        action="store_true",
-        help="Deprecated alias to disable SchemaCrawler",
-    )
-    parser.add_argument(
         "--infer-fks",
         choices=["on", "off"],
         nargs="?",
@@ -554,7 +541,6 @@ def generate_markdown_report(
     lines.append(f"| CoT | {'ON' if config_info.get('use_cot') else 'OFF'} |")
     lines.append(f"| DataExploration | {'ON' if config_info.get('use_data_exploration') else 'OFF'} |")
     lines.append(f"| ExplorationSelector | `{config_info.get('exploration_selector')}` |")
-    lines.append(f"| SchemaCrawler | {'ON' if config_info.get('schemacrawler') else 'OFF'} |")
     lines.append(f"| InferFKs | {'ON' if config_info.get('infer_fks') else 'OFF'} |")
     lines.append(f"| WithGraphs | {'ON' if config_info.get('with_graphs') else 'OFF'} |")
     lines.append(f"| UseEvidence | {'ON' if config_info.get('use_evidence') else 'OFF'} |")
@@ -757,8 +743,6 @@ def main() -> None:
     if args.max_tokens is not None:
         model_kwargs["max_tokens"] = args.max_tokens
 
-    # SchemaCrawler resolution
-    use_schemacrawler = (args.schemacrawler == "on") and (not args.no_schemacrawler)
     infer_fks = (args.infer_fks == "on")
     with_graphs = (args.with_graphs == "on")
     use_cot = (args.cot == "on")
@@ -838,7 +822,6 @@ def main() -> None:
         "use_cot": use_cot,
         "use_data_exploration": use_data_exploration,
         "exploration_selector": args.exploration_selector,
-        "schemacrawler": use_schemacrawler,
         "infer_fks": infer_fks,
         "with_graphs": with_graphs,
         "use_evidence": use_evidence,
@@ -908,7 +891,6 @@ def main() -> None:
                             engine_cache[db_id] = InsightEngine(
                                 api_key=api_key,
                                 model=concrete_model,
-                                db_path=db_path,
                                 db_engine=db_engine,
                                 hitl=False,
                                 show_output=False,
@@ -919,7 +901,6 @@ def main() -> None:
                                 use_rag=use_rag,
                                 enrich_rag=enrich_rag,
                                 inferir_fks_virtuais=infer_fks,
-                                usar_schemacrawler=use_schemacrawler,
                                 model_kwargs=model_kwargs,
                             )
                         engine = engine_cache[db_id]

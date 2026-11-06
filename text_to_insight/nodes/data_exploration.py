@@ -20,6 +20,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from ..cache import diretorio_chroma
 from ..state import EstadoTextToInsight
 from ..token_tracking import build_token_usage_update
 from ..utils import extrair_tokens
@@ -374,36 +375,6 @@ def explore_table(
     return result
 
 
-def explore_tables(
-    db_path: str,
-    table_names: list[str],
-    colunas_para_explorar: dict[str, list[str]] | None = None,
-    known_row_counts: dict[str, int] | None = None,
-) -> dict[str, TableExplorationResult]:
-    """
-    Explora múltiplas tabelas e retorna dict indexado por nome de tabela.
-
-    Args:
-        db_path: Caminho para o arquivo SQLite.
-        table_names: Lista de nomes de tabelas a explorar.
-        colunas_para_explorar: Dicionário opcional mapeando tabela para lista de colunas a explorar.
-        known_row_counts: Dicionário opcional mapeando tabela para contagem de linhas já conhecida.
-
-    Returns:
-        Dict[table_name, TableExplorationResult]
-    """
-    caminho = Path(db_path)
-    if not caminho.exists():
-        print(f"[DATA_EXPLORATION] Banco não encontrado: {db_path}")
-        return {}
-
-    conn = sqlite3.connect(f"file:{caminho}?mode=ro", uri=True)
-    try:
-        return _explorar_tabelas(conn, table_names, colunas_para_explorar, known_row_counts)
-    finally:
-        conn.close()
-
-
 def _explorar_tabelas(
     conn: Any,
     table_names: list[str],
@@ -598,30 +569,10 @@ def _extract_table_names_from_rag_context(contexto_rag: str) -> list[str]:
 # Nó do grafo LangGraph
 # ---------------------------------------------------------------------------
 
-def _backend_suporta_exploracao(estado: EstadoTextToInsight, db_path: str) -> bool:
-    """
-    Este nó só sabe explorar um arquivo SQLite local (abre `db_path` com
-    sqlite3). Para qualquer outro banco ele não consegue explorar — e, pior,
-    se `db_path` sobrou preenchido com um valor antigo (o default do CLI
-    aponta para um .db do projeto), ele exploraria esse arquivo sem relação
-    nenhuma com o banco de verdade, devolvendo estatísticas erradas pra IA.
-
-    Retorna False quando:
-    - `db_url` está preenchido (o banco real vem da URL, não do db_path);
-    - ou o dialeto deduzido pela extensão do db_path não é sqlite (ex: .duckdb).
-    """
-    if (estado.get("db_url") or "").strip():
-        return False
-
-    from .schema import _detectar_dialeto
-
-    return _detectar_dialeto(db_path) == "sqlite"
-
-
 def nos_nodo_data_exploration(
     estado: EstadoTextToInsight,
+    engine: Any,
     use_data_exploration: bool = True,
-    engine: Any = None,
 ) -> dict:
     """
     Nó Data Exploration: calcula estatísticas por coluna para as tabelas
@@ -630,31 +581,22 @@ def nos_nodo_data_exploration(
     Roda após o retriever e antes do planejador, injetando as estatísticas
     no campo `contexto_data_exploration` do estado.
 
-    Com `engine` injetada, explora o banco dela (e nunca o `db_path` do estado).
-    As estatísticas usam SQL específico do SQLite (PRAGMA), então para outros
+    Explora o banco da Engine SQLAlchemy injetada pelo chamador. As
+    estatísticas usam SQL específico do SQLite (PRAGMA), então para outros
     dialetos a exploração é pulada.
     """
     if not use_data_exploration:
         print("[DATA_EXPLORATION] Data exploration desativada via toggle.")
         return {"contexto_data_exploration": ""}
 
-    if engine is not None and engine.dialect.name != "sqlite":
+    if engine.dialect.name != "sqlite":
         print(f"[DATA_EXPLORATION] Exploração só suporta SQLite (engine: {engine.dialect.name}) — pulando.")
         return {"contexto_data_exploration": ""}
 
     schema_alvo = estado.get("contexto_rag_schema") or estado.get("contexto_schema", "")
-    db_path = estado.get("db_path", "").strip()
 
-    if not schema_alvo or (engine is None and not db_path):
-        print("[DATA_EXPLORATION] Sem schema ou db_path — pulando exploração.")
-        return {}
-
-    if engine is None and not _backend_suporta_exploracao(estado, db_path):
-        print(
-            "[DATA_EXPLORATION] O banco configurado não é um arquivo SQLite local "
-            "(db_url/extensão do db_path) — exploração ainda não "
-            "suportada para esse banco, pulando."
-        )
+    if not schema_alvo:
+        print("[DATA_EXPLORATION] Sem schema — pulando exploração.")
         return {}
 
     # Extrair nomes de tabelas do contexto de schema (RAG ou completo)
@@ -675,14 +617,11 @@ def nos_nodo_data_exploration(
 
     if alvos:
         known_row_counts = {t: cache[t]["linhas"] for t in alvos if t in cache}
-        if engine is not None:
-            conn = engine.raw_connection()
-            try:
-                exploration_results = _explorar_tabelas(conn, alvos, explorar_parcial, known_row_counts)
-            finally:
-                conn.close()
-        else:
-            exploration_results = explore_tables(db_path, alvos, explorar_parcial, known_row_counts)
+        conn = engine.raw_connection()
+        try:
+            exploration_results = _explorar_tabelas(conn, alvos, explorar_parcial, known_row_counts)
+        finally:
+            conn.close()
         cache = _atualizar_cache(cache, exploration_results, set(explorar_tudo))
 
     # Formatar para injeção no prompt
@@ -832,6 +771,7 @@ def _parse_columns_from_rag_context(contexto_rag: str) -> list[dict[str, str]]:
 def _exploration_selector_rag(
     estado: EstadoTextToInsight,
     top_k: int = 15,
+    cache_dir: str | Path | None = None,
 ) -> dict:
     """
     Seleção de colunas via RAG: indexa cada coluna do schema recuperado
@@ -868,8 +808,7 @@ def _exploration_selector_rag(
     context_hash = hashlib.md5(contexto_rag.encode("utf-8")).hexdigest()
     collection_name = f"cols_{context_hash}"
 
-    chroma_dir = Path(__file__).resolve().parent.parent / "retriever" / "chroma_db"
-    chroma_client = chromadb.PersistentClient(path=str(chroma_dir))
+    chroma_client = chromadb.PersistentClient(path=str(diretorio_chroma(cache_dir)))
     collection = chroma_client.get_or_create_collection(name=collection_name)
 
     # Indexar se necessário
@@ -910,6 +849,7 @@ def nos_nodo_exploration_selector(
     estado: EstadoTextToInsight,
     llm: Any,
     exploration_selector_mode: str = "off",
+    cache_dir: str | Path | None = None,
 ) -> dict:
     """
     Nó que decide quais colunas de cada tabela devem ser exploradas.
@@ -925,7 +865,7 @@ def nos_nodo_exploration_selector(
         return {"colunas_para_explorar": {}}
 
     if mode == "rag":
-        return _exploration_selector_rag(estado)
+        return _exploration_selector_rag(estado, cache_dir=cache_dir)
 
     if mode == "llm":
         return _exploration_selector_llm(estado, llm)

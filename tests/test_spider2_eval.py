@@ -272,12 +272,10 @@ def test_dialect_and_criteria_filtering(mock_spider2_env: Path) -> None:
 # ==============================================================================
 
 def test_cli_argument_parsing_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verifies default values for CLI flags, ensuring schemacrawler defaults to off."""
+    """Verifies default values for CLI flags."""
     monkeypatch.setattr("sys.argv", ["test_spider2_eval.py"])
     args = parse_arguments()
 
-    assert args.schemacrawler == "off"
-    assert args.no_schemacrawler is False
     assert args.infer_fks == "off"
     assert args.with_graphs == "off"
     assert args.rag == "on"
@@ -301,7 +299,6 @@ def test_cli_argument_parsing_unified_flags(monkeypatch: pytest.MonkeyPatch) -> 
             "test_spider2_eval.py",
             "--temperature", "0.2",
             "--max-tokens", "1024",
-            "--schemacrawler", "on",
             "--infer-fks",
             "--with-graphs",
             "--use-evidence", "off",
@@ -313,7 +310,6 @@ def test_cli_argument_parsing_unified_flags(monkeypatch: pytest.MonkeyPatch) -> 
 
     assert args.temperature == 0.2
     assert args.max_tokens == 1024
-    assert args.schemacrawler == "on"
     assert args.infer_fks == "on"
     assert args.with_graphs == "on"
     assert args.use_evidence == "off"
@@ -329,11 +325,11 @@ def test_cli_argument_parsing_dialect_options(monkeypatch: pytest.MonkeyPatch) -
         assert args.dialect == dialect_val
 
 
-def test_cli_argument_parsing_no_schemacrawler_alias(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verifies the --no-schemacrawler deprecated alias."""
-    monkeypatch.setattr("sys.argv", ["test_spider2_eval.py", "--no-schemacrawler"])
-    args = parse_arguments()
-    assert args.no_schemacrawler is True
+def test_cli_argument_parsing_rejeita_schemacrawler(monkeypatch: pytest.MonkeyPatch) -> None:
+    """SchemaCrawler foi removido da biblioteca: a flag antiga não existe mais."""
+    monkeypatch.setattr("sys.argv", ["test_spider2_eval.py", "--schemacrawler", "on"])
+    with pytest.raises(SystemExit):
+        parse_arguments()
 
 
 def test_validate_api_key_env_valid() -> None:
@@ -627,7 +623,6 @@ def test_spider_execution_logger_lifecycle(tmp_path: Path) -> None:
         "timeout": 30,
         "use_rag": True,
         "use_cot": True,
-        "schemacrawler": False,
         "with_graphs": False,
         "model_kwargs": {"temperature": 0.0, "api_key": "should_be_redacted"},
     }
@@ -641,7 +636,7 @@ def test_spider_execution_logger_lifecycle(tmp_path: Path) -> None:
     assert "Model:              gpt-4o-mini" in content
     assert "Provider:           openai" in content
     assert "Dialect:            sqlite" in content
-    assert "SchemaCrawler: OFF" in content
+    assert "SchemaCrawler" not in content
     assert "should_be_redacted" not in content
     assert "***REDACTED***" in content
 
