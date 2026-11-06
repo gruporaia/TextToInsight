@@ -138,7 +138,8 @@ def executar_sql_via_engine(
 
                 # exec_driver_sql manda a SQL direto ao driver; text() trataria
                 # ":palavra" dentro de literais como parâmetro de bind.
-                resultado = conn.exec_driver_sql(sql)
+                #resultado = conn.exec_driver_sql(sql)
+                resultado = conn.execution_options(no_parameters=True).exec_driver_sql(sql)
                 rows = [dict(linha) for linha in resultado.mappings().all()]
             finally:
                 if dbapi_conn is not None:
