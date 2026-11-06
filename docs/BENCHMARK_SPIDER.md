@@ -126,8 +126,6 @@ The Spider 2.0 evaluation orchestrator is invoked via `scripts/test_spider2_eval
 | `--cot` | `on`, `off` | `on` | Enables Chain-of-Thought explicit reasoning in Code Agent. |
 | `--data-exploration` | `on`, `off` | `on` | Enables active exploratory SQL sampling against tables. |
 | `--exploration-selector` | `off`, `llm`, `rag` | `off` | Column selection mode for data exploration. |
-| `--schemacrawler` | `on`, `off` | `off` | Enables SchemaCrawler database introspection (default: `off`). |
-| `--no-schemacrawler` | Flag | Disabled | Deprecated alias to disable SchemaCrawler introspection. |
 | `--infer-fks` | `on`, `off` | `off` | Enables virtual foreign key inference heuristic. |
 | `--with-graphs` | `on`, `off` | `off` | Enables chart generation (matplotlib) and CSV data exports. |
 | `--use-evidence` | `on`, `off` | `on` | Injects external knowledge documents and hints into prompt context. |
