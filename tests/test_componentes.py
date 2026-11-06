@@ -290,6 +290,26 @@ def test_executor_via_engine_preserva_literais_com_dois_pontos(sql, esperado):
     assert resultado["linhas_resultado_preview"][0]["v"] == esperado
 
 
+@pytest.mark.parametrize("sql, esperado", [
+    ("SELECT '50%' AS v", "50%"),
+    ("SELECT 'abc' LIKE '%b%' AS v", True),
+    ("SELECT 10 % 3 AS v", 1),
+    ("SELECT '%(x)s' AS v", "%(x)s"),
+    ("SELECT 'Status :ativo' AS v", "Status :ativo"),
+])
+def test_executor_postgres_preserva_porcento_e_dois_pontos(pg_engine, sql, esperado):
+    """
+    psycopg2 trata "%" como marcador de parâmetro: sem no_parameters, LIKE '%b%',
+    '50%' e o operador de módulo quebravam no PostgreSQL (no SQLite "%" não é especial).
+    """
+    from text_to_insight.nodes.code_agent.code_sql import executar_sql_via_engine
+
+    resultado = executar_sql_via_engine(pg_engine, sql)
+
+    assert resultado["ok"], resultado["erro_execucao"]
+    assert resultado["linhas_resultado_preview"][0]["v"] == esperado
+
+
 def test_executor_via_engine_nao_deixa_timeout_na_conexao_do_pool():
     """
     A conexão volta para o pool do chamador: o progress handler de timeout

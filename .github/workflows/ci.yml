@@ -20,11 +20,25 @@ jobs:
             model: gpt-4o-mini
           - provider: google
             model: gemini-2.5-flash
+    # PostgreSQL para os testes que precisam de um banco real (fixture pg_engine)
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       TEXT_TO_INSIGHT_TEST_PROVIDER: ${{ matrix.provider }}
       TEXT_TO_INSIGHT_TEST_MODEL: ${{ matrix.model }}
       OPENAI_API_KEY: ${{ matrix.provider == 'openai' && 'dummy-key' || '' }}
       GOOGLE_API_KEY: ${{ matrix.provider == 'google' && 'dummy-key' || '' }}
+      TEXT_TO_INSIGHT_TEST_PG_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/postgres
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

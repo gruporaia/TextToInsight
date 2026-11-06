@@ -258,3 +258,35 @@ def cache_dir_isolado(monkeypatch, _cache_dir_testes):
 
     monkeypatch.setattr(cache_mod, "user_cache_dir", lambda *_a, **_k: str(_cache_dir_testes))
     return _cache_dir_testes
+
+
+# ============================================================
+# PostgreSQL (opcional): definido via TEXT_TO_INSIGHT_TEST_PG_URL
+# ============================================================
+
+PG_URL_ENV = "TEXT_TO_INSIGHT_TEST_PG_URL"
+PG_SCHEMA_TESTES = "tti_testes"
+
+
+@pytest.fixture
+def pg_engine():
+    """
+    Engine de um PostgreSQL real, com search_path num schema próprio e vazio.
+    Pula o teste se TEXT_TO_INSIGHT_TEST_PG_URL não estiver definida
+    (ex.: postgresql+psycopg2://postgres:postgres@localhost:5432/postgres).
+    """
+    url = os.getenv(PG_URL_ENV)
+    if not url:
+        pytest.skip(f"{PG_URL_ENV} não definida; testes de PostgreSQL pulados.")
+    from sqlalchemy import create_engine, text
+
+    admin = create_engine(url)
+    with admin.begin() as conn:
+        conn.execute(text(f"DROP SCHEMA IF EXISTS {PG_SCHEMA_TESTES} CASCADE"))
+        conn.execute(text(f"CREATE SCHEMA {PG_SCHEMA_TESTES}"))
+    engine = create_engine(url, connect_args={"options": f"-c search_path={PG_SCHEMA_TESTES}"})
+    yield engine
+    engine.dispose()
+    with admin.begin() as conn:
+        conn.execute(text(f"DROP SCHEMA IF EXISTS {PG_SCHEMA_TESTES} CASCADE"))
+    admin.dispose()
