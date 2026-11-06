@@ -180,7 +180,15 @@ pytest tests/test_main_engine_integracao.py -v -s
 
 # integracao do pacote como biblioteca (sem chamadas de API, testa HITL e run/resume)
 pytest tests/test_biblioteca_integracao.py -v -s
+
+# data exploration em PostgreSQL (pulados sem TEXT_TO_INSIGHT_TEST_PG_URL)
+TEXT_TO_INSIGHT_TEST_PG_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/postgres \
+pytest tests/test_data_exploration_postgres.py -v
 ```
+
+Os testes de PostgreSQL criam e apagam o schema `tti_testes` no banco da URL;
+use um banco descartável. Na CI, o job `tests-vcr` sobe um serviço `postgres:16`
+e define a variável.
 
 ### Gravação de cassetes VCR (fluxo recomendado)
 

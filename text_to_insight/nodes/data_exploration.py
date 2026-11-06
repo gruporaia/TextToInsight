@@ -14,7 +14,6 @@ import hashlib
 import json
 import random
 import re
-import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -85,12 +84,12 @@ _NUMERIC_TYPES = re.compile(
     r"(int|integer|real|float|numeric|decimal|double|number|smallint|bigint|tinyint|mediumint)",
     re.IGNORECASE,
 )
-_DATE_TYPES = re.compile(r"(date|datetime|timestamp|time)", re.IGNORECASE)
+_DATE_TYPES = re.compile(r"(date|datetime|timestamp|time|interval)", re.IGNORECASE)
 _BOOL_TYPES = re.compile(r"(bool|boolean)", re.IGNORECASE)
 
 
 def _classify_column_type(declared_type: str) -> str:
-    """Classifica o tipo declarado SQLite em uma das 4 categorias."""
+    """Classifica o tipo declarado (SQLite ou PostgreSQL) em uma das 4 categorias."""
     if not declared_type:
         # SQLite permite colunas sem tipo; tratamos como categórica por segurança
         return "categorical"
@@ -109,6 +108,90 @@ def _classify_column_type(declared_type: str) -> str:
 
 # Limite de amostragem para tabelas grandes
 SAMPLE_LIMIT = 10_000
+
+# Dialetos em que a exploração sabe rodar (SQL das estatísticas + introspecção).
+DIALETOS_SUPORTADOS = {"sqlite", "postgresql"}
+
+# Timeout por consulta de exploração no PostgreSQL. Uma coluna/tabela que
+# estoure o tempo é pulada; as demais continuam.
+TIMEOUT_EXPLORACAO_SEGUNDOS = 15
+
+# Acima deste número de linhas (pela estimativa do PostgreSQL) não roda
+# COUNT(*): a contagem exata exigiria varrer a tabela inteira, e as
+# estatísticas já usam no máximo SAMPLE_LIMIT linhas.
+LIMIAR_ESTIMATIVA_LINHAS = 100_000
+
+
+def _q(identificador: str) -> str:
+    """Identificador entre aspas duplas (SQLite e PostgreSQL), escapando aspas internas."""
+    return '"' + identificador.replace('"', '""') + '"'
+
+
+def _preparar_sessao_postgres(conn: Any) -> None:
+    """
+    Abre a transação da exploração como somente leitura e com timeout.
+
+    SET TRANSACTION e SET LOCAL valem só para a transação corrente, que é
+    desfeita ao final: nada disso fica na conexão quando ela volta para o
+    pool do chamador.
+    """
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SET TRANSACTION READ ONLY")
+        cursor.execute(f"SET LOCAL statement_timeout = {int(TIMEOUT_EXPLORACAO_SEGUNDOS * 1000)}")
+        # Sem ORDER BY, "LIMIT n" só devolve sempre as mesmas linhas se a varredura
+        # for sequencial, sem workers paralelos e começando do início da tabela.
+        # Assim todas as estatísticas de uma coluna olham para a mesma amostra.
+        cursor.execute("SET LOCAL max_parallel_workers_per_gather = 0")
+        cursor.execute("SET LOCAL synchronize_seqscans = off")
+    finally:
+        cursor.close()
+
+
+def _recuperar_apos_erro(conn: Any, dialeto: str) -> None:
+    """
+    No PostgreSQL, um erro aborta a transação inteira e as consultas
+    seguintes falhariam todas. Desfaz e reabre a transação de exploração.
+    """
+    if dialeto != "postgresql":
+        return
+    conn.rollback()
+    _preparar_sessao_postgres(conn)
+
+
+def _listar_colunas(cursor: Any, table: str, dialeto: str) -> list[tuple[str, str]]:
+    """(nome, tipo declarado) de cada coluna, na ordem da tabela."""
+    if dialeto == "postgresql":
+        # Mesmo schema que o SQLAlchemy usa por padrão no nó de schema.
+        cursor.execute(
+            "SELECT column_name, data_type FROM information_schema.columns "
+            "WHERE table_schema = current_schema() AND table_name = %s "
+            "ORDER BY ordinal_position",
+            (table,),
+        )
+        return [(nome, tipo or "") for nome, tipo in cursor.fetchall()]
+
+    cursor.execute(f"PRAGMA table_info({_q(table)})")
+    # table_info retorna: cid, name, type, notnull, dflt_value, pk
+    return [(info[1], info[2] or "") for info in cursor.fetchall()]
+
+
+def _contar_linhas(cursor: Any, table: str, dialeto: str) -> int:
+    """Total de linhas; no PostgreSQL usa a estimativa do catálogo para tabelas grandes."""
+    if dialeto == "postgresql":
+        cursor.execute(
+            "SELECT c.reltuples::bigint FROM pg_class c "
+            "JOIN pg_namespace n ON n.oid = c.relnamespace "
+            "WHERE n.nspname = current_schema() AND c.relname = %s",
+            (table,),
+        )
+        linha = cursor.fetchone()
+        estimativa = linha[0] if linha else None
+        if estimativa is not None and estimativa >= LIMIAR_ESTIMATIVA_LINHAS:
+            return int(estimativa)
+
+    cursor.execute(f"SELECT COUNT(*) FROM {_q(table)}")
+    return cursor.fetchone()[0]
 
 
 def _safe_float(val: Any) -> float | None:
@@ -130,16 +213,16 @@ def _safe_round(val: Any, ndigits: int = 4) -> float | None:
 
 
 def _compute_numeric_stats(
-    cursor: sqlite3.Cursor, table: str, column: str, total_rows: int,
+    cursor: Any, table: str, column: str, total_rows: int, dialeto: str = "sqlite",
 ) -> NumericColumnStats:
     """Calcula estatísticas numéricas usando SQL aggregates + amostragem para mediana."""
-    safe_col = f'"{column}"'
-    safe_tbl = f'"{table}"'
+    safe_col = _q(column)
+    safe_tbl = _q(table)
 
     cursor.execute(
         f"SELECT AVG({safe_col}), MIN({safe_col}), MAX({safe_col}), "
         f"COUNT(*) - COUNT({safe_col}) "
-        f"FROM (SELECT {safe_col} FROM {safe_tbl} LIMIT {SAMPLE_LIMIT})"
+        f"FROM (SELECT {safe_col} FROM {safe_tbl} LIMIT {SAMPLE_LIMIT}) AS _amostra"
     )
     row = cursor.fetchone()
     avg_val, min_val, max_val, null_count = row
@@ -154,7 +237,7 @@ def _compute_numeric_stats(
         try:
             cursor.execute(
                 f"SELECT AVG(({safe_col} - {avg_float}) * ({safe_col} - {avg_float})) "
-                f"FROM (SELECT {safe_col} FROM {safe_tbl} WHERE {safe_col} IS NOT NULL LIMIT {SAMPLE_LIMIT})"
+                f"FROM (SELECT {safe_col} FROM {safe_tbl} WHERE {safe_col} IS NOT NULL LIMIT {SAMPLE_LIMIT}) AS _amostra"
             )
             variance = cursor.fetchone()[0]
             var_float = _safe_float(variance)
@@ -167,13 +250,16 @@ def _compute_numeric_stats(
     median_val = None
     try:
         cursor.execute(
-            f"SELECT COUNT(*) FROM (SELECT {safe_col} FROM {safe_tbl} WHERE {safe_col} IS NOT NULL LIMIT {SAMPLE_LIMIT})"
+            f"SELECT COUNT(*) FROM (SELECT {safe_col} FROM {safe_tbl} WHERE {safe_col} IS NOT NULL LIMIT {SAMPLE_LIMIT}) AS _amostra"
         )
         non_null_count = cursor.fetchone()[0]
         if non_null_count > 0:
             mid = non_null_count // 2
+            # Ordena só a amostra: a posição `mid` vem da contagem da amostra,
+            # e ordenar a tabela inteira seria caro em tabelas grandes.
             cursor.execute(
-                f"SELECT {safe_col} FROM {safe_tbl} WHERE {safe_col} IS NOT NULL "
+                f"SELECT {safe_col} FROM "
+                f"(SELECT {safe_col} FROM {safe_tbl} WHERE {safe_col} IS NOT NULL LIMIT {SAMPLE_LIMIT}) AS _amostra "
                 f"ORDER BY {safe_col} LIMIT 1 OFFSET {mid}"
             )
             median_row = cursor.fetchone()
@@ -193,16 +279,16 @@ def _compute_numeric_stats(
 
 
 def _compute_categorical_stats(
-    cursor: sqlite3.Cursor, table: str, column: str, total_rows: int,
+    cursor: Any, table: str, column: str, total_rows: int, dialeto: str = "sqlite",
 ) -> CategoricalColumnStats:
     """Calcula top-5, cardinalidade e amostras para colunas categóricas."""
-    safe_col = f'"{column}"'
-    safe_tbl = f'"{table}"'
+    safe_col = _q(column)
+    safe_tbl = _q(table)
 
     # Top 5 valores mais frequentes
     cursor.execute(
         f"SELECT {safe_col}, COUNT(*) as cnt "
-        f"FROM (SELECT {safe_col} FROM {safe_tbl} LIMIT {SAMPLE_LIMIT}) "
+        f"FROM (SELECT {safe_col} FROM {safe_tbl} LIMIT {SAMPLE_LIMIT}) AS _amostra "
         f"WHERE {safe_col} IS NOT NULL "
         f"GROUP BY {safe_col} ORDER BY cnt DESC LIMIT 5"
     )
@@ -211,7 +297,7 @@ def _compute_categorical_stats(
     # Cardinalidade
     cursor.execute(
         f"SELECT COUNT(DISTINCT {safe_col}) "
-        f"FROM (SELECT {safe_col} FROM {safe_tbl} LIMIT {SAMPLE_LIMIT})"
+        f"FROM (SELECT {safe_col} FROM {safe_tbl} LIMIT {SAMPLE_LIMIT}) AS _amostra"
     )
     cardinality = cursor.fetchone()[0] or 0
 
@@ -219,7 +305,7 @@ def _compute_categorical_stats(
     sample_size = min(total_rows, SAMPLE_LIMIT)
     cursor.execute(
         f"SELECT COUNT(*) - COUNT({safe_col}) "
-        f"FROM (SELECT {safe_col} FROM {safe_tbl} LIMIT {SAMPLE_LIMIT})"
+        f"FROM (SELECT {safe_col} FROM {safe_tbl} LIMIT {SAMPLE_LIMIT}) AS _amostra"
     )
     null_count = cursor.fetchone()[0]
     null_rate = round(null_count / sample_size, 4) if sample_size > 0 else 0.0
@@ -243,16 +329,16 @@ def _compute_categorical_stats(
 
 
 def _compute_date_stats(
-    cursor: sqlite3.Cursor, table: str, column: str, total_rows: int,
+    cursor: Any, table: str, column: str, total_rows: int, dialeto: str = "sqlite",
 ) -> DateColumnStats:
     """Calcula min, max e amostras para colunas de data."""
-    safe_col = f'"{column}"'
-    safe_tbl = f'"{table}"'
+    safe_col = _q(column)
+    safe_tbl = _q(table)
 
     cursor.execute(
         f"SELECT MIN({safe_col}), MAX({safe_col}), "
         f"COUNT(*) - COUNT({safe_col}) "
-        f"FROM (SELECT {safe_col} FROM {safe_tbl} LIMIT {SAMPLE_LIMIT})"
+        f"FROM (SELECT {safe_col} FROM {safe_tbl} LIMIT {SAMPLE_LIMIT}) AS _amostra"
     )
     row = cursor.fetchone()
     min_val, max_val, null_count = row
@@ -279,18 +365,25 @@ def _compute_date_stats(
 
 
 def _compute_boolean_stats(
-    cursor: sqlite3.Cursor, table: str, column: str, total_rows: int,
+    cursor: Any, table: str, column: str, total_rows: int, dialeto: str = "sqlite",
 ) -> BooleanColumnStats:
     """Calcula contagens true/false para colunas booleanas."""
-    safe_col = f'"{column}"'
-    safe_tbl = f'"{table}"'
+    safe_col = _q(column)
+    safe_tbl = _q(table)
 
+    if dialeto == "postgresql":
+        # boolean nativo: comparar com 1/0 é erro de tipo no PostgreSQL.
+        cond_true = f"{safe_col} IS TRUE"
+        cond_false = f"{safe_col} IS FALSE"
+    else:
+        cond_true = f"{safe_col} = 1 OR LOWER(CAST({safe_col} AS TEXT)) = 'true'"
+        cond_false = f"{safe_col} = 0 OR LOWER(CAST({safe_col} AS TEXT)) = 'false'"
     cursor.execute(
         f"SELECT "
-        f"SUM(CASE WHEN {safe_col} = 1 OR LOWER(CAST({safe_col} AS TEXT)) = 'true' THEN 1 ELSE 0 END), "
-        f"SUM(CASE WHEN {safe_col} = 0 OR LOWER(CAST({safe_col} AS TEXT)) = 'false' THEN 1 ELSE 0 END), "
+        f"SUM(CASE WHEN {cond_true} THEN 1 ELSE 0 END), "
+        f"SUM(CASE WHEN {cond_false} THEN 1 ELSE 0 END), "
         f"COUNT(*) - COUNT({safe_col}) "
-        f"FROM (SELECT {safe_col} FROM {safe_tbl} LIMIT {SAMPLE_LIMIT})"
+        f"FROM (SELECT {safe_col} FROM {safe_tbl} LIMIT {SAMPLE_LIMIT}) AS _amostra"
     )
     row = cursor.fetchone()
     true_count, false_count, null_count = row
@@ -318,19 +411,22 @@ _STAT_DISPATCHER = {
 
 
 def explore_table(
-    conn: sqlite3.Connection,
+    conn: Any,
     table_name: str,
     columns_to_explore: list[str] | None = None,
     row_count: int | None = None,
+    dialeto: str = "sqlite",
 ) -> TableExplorationResult:
     """
-    Calcula estatísticas por coluna para uma tabela SQLite.
+    Calcula estatísticas por coluna para uma tabela (SQLite ou PostgreSQL).
 
     Args:
-        conn: Conexão SQLite (preferencialmente read-only).
+        conn: Conexão DB-API (preferencialmente read-only). No PostgreSQL, a
+            transação já deve ter sido preparada com `_preparar_sessao_postgres`.
         table_name: Nome da tabela a explorar.
         columns_to_explore: Lista opcional de colunas a explorar. Se omitida (ou None), explora todas.
         row_count: Contagem de linhas já conhecida (ex: vinda do cache) para evitar SELECT COUNT(*).
+        dialeto: "sqlite" ou "postgresql".
 
     Returns:
         TableExplorationResult com stats por coluna.
@@ -338,36 +434,28 @@ def explore_table(
     cursor = conn.cursor()
 
     # Contagem total de linhas (reaproveita do cache se já conhecida)
-    safe_tbl = f'"{table_name}"'
-    if row_count is None:
-        cursor.execute(f"SELECT COUNT(*) FROM {safe_tbl}")
-        total_rows = cursor.fetchone()[0]
-    else:
-        total_rows = row_count
+    total_rows = row_count if row_count is not None else _contar_linhas(cursor, table_name, dialeto)
 
-    # Introspect colunas
-    cursor.execute(f"PRAGMA table_info({safe_tbl})")
-    columns_info = cursor.fetchall()
-    # table_info retorna: cid, name, type, notnull, dflt_value, pk
+    columns_info = _listar_colunas(cursor, table_name, dialeto)
 
     result = TableExplorationResult(
         table_name=table_name,
         row_count_estimate=total_rows,
     )
 
-    for col_info in columns_info:
-        col_name = col_info[1]
+    for col_name, col_type_raw in columns_info:
         if columns_to_explore is not None and col_name not in columns_to_explore:
             continue
-        col_type_raw = col_info[2] or ""
         category = _classify_column_type(col_type_raw)
 
         compute_fn = _STAT_DISPATCHER[category]
         try:
-            stats = compute_fn(cursor, table_name, col_name, total_rows)
+            stats = compute_fn(cursor, table_name, col_name, total_rows, dialeto=dialeto)
         except Exception as e:
-            # Se falhar em uma coluna, log e segue para as demais
+            # Se falhar em uma coluna (tipo sem suporte, timeout...), log e segue para as demais
             print(f"[DATA_EXPLORATION] Erro ao computar stats para {table_name}.{col_name}: {e}")
+            _recuperar_apos_erro(conn, dialeto)
+            cursor = conn.cursor()
             continue
 
         result.columns[col_name] = stats
@@ -380,6 +468,7 @@ def _explorar_tabelas(
     table_names: list[str],
     colunas_para_explorar: dict[str, list[str]] | None,
     known_row_counts: dict[str, int] | None = None,
+    dialeto: str = "sqlite",
 ) -> dict[str, TableExplorationResult]:
     results: dict[str, TableExplorationResult] = {}
     for table_name in table_names:
@@ -388,9 +477,12 @@ def _explorar_tabelas(
             if colunas_para_explorar and table_name in colunas_para_explorar:
                 cols_to_explore = colunas_para_explorar[table_name]
             row_count = known_row_counts.get(table_name) if known_row_counts else None
-            results[table_name] = explore_table(conn, table_name, cols_to_explore, row_count=row_count)
+            results[table_name] = explore_table(
+                conn, table_name, cols_to_explore, row_count=row_count, dialeto=dialeto
+            )
         except Exception as e:
             print(f"[DATA_EXPLORATION] Erro ao explorar tabela '{table_name}': {e}")
+            _recuperar_apos_erro(conn, dialeto)
             continue
     return results
 
@@ -559,15 +651,37 @@ def _extract_table_names_from_rag_context(contexto_rag: str) -> list[str]:
     """
     Extrai nomes de tabelas do texto formatado pelo retriever RAG.
 
-    O retriever formata cada tabela como 'Tabela: <nome>', então
-    extraímos todos os nomes com regex.
+    O retriever formata cada tabela como 'Tabela: <nome>' numa linha
+    própria. O nome vai até o fim da linha, para aceitar nomes com espaço
+    ou outros caracteres (possíveis com identificadores entre aspas).
     """
-    return re.findall(r"Tabela:\s*(\w+)", contexto_rag)
+    return [nome.strip() for nome in re.findall(r"^\s*Tabela:[ \t]*(.+?)[ \t]*$", contexto_rag, re.MULTILINE)]
 
 
 # ---------------------------------------------------------------------------
 # Nó do grafo LangGraph
 # ---------------------------------------------------------------------------
+
+def _explorar_no_banco(
+    engine: Any,
+    dialeto: str,
+    alvos: list[str],
+    explorar_parcial: dict[str, list[str]],
+    known_row_counts: dict[str, int],
+) -> dict[str, TableExplorationResult]:
+    """Explora as tabelas numa conexão do pool do chamador e a devolve limpa."""
+    conn = engine.raw_connection()
+    try:
+        if dialeto == "postgresql":
+            _preparar_sessao_postgres(conn)
+        return _explorar_tabelas(conn, alvos, explorar_parcial, known_row_counts, dialeto=dialeto)
+    finally:
+        try:
+            if dialeto == "postgresql":
+                conn.rollback()  # encerra a transação read-only antes de devolver ao pool
+        finally:
+            conn.close()
+
 
 def nos_nodo_data_exploration(
     estado: EstadoTextToInsight,
@@ -581,16 +695,18 @@ def nos_nodo_data_exploration(
     Roda após o retriever e antes do planejador, injetando as estatísticas
     no campo `contexto_data_exploration` do estado.
 
-    Explora o banco da Engine SQLAlchemy injetada pelo chamador. As
-    estatísticas usam SQL específico do SQLite (PRAGMA), então para outros
-    dialetos a exploração é pulada.
+    Explora o banco da Engine SQLAlchemy injetada pelo chamador. Suporta
+    SQLite e PostgreSQL; para outros dialetos a exploração é pulada. No
+    PostgreSQL, a exploração roda numa transação somente leitura, com
+    timeout por consulta, que é desfeita ao final.
     """
     if not use_data_exploration:
         print("[DATA_EXPLORATION] Data exploration desativada via toggle.")
         return {"contexto_data_exploration": ""}
 
-    if engine.dialect.name != "sqlite":
-        print(f"[DATA_EXPLORATION] Exploração só suporta SQLite (engine: {engine.dialect.name}) — pulando.")
+    dialeto = engine.dialect.name
+    if dialeto not in DIALETOS_SUPORTADOS:
+        print(f"[DATA_EXPLORATION] Exploração não suporta o dialeto '{dialeto}' — pulando.")
         return {"contexto_data_exploration": ""}
 
     schema_alvo = estado.get("contexto_rag_schema") or estado.get("contexto_schema", "")
@@ -617,11 +733,13 @@ def nos_nodo_data_exploration(
 
     if alvos:
         known_row_counts = {t: cache[t]["linhas"] for t in alvos if t in cache}
-        conn = engine.raw_connection()
         try:
-            exploration_results = _explorar_tabelas(conn, alvos, explorar_parcial, known_row_counts)
-        finally:
-            conn.close()
+            exploration_results = _explorar_no_banco(engine, dialeto, alvos, explorar_parcial, known_row_counts)
+        except Exception as e:
+            # A exploração é um complemento do prompt: se o banco falhar aqui
+            # (conexão caiu, permissão...), o fluxo segue sem estatísticas novas.
+            print(f"[DATA_EXPLORATION] Exploração interrompida ({e}) — seguindo sem estatísticas novas.")
+            exploration_results = {}
         cache = _atualizar_cache(cache, exploration_results, set(explorar_tudo))
 
     # Formatar para injeção no prompt

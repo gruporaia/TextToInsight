@@ -59,6 +59,7 @@ jobs:
           pytest tests/test_componentes.py tests/test_nodes.py \
             tests/test_integracao.py tests/test_main_engine_integracao.py \
             tests/test_biblioteca_integracao.py tests/test_data_exploration.py \
+            tests/test_data_exploration_postgres.py \
             tests/test_model_selection.py tests/test_token_tracking.py \
             tests/test_bird_eval.py tests/test_spider2_eval.py \
             -v -s --record-mode=none -m "not real_api"

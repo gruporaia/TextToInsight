@@ -139,7 +139,8 @@ SQLAlchemy (a partir de `--db-path` ou `--db-url`) e a descarta ao final.
 ### Seletor de colunas e Data Exploration (`text_to_insight/nodes/data_exploration.py`)
 
 - o seletor (`off`, `llm` ou `rag`) escolhe quais colunas explorar
-- a exploracao calcula estatisticas por coluna (SQLite) e guarda em `cache_data_exploration` para nao repetir trabalho dentro da mesma pergunta
+- a exploracao calcula estatisticas por coluna numa amostra de ate 10 mil linhas (SQLite e PostgreSQL) e guarda em `cache_data_exploration` para nao repetir trabalho dentro da mesma pergunta
+- no PostgreSQL roda numa transacao somente leitura, com timeout por consulta, desfeita ao final; uma coluna ou tabela que falhe e pulada sem derrubar as demais, e tabelas grandes usam a estimativa de linhas do catalogo em vez de `COUNT(*)`
 
 ### Agente de Codigo (`text_to_insight/nodes/code_agent/code_agent.py`)
 

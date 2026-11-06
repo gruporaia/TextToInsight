@@ -346,12 +346,12 @@ def test_data_exploration_via_engine(olist_engine):
     assert "order_status" in resultado["contexto_data_exploration"]
 
 
-def test_data_exploration_engine_nao_sqlite_pula():
-    """Exploração é SQLite-only: com engine de outro dialeto, pula sem conectar."""
+def test_data_exploration_dialeto_sem_suporte_pula():
+    """Exploração suporta SQLite e PostgreSQL: com outro dialeto, pula sem conectar."""
     from sqlalchemy import create_engine
     from text_to_insight.nodes.data_exploration import nos_nodo_data_exploration
 
-    engine = create_engine("postgresql+psycopg2://u:p@localhost:1/nao_conecta")
+    engine = create_engine("mysql+pymysql://u:p@localhost:1/nao_conecta")
     estado = {"contexto_rag_schema": "Tabela: orders"}
     resultado = nos_nodo_data_exploration(estado, engine=engine)
 

@@ -60,7 +60,7 @@ Toda SQL gerada passa por uma validação (apenas `SELECT`/`WITH`, uma única in
 | `hitl` | `False` | Permite que o agente pause e peça esclarecimentos (`AWAITING_USER`). |
 | `use_rag` | `True` | Seleciona só as tabelas relevantes quando o schema é grande (GraphRAG). |
 | `enrich_rag` | `False` | Gera, com o LLM, descrições curtas das colunas antes do RAG. O resultado fica em cache. |
-| `use_data_exploration` | `True` | Inclui estatísticas das colunas no prompt (hoje só em SQLite). |
+| `use_data_exploration` | `True` | Inclui estatísticas das colunas no prompt (SQLite e PostgreSQL; outros bancos pulam esta etapa). |
 | `use_exploration_selector` | `"off"` | Escolhe quais colunas explorar: `"off"`, `"llm"` ou `"rag"`. |
 | `use_cot` | `True` | Pede raciocínio passo a passo antes da SQL. |
 | `inferir_fks_virtuais` | `False` | Infere chaves estrangeiras por nome (`*_id`) quando o banco não as declara. |
