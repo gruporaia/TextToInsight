@@ -195,7 +195,7 @@ def test_planner_early_return_and_llm_call():
     res_no_schema = nos_nodo_planejador(
         {"pergunta_atual": "how many?", "contexto_schema": ""},
         llm=mock_llm,
-        hitl=False,
+        hitl=True,
     )
     assert res_no_schema["status"] == "aguardando_schema"
     assert res_no_schema["tokens_by_node"] == {}
@@ -206,7 +206,7 @@ def test_planner_early_return_and_llm_call():
     res_approved = nos_nodo_planejador(
         {"pergunta_atual": "how many?", "contexto_schema": "Tabela: users", "status": "aprovado"},
         llm=mock_llm,
-        hitl=False,
+        hitl=True,
     )
     assert res_approved["status"] == "aprovado"
     assert res_approved["tokens_by_node"] == {}
@@ -220,7 +220,7 @@ def test_planner_early_return_and_llm_call():
     res_llm = nos_nodo_planejador(
         {"pergunta_atual": "how many?", "contexto_schema": "Tabela: users", "status": "iniciado"},
         llm=mock_llm,
-        hitl=False,
+        hitl=True,
     )
     assert res_llm["status"] == "pronto_codificacao"
     assert res_llm["tokens_input"] == 100
