@@ -86,6 +86,12 @@ def nos_nodo_planejador(estado: EstadoTextToInsight, llm: BaseChatModel, hitl: b
 # - "pronto_codificacao" → se temos schema, a pergunta faz sentido e devemos gerar/regenerar SQL
 # - "revisando_estrategia" → se houve um erro de execução e devemos tentar uma abordagem diferente"""
     decisao = None
+    token_update = {
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "tokens_total": 0,
+    "tokens_by_node": {},
+    }
     if hitl:
         diretrizes = """AVALIAÇÃO CRÍTICA:
 Verifique se a "Pergunta do usuário" pode ser respondida com as tabelas e colunas do Schema.
