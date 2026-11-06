@@ -261,7 +261,9 @@ def executar_sql_via_engine(
 
                     dbapi_conn.set_progress_handler(_progress_handler, 1000)
 
-                resultado = conn.execute(text(sql))
+                # exec_driver_sql manda a SQL direto ao driver; text() trataria
+                # ":palavra" dentro de literais como parâmetro de bind.
+                resultado = conn.exec_driver_sql(sql)
                 rows = [dict(linha) for linha in resultado.mappings().all()]
             finally:
                 if dbapi_conn is not None:
