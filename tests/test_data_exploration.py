@@ -366,18 +366,11 @@ class TestNodoDataExploration:
         assert "name" not in text
         assert "category" not in text
 
-    @pytest.mark.parametrize(
-        "url",
-        [
-            "mysql+pymysql://u:p@localhost:3306/banco",
-            "postgresql+psycopg2://u:p@localhost:5432/banco",
-        ],
-    )
-    def test_skips_when_engine_is_not_sqlite(self, url):
-        # A exploração usa PRAGMA (SQLite): com outro dialeto o nó pula sem conectar.
+    def test_skips_unsupported_dialect(self):
+        # Só SQLite e PostgreSQL são suportados: com outro dialeto o nó pula sem conectar.
         from sqlalchemy import create_engine
 
-        engine = create_engine(url)
+        engine = create_engine("mysql+pymysql://u:p@localhost:3306/banco")
         estado = {"contexto_rag_schema": "Tabela: products\n- id: INTEGER\n"}
         assert nos_nodo_data_exploration(estado, engine=engine) == {"contexto_data_exploration": ""}
 
@@ -392,9 +385,9 @@ class TestCacheDataExploration:
         chamadas = []
         original = de.explore_table
 
-        def _espiao(conn, table_name, columns_to_explore=None, row_count=None):
+        def _espiao(conn, table_name, columns_to_explore=None, row_count=None, dialeto="sqlite"):
             chamadas.append((table_name, columns_to_explore))
-            return original(conn, table_name, columns_to_explore, row_count=row_count)
+            return original(conn, table_name, columns_to_explore, row_count=row_count, dialeto=dialeto)
 
         monkeypatch.setattr(de, "explore_table", _espiao)
         return chamadas
@@ -489,9 +482,9 @@ class TestCacheDataExploration:
         row_counts_recebidos = []
         original = de.explore_table
 
-        def _espiao_row_count(conn, table_name, columns_to_explore=None, row_count=None):
+        def _espiao_row_count(conn, table_name, columns_to_explore=None, row_count=None, dialeto="sqlite"):
             row_counts_recebidos.append((table_name, row_count))
-            return original(conn, table_name, columns_to_explore, row_count=row_count)
+            return original(conn, table_name, columns_to_explore, row_count=row_count, dialeto=dialeto)
 
         monkeypatch.setattr(de, "explore_table", _espiao_row_count)
 
