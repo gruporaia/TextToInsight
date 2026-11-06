@@ -117,7 +117,6 @@ O orquestrador de avaliacao e acionado via `scripts/test_bird_eval.py`.
 | `--cot` | `on`, `off` | `on` | Ativa raciocinio explicito passo a passo (Chain of Thought). |
 | `--data-exploration` | `on`, `off` | `on` | Permite que o agente consulte amostras de valores nas tabelas. |
 | `--exploration-selector` | `off`, `heuristic`, `llm` | `off` | Modo de selecao de colunas para exploracao de dados. |
-| `--schemacrawler` | `on`, `off` | `off` | Ativa/desativa introspeccao via SchemaCrawler (padrao: `off`, usa PRAGMA nativo do SQLite). |
 | `--timeout` | Inteiro | `30` | Tempo limite em segundos para execucao de queries no SQLite. |
 | `--dry-run` | Flag | Desativado | Simula a geracao de SQL sem custo de API. |
 | `--log` | `on`, `off` | `on` | Controla geracao do arquivo de log detalhado de execucao (`.log`). |

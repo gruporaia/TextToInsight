@@ -19,8 +19,8 @@ from text_to_insight.nodes.data_exploration import (
     TableExplorationResult,
     _classify_column_type,
     _extract_table_names_from_rag_context,
+    _explorar_tabelas,
     explore_table,
-    explore_tables,
     format_exploration_for_prompt,
     nos_nodo_data_exploration,
     nos_nodo_exploration_selector,
@@ -90,6 +90,25 @@ def sample_db(tmp_path):
     conn.commit()
     conn.close()
     return str(db_path)
+
+
+@pytest.fixture
+def sample_engine(sample_db):
+    """Engine SQLAlchemy somente leitura do banco de exemplo (como o chamador passaria)."""
+    from tests.conftest import criar_engine_sqlite
+
+    engine = criar_engine_sqlite(sample_db)
+    yield engine
+    engine.dispose()
+
+
+def explore_tables(db_path, table_names, colunas_para_explorar=None, known_row_counts=None):
+    """Explora tabelas de um arquivo SQLite numa conexão read-only própria."""
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    try:
+        return _explorar_tabelas(conn, table_names, colunas_para_explorar, known_row_counts)
+    finally:
+        conn.close()
 
 
 @pytest.fixture
@@ -237,10 +256,6 @@ class TestExploreTables:
         assert "products" in results
         assert "nonexistent" not in results
 
-    def test_nonexistent_db_returns_empty(self):
-        results = explore_tables("/tmp/nonexistent_db.db", ["products"])
-        assert results == {}
-
 
 # ---------------------------------------------------------------------------
 # Testes de formatação para prompt
@@ -307,104 +322,64 @@ Tabela: orders
 
 
 class TestNodoDataExploration:
-    def test_returns_exploration_context(self, sample_db):
+    def test_returns_exploration_context(self, sample_engine):
         estado = {
-            "db_path": sample_db,
             "contexto_rag_schema": (
                 "Tabela: products\n- id: INTEGER\n\n"
                 "Tabela: orders\n- id: INTEGER\n"
             ),
         }
-        result = nos_nodo_data_exploration(estado)
+        result = nos_nodo_data_exploration(estado, engine=sample_engine)
         assert "contexto_data_exploration" in result
         assert "products" in result["contexto_data_exploration"]
         assert "orders" in result["contexto_data_exploration"]
 
-    def test_missing_rag_context_returns_empty(self, sample_db):
-        estado = {"db_path": sample_db, "contexto_rag_schema": ""}
-        result = nos_nodo_data_exploration(estado)
+    def test_missing_rag_context_returns_empty(self, sample_engine):
+        estado = {"contexto_rag_schema": ""}
+        result = nos_nodo_data_exploration(estado, engine=sample_engine)
         assert result == {}
 
-    def test_missing_db_path_returns_empty(self):
-        estado = {"db_path": "", "contexto_rag_schema": "Tabela: products\n"}
-        result = nos_nodo_data_exploration(estado)
-        assert result == {}
-
-    def test_exploration_output_fits_prompt(self, sample_db):
+    def test_exploration_output_fits_prompt(self, sample_engine):
         """O output deve ser compacto o suficiente para caber num prompt LLM."""
-        estado = {
-            "db_path": sample_db,
-            "contexto_rag_schema": "Tabela: products\n- id: INTEGER\n",
-        }
-        result = nos_nodo_data_exploration(estado)
+        estado = {"contexto_rag_schema": "Tabela: products\n- id: INTEGER\n"}
+        result = nos_nodo_data_exploration(estado, engine=sample_engine)
         text = result.get("contexto_data_exploration", "")
         # Não deveria exceder ~2000 chars para uma tabela com 7 colunas
         assert len(text) < 5000
 
-    def test_exploration_disabled(self, sample_db):
-        estado = {
-            "db_path": sample_db,
-            "contexto_rag_schema": "Tabela: products\n- id: INTEGER\n",
-        }
-        result = nos_nodo_data_exploration(estado, use_data_exploration=False)
+    def test_exploration_disabled(self, sample_engine):
+        estado = {"contexto_rag_schema": "Tabela: products\n- id: INTEGER\n"}
+        result = nos_nodo_data_exploration(estado, engine=sample_engine, use_data_exploration=False)
         assert result == {"contexto_data_exploration": ""}
 
-    def test_exploration_with_colunas_para_explorar(self, sample_db):
+    def test_exploration_with_colunas_para_explorar(self, sample_engine):
         estado = {
-            "db_path": sample_db,
             "contexto_rag_schema": "Tabela: products\n- id: INTEGER\n",
             "colunas_para_explorar": {
                 "products": ["price"]
             }
         }
-        result = nos_nodo_data_exploration(estado, use_data_exploration=True)
+        result = nos_nodo_data_exploration(estado, engine=sample_engine, use_data_exploration=True)
         text = result.get("contexto_data_exploration", "")
         assert "price" in text
         # Because we only requested "price", name or category should not be in the exploration context
         assert "name" not in text
         assert "category" not in text
 
-    # --- Bancos que não são um arquivo SQLite local: o nó deve PULAR ---------
-    # Cenário real: o usuário roda com --db-url mas --db-path sobra com um .db
-    # antigo que EXISTE. Sem o guard, o nó exploraria esse arquivo sem relação
-    # com o banco de verdade.
-
     @pytest.mark.parametrize(
-        "campos_do_banco",
+        "url",
         [
-            {"db_url": "mysql+pymysql://u:p@localhost:3306/banco"},
-            {"db_url": "postgresql://u:p@localhost:5432/banco"},
-            {"db_url": "sqlite:///outro_arquivo.db"},
+            "mysql+pymysql://u:p@localhost:3306/banco",
+            "postgresql+psycopg2://u:p@localhost:5432/banco",
         ],
     )
-    def test_skips_when_backend_is_not_local_sqlite(self, sample_db, campos_do_banco):
-        # sample_db é um .db REAL e explorável: se o guard falhasse, o nó o exploraria.
-        estado = {
-            "db_path": sample_db,
-            "contexto_rag_schema": "Tabela: products\n- id: INTEGER\n",
-            **campos_do_banco,
-        }
-        result = nos_nodo_data_exploration(estado)
-        assert result == {}
+    def test_skips_when_engine_is_not_sqlite(self, url):
+        # A exploração usa PRAGMA (SQLite): com outro dialeto o nó pula sem conectar.
+        from sqlalchemy import create_engine
 
-    def test_skips_for_duckdb_extension(self, sample_db, tmp_path):
-        # .duckdb é detectado pela extensão do db_path; o nó não sabe abrir DuckDB.
-        arquivo = tmp_path / "dados.duckdb"
-        arquivo.write_bytes(Path(sample_db).read_bytes())
-        estado = {
-            "db_path": str(arquivo),
-            "contexto_rag_schema": "Tabela: products\n- id: INTEGER\n",
-        }
-        assert nos_nodo_data_exploration(estado) == {}
-
-    def test_still_explores_local_sqlite_with_empty_db_url(self, sample_db):
-        estado = {
-            "db_path": sample_db,
-            "db_url": "",  # vazio/None não conta como db_url preenchido
-            "contexto_rag_schema": "Tabela: products\n- id: INTEGER\n",
-        }
-        result = nos_nodo_data_exploration(estado)
-        assert "products" in result["contexto_data_exploration"]
+        engine = create_engine(url)
+        estado = {"contexto_rag_schema": "Tabela: products\n- id: INTEGER\n"}
+        assert nos_nodo_data_exploration(estado, engine=engine) == {"contexto_data_exploration": ""}
 
 
 class TestCacheDataExploration:
@@ -426,14 +401,19 @@ class TestCacheDataExploration:
 
     @staticmethod
     def _rodar(sample_db, tabelas, cache=None, colunas=None):
+        from tests.conftest import criar_engine_sqlite
+
         estado = {
-            "db_path": sample_db,
             "contexto_rag_schema": "".join(f"Tabela: {t}\n- id: INTEGER\n" for t in tabelas),
             "cache_data_exploration": cache or {},
         }
         if colunas is not None:
             estado["colunas_para_explorar"] = colunas
-        return nos_nodo_data_exploration(estado)
+        engine = criar_engine_sqlite(sample_db)
+        try:
+            return nos_nodo_data_exploration(estado, engine=engine)
+        finally:
+            engine.dispose()
 
     @pytest.mark.parametrize("colunas", [None, {"products": ["price", "category"]}])
     def test_texto_igual_ao_formatador_sem_cache(self, sample_db, colunas):
@@ -500,7 +480,7 @@ class TestCacheDataExploration:
     def test_estado_inicial_zera_cache(self):
         from text_to_insight.runtime import construir_estado_inicial
 
-        assert construir_estado_inicial("pergunta", db_path="x.db")["cache_data_exploration"] == {}
+        assert construir_estado_inicial("pergunta")["cache_data_exploration"] == {}
 
     def test_nao_reexecuta_count_quando_linhas_no_cache(self, sample_db, monkeypatch):
         import sqlite3

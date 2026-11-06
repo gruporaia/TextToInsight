@@ -10,6 +10,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import main as main_entry
 from text_to_insight.InsightEngine import InsightEngine
 
+DB_OLIST = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "olist_relational.db")
+
 
 class _FakeCompiledGraph:
     def __init__(self):
@@ -93,19 +95,19 @@ def _patch_integracao(monkeypatch):
 def test_integracao_main_engine_sucesso(monkeypatch):
     _patch_integracao(monkeypatch)
 
-    resultado = main_entry.main(["--hitl", "on", "Quantos pedidos existem?"])
+    resultado = main_entry.main(["--db-path", DB_OLIST, "--hitl", "on", "Quantos pedidos existem?"])
 
     assert resultado["status"] == "aprovado"
     assert resultado["sql_gerada"] == "SELECT 1 AS total"
 
 
-def test_integracao_main_engine_hitl_on_com_retomada(monkeypatch):
+def test_integracao_main_engine_hitl_on_com_retomada(monkeypatch, olist_engine):
     _patch_integracao(monkeypatch)
 
     engine = InsightEngine(
         api_key="fake-key",
         model="gemini-2.5-flash",
-        db_path="data/olist_relational.db",
+        db_engine=olist_engine,
         hitl=True,
         show_output=False,
     )
@@ -121,7 +123,60 @@ def test_integracao_main_engine_hitl_on_com_retomada(monkeypatch):
 def test_integracao_main_engine_hitl_off_bloqueado(monkeypatch):
     _patch_integracao(monkeypatch)
 
-    resultado = main_entry.main(["--hitl", "off", "consulta com hitl"])
+    resultado = main_entry.main(["--db-path", DB_OLIST, "--hitl", "off", "consulta com hitl"])
 
     assert resultado["status"] == "bloqueado_hitl"
     assert "intervenção humana" in resultado["erro_execucao"].lower()
+
+
+# ============================================================
+# CLI: é o CLI (chamador) quem cria a Engine, não a biblioteca
+# ============================================================
+
+def test_cli_sem_banco_falha_com_mensagem(monkeypatch):
+    import pytest
+    from text_to_insight import cli
+
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    with pytest.raises(SystemExit, match="--db-path"):
+        cli._criar_engine(None, None)
+
+
+def test_cli_db_path_inexistente_falha_sem_criar_arquivo(tmp_path):
+    import pytest
+    from text_to_insight import cli
+
+    caminho = tmp_path / "nao_existe.db"
+    with pytest.raises(SystemExit, match="não encontrado"):
+        cli._criar_engine(str(caminho), None)
+    assert not caminho.exists()
+
+
+def test_cli_db_path_abre_sqlite_somente_leitura():
+    import pytest
+    from sqlalchemy import text
+    from sqlalchemy.exc import OperationalError
+    from text_to_insight import cli
+
+    engine = cli._criar_engine(DB_OLIST, None)
+    try:
+        assert engine.dialect.name == "sqlite"
+        with engine.connect() as conn:
+            assert conn.execute(text("SELECT COUNT(*) FROM orders")).scalar() > 0
+            with pytest.raises(OperationalError):
+                conn.execute(text("CREATE TABLE x (a INT)"))
+    finally:
+        engine.dispose()
+
+
+def test_cli_db_url_tem_prioridade_e_usa_driver_dos_extras():
+    from text_to_insight import cli
+
+    assert cli._normalizar_db_url("postgresql://u:p@h/db") == "postgresql+psycopg2://u:p@h/db"
+    assert cli._normalizar_db_url("mysql://u:p@h/db") == "mysql+pymysql://u:p@h/db"
+
+    engine = cli._criar_engine(DB_OLIST, "sqlite://")
+    try:
+        assert str(engine.url) == "sqlite://"
+    finally:
+        engine.dispose()

@@ -41,33 +41,13 @@ _NOTA_DIALETO = {
 }
 
 
-def _resolver_info_dialeto(estado: EstadoTextToInsight, engine=None) -> tuple[str, str]:
-    """Resolve (nome_exibicao, nota_sintaxe) do dialeto configurado no estado.
+def _resolver_info_dialeto(engine=None) -> tuple[str, str]:
+    """Resolve (nome_exibicao, nota_sintaxe) do dialeto da Engine injetada.
 
-    Ordem de resolução:
-    1. `engine.dialect.name`, se uma Engine SQLAlchemy foi injetada pelo
-       chamador (caso mais confiável: vem direto da conexão, sem adivinhar).
-    2. `db_url`, cujo dialeto é lido do prefixo da URL (sem conectar).
-    3. 'sqlite' como default, preservando o comportamento anterior quando
-       nada é informado (compatibilidade retroativa).
+    O dialeto vem de `engine.dialect.name`. Sem engine (ex.: testes que
+    chamam o nó isolado), usa SQLite como padrão.
     """
-    if engine is not None:
-        dialeto = engine.dialect.name
-        nome = _NOME_DIALETO.get(dialeto, _NOME_DIALETO["sqlite"])
-        nota = _NOTA_DIALETO.get(dialeto, _NOTA_DIALETO["sqlite"])
-        return nome, nota
-
-    dialeto = ""
-    db_url = (estado.get("db_url") or "").strip()
-    if db_url:
-        try:
-            from sqlalchemy.engine import make_url
-
-            dialeto = make_url(db_url).get_backend_name()
-        except Exception:
-            dialeto = ""
-
-    dialeto = dialeto or "sqlite"
+    dialeto = engine.dialect.name if engine is not None else "sqlite"
     nome = _NOME_DIALETO.get(dialeto, _NOME_DIALETO["sqlite"])
     nota = _NOTA_DIALETO.get(dialeto, _NOTA_DIALETO["sqlite"])
     return nome, nota
@@ -173,9 +153,9 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: BaseChatModel, use_
     """
     Nó Agente de Código: usa Gemini para gerar SQL a partir da pergunta + schema.
 
-    `engine`, se informado, é a Engine SQLAlchemy injetada pelo chamador —
-    usada apenas para resolver o dialeto (via `engine.dialect.name`) e ajustar
-    a sintaxe do prompt, sem depender de `db_url` no estado.
+    `engine` é a Engine SQLAlchemy injetada pelo chamador — usada apenas
+    para resolver o dialeto (via `engine.dialect.name`) e ajustar a sintaxe
+    do prompt.
     """
     pergunta = (
         estado.get("pergunta_atual", "")
@@ -192,7 +172,7 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: BaseChatModel, use_
     print(f"[AGENTE_CODIGO] Gerando SQL (tentativa {tentativas + 1})...")
 
     historico_section = _formatar_historico_tentativas(historico)
-    dialeto_nome, nota_dialeto = _resolver_info_dialeto(estado, engine=engine)
+    dialeto_nome, nota_dialeto = _resolver_info_dialeto(engine)
 
     template = PROMPT_TEMPLATE_COT if use_cot else PROMPT_TEMPLATE_NO_COT
 

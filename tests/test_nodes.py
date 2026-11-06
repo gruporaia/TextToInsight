@@ -25,8 +25,14 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "olist_relationa
 
 def _obter_schema_real() -> str:
     """Helper: extrai schema real do olist DB (sem API, só SQLite)."""
+    from tests.conftest import criar_engine_sqlite
     from text_to_insight.nodes.schema import nos_nodo_esquema
-    resultado = nos_nodo_esquema({"db_path": DB_PATH, "pergunta_atual": "teste"})
+
+    engine = criar_engine_sqlite(DB_PATH)
+    try:
+        resultado = nos_nodo_esquema({"pergunta_atual": "teste"}, engine=engine)
+    finally:
+        engine.dispose()
     return resultado["contexto_schema"]
 
 
@@ -179,16 +185,15 @@ def test_code_agent_com_feedback_regenera(llm):
 # EXECUTOR — com DB real (sem API)
 # ============================================================
 
-def test_executor_com_sql_real():
+def test_executor_com_sql_real(olist_engine):
     """Executor executa SQL gerada manualmente contra olist DB."""
     from text_to_insight.nodes.sandbox import nos_nodo_sandbox
 
     estado = {
         "sql_gerada": "SELECT COUNT(*) as total_pedidos FROM orders",
-        "db_path": DB_PATH,
         "pergunta_atual": "Quantos pedidos existem?",
     }
-    resultado = nos_nodo_sandbox(estado)
+    resultado = nos_nodo_sandbox(estado, engine=olist_engine)
 
     assert resultado["status"] == "exec_ok"
     assert resultado["total_linhas_resultado"] >= 1
@@ -204,7 +209,7 @@ def test_executor_com_sql_real():
 
 @pytest.mark.vcr
 @pytest.mark.timeout(90)
-def test_cadeia_code_agent_executor(llm):
+def test_cadeia_code_agent_executor(llm, olist_engine):
     """Code Agent gera SQL, Executor executa — testa a conexão entre os dois."""
     from text_to_insight.nodes.code_agent.code_agent import nos_nodo_agente_codigo
     from text_to_insight.nodes.sandbox import nos_nodo_sandbox
@@ -228,10 +233,9 @@ def test_cadeia_code_agent_executor(llm):
     # Passo 2: Executor executa a SQL gerada
     estado_exec = {
         "sql_gerada": resultado_code["sql_gerada"],
-        "db_path": DB_PATH,
         "pergunta_atual": "Quantos clientes existem no banco?",
     }
-    resultado_exec = nos_nodo_sandbox(estado_exec)
+    resultado_exec = nos_nodo_sandbox(estado_exec, engine=olist_engine)
     print(f"  → Status execução: {resultado_exec['status']}")
     print(f"  → Preview: {resultado_exec.get('linhas_resultado_preview', [])}")
 

@@ -247,7 +247,7 @@ def test_planner_early_return_and_llm_call():
     }
 
 
-def test_rag_enrichment_batch_token_accumulation():
+def test_rag_enrichment_batch_token_accumulation(tmp_path):
     """Enrichment node processes batches and aggregates token usage across all batches."""
     schema_6_tables = "\n".join([f"Tabela: table_{i}\n- col_{i}: int" for i in range(6)])
     mock_llm = MagicMock()
@@ -267,9 +267,9 @@ def test_rag_enrichment_batch_token_accumulation():
     ]
 
     res = nos_nodo_enrich(
-        {"contexto_schema": schema_6_tables, "db_url": "sqlite://"},
+        {"contexto_schema": schema_6_tables},
         llm=mock_llm,
-        engine=object(),  # prevents disk cache write
+        cache_dir=tmp_path,
     )
 
     assert res["tem_descricao"] is True
@@ -360,12 +360,14 @@ def test_code_agent_and_sandbox_attempt_tracking(tmp_path):
     conn.close()
 
     # Sandbox execution with success
+    from tests.conftest import criar_engine_sqlite
+
+    db_engine = criar_engine_sqlite(str(db_file))
     sandbox_input = {
         **estado,
         **code_res,
-        "db_path": str(db_file),
     }
-    sandbox_res = nos_nodo_sandbox(sandbox_input)
+    sandbox_res = nos_nodo_sandbox(sandbox_input, engine=db_engine)
     assert sandbox_res["status"] == "exec_ok"
     assert len(sandbox_res["historico_tentativas"]) == 1
     attempt = sandbox_res["historico_tentativas"][0]
@@ -379,7 +381,8 @@ def test_code_agent_and_sandbox_attempt_tracking(tmp_path):
         **sandbox_input,
         "sql_gerada": "SELECT * FROM nonexistent_table;",
     }
-    sandbox_err_res = nos_nodo_sandbox(sandbox_input_err)
+    sandbox_err_res = nos_nodo_sandbox(sandbox_input_err, engine=db_engine)
+    db_engine.dispose()
     assert sandbox_err_res["status"] == "exec_erro"
     err_attempt = sandbox_err_res["historico_tentativas"][0]
     assert err_attempt["tokens_input"] == 150
@@ -414,7 +417,7 @@ def test_graph_router_token_sink_and_graph_adapter(monkeypatch):
         "text_to_insight.graph.get_model",
         lambda *args, **kwargs: mock_llm,
     )
-    g = Graph(api_key="mock", model="gemini-2.0-flash", enable_graphs=True)
+    g = Graph(api_key="mock", model="gemini-2.0-flash", db_engine=object(), enable_graphs=True)
     compiled_nodes = g.grafo_text_to_insight.get_graph().nodes
     assert "graph_router" in compiled_nodes
 
