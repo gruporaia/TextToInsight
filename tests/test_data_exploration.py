@@ -256,6 +256,53 @@ class TestExploreTables:
         assert "products" in results
         assert "nonexistent" not in results
 
+    def test_nonexistent_table_with_known_row_count_skipped(self, sample_db):
+        # Com a contagem vinda do cache não há COUNT(*) para falhar; a tabela
+        # sem colunas não pode entrar no resultado (o cache a marcaria completa).
+        results = explore_tables(sample_db, ["nonexistent"], known_row_counts={"nonexistent": 5})
+        assert results == {}
+
+
+# ---------------------------------------------------------------------------
+# Amostragem das estatísticas numéricas
+# ---------------------------------------------------------------------------
+
+
+def _tabela_numerica(valores):
+    conn = sqlite3.connect(":memory:")
+    conn.execute("CREATE TABLE t (v INTEGER)")
+    conn.executemany("INSERT INTO t VALUES (?)", [(v,) for v in valores])
+    return conn
+
+
+class TestAmostraNumerica:
+    def test_mediana_usa_a_amostra_em_tabela_grande(self):
+        # 20 mil valores em ordem decrescente: a amostra são as 10 mil
+        # primeiras linhas (20000..10001), e a mediana tem que estar nela.
+        stats = explore_table(_tabela_numerica(range(20_000, 0, -1)), "t").columns["v"]
+
+        assert (stats.min, stats.max) == (10_001, 20_000)
+        assert stats.median == 15_000.5
+        assert stats.mean == 15_000.5
+
+    def test_nulos_nao_puxam_a_mediana_para_fora_da_amostra(self):
+        # A amostra tem 9999 nulos e um 1; os 1000 vêm depois dela.
+        conn = _tabela_numerica([None] * 9_999 + [1] + [1_000] * 10_000)
+        stats = explore_table(conn, "t").columns["v"]
+
+        assert (stats.mean, stats.min, stats.max, stats.median) == (1, 1, 1, 1)
+        assert stats.std_dev == 0
+        assert stats.null_rate == 0.9999
+
+    @pytest.mark.parametrize("valores, mediana", [([1, 2, 3, 4], 2.5), ([3, 1, 2], 2), ([7], 7)])
+    def test_mediana_par_e_impar(self, valores, mediana):
+        assert explore_table(_tabela_numerica(valores), "t").columns["v"].median == mediana
+
+    def test_valores_de_exemplo_sao_reprodutiveis(self, sample_conn):
+        a = explore_table(sample_conn, "products")
+        b = explore_table(sample_conn, "products")
+        assert a == b
+
 
 # ---------------------------------------------------------------------------
 # Testes de formatação para prompt
@@ -366,18 +413,11 @@ class TestNodoDataExploration:
         assert "name" not in text
         assert "category" not in text
 
-    @pytest.mark.parametrize(
-        "url",
-        [
-            "mysql+pymysql://u:p@localhost:3306/banco",
-            "postgresql+psycopg2://u:p@localhost:5432/banco",
-        ],
-    )
-    def test_skips_when_engine_is_not_sqlite(self, url):
-        # A exploração usa PRAGMA (SQLite): com outro dialeto o nó pula sem conectar.
+    def test_skips_unsupported_dialect(self):
+        # Só SQLite e PostgreSQL são suportados: com outro dialeto o nó pula sem conectar.
         from sqlalchemy import create_engine
 
-        engine = create_engine(url)
+        engine = create_engine("mysql+pymysql://u:p@localhost:3306/banco")
         estado = {"contexto_rag_schema": "Tabela: products\n- id: INTEGER\n"}
         assert nos_nodo_data_exploration(estado, engine=engine) == {"contexto_data_exploration": ""}
 
@@ -392,9 +432,9 @@ class TestCacheDataExploration:
         chamadas = []
         original = de.explore_table
 
-        def _espiao(conn, table_name, columns_to_explore=None, row_count=None):
+        def _espiao(conn, table_name, columns_to_explore=None, row_count=None, dialeto="sqlite"):
             chamadas.append((table_name, columns_to_explore))
-            return original(conn, table_name, columns_to_explore, row_count=row_count)
+            return original(conn, table_name, columns_to_explore, row_count=row_count, dialeto=dialeto)
 
         monkeypatch.setattr(de, "explore_table", _espiao)
         return chamadas
@@ -489,9 +529,9 @@ class TestCacheDataExploration:
         row_counts_recebidos = []
         original = de.explore_table
 
-        def _espiao_row_count(conn, table_name, columns_to_explore=None, row_count=None):
+        def _espiao_row_count(conn, table_name, columns_to_explore=None, row_count=None, dialeto="sqlite"):
             row_counts_recebidos.append((table_name, row_count))
-            return original(conn, table_name, columns_to_explore, row_count=row_count)
+            return original(conn, table_name, columns_to_explore, row_count=row_count, dialeto=dialeto)
 
         monkeypatch.setattr(de, "explore_table", _espiao_row_count)
 
