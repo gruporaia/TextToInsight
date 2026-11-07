@@ -222,3 +222,71 @@ def default_cassette_name(request, llm_profile):
         base_name = _default_cassette_name(request.cls, request.node.name)
 
     return f"{base_name}{llm_profile.cassette_suffix}"
+
+# ============================================================
+# Banco de teste e cache
+# ============================================================
+
+DB_OLIST = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "olist_relational.db")
+
+
+def criar_engine_sqlite(caminho: str):
+    """Engine SQLAlchemy somente leitura para um arquivo SQLite (como os scripts de avaliação)."""
+    from pathlib import Path
+    from sqlalchemy import create_engine
+
+    return create_engine(f"sqlite:///file:{Path(caminho).resolve()}?mode=ro&uri=true")
+
+
+@pytest.fixture(scope="session")
+def olist_engine():
+    """Engine somente leitura do banco olist (baixado da release `dados-teste`)."""
+    engine = criar_engine_sqlite(DB_OLIST)
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture(scope="session")
+def _cache_dir_testes(tmp_path_factory):
+    return tmp_path_factory.mktemp("text_to_insight_cache")
+
+
+@pytest.fixture(autouse=True)
+def cache_dir_isolado(monkeypatch, _cache_dir_testes):
+    """Nenhum teste grava na pasta de cache real do usuário (schema enriquecido, ChromaDB)."""
+    import text_to_insight.cache as cache_mod
+
+    monkeypatch.setattr(cache_mod, "user_cache_dir", lambda *_a, **_k: str(_cache_dir_testes))
+    return _cache_dir_testes
+
+
+# ============================================================
+# PostgreSQL (opcional): definido via TEXT_TO_INSIGHT_TEST_PG_URL
+# ============================================================
+
+PG_URL_ENV = "TEXT_TO_INSIGHT_TEST_PG_URL"
+PG_SCHEMA_TESTES = "tti_testes"
+
+
+@pytest.fixture
+def pg_engine():
+    """
+    Engine de um PostgreSQL real, com search_path num schema próprio e vazio.
+    Pula o teste se TEXT_TO_INSIGHT_TEST_PG_URL não estiver definida
+    (ex.: postgresql+psycopg2://postgres:postgres@localhost:5432/postgres).
+    """
+    url = os.getenv(PG_URL_ENV)
+    if not url:
+        pytest.skip(f"{PG_URL_ENV} não definida; testes de PostgreSQL pulados.")
+    from sqlalchemy import create_engine, text
+
+    admin = create_engine(url)
+    with admin.begin() as conn:
+        conn.execute(text(f"DROP SCHEMA IF EXISTS {PG_SCHEMA_TESTES} CASCADE"))
+        conn.execute(text(f"CREATE SCHEMA {PG_SCHEMA_TESTES}"))
+    engine = create_engine(url, connect_args={"options": f"-c search_path={PG_SCHEMA_TESTES}"})
+    yield engine
+    engine.dispose()
+    with admin.begin() as conn:
+        conn.execute(text(f"DROP SCHEMA IF EXISTS {PG_SCHEMA_TESTES} CASCADE"))
+    admin.dispose()

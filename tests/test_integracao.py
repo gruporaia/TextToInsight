@@ -15,16 +15,15 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "olist_relational.db")
 
 load_dotenv()
 
 @pytest.fixture
-def grafo(llm_profile):
+def grafo(llm_profile, olist_engine):
     """Retorna o grafo compilado com o provider de teste configurado no ambiente."""
     from text_to_insight.graph import Graph
 
-    return Graph(llm_profile.api_key, llm_profile.model_name, hitl=True)
+    return Graph(llm_profile.api_key, llm_profile.model_name, db_engine=olist_engine, hitl=True)
 
 
 @pytest.fixture(autouse=True)
@@ -46,7 +45,6 @@ def _estado_inicial(pergunta: str) -> dict:
         "erro_execucao": "",
         "status": "iniciado",
         "tentativas_loop": 0,
-        "db_path": DB_PATH,
     }
 
 
@@ -155,10 +153,10 @@ def _montar_grafo_fake(monkeypatch, tmp_path, enable_graphs: bool):
     def _fake_planejador(estado, llm=None, hitl=True):
         return {"status": "pronto_codificacao"}
 
-    def _fake_agente_codigo(estado, llm=None, use_cot=True):
+    def _fake_agente_codigo(estado, llm=None, use_cot=True, engine=None):
         return {"sql_gerada": "SELECT 1", "status": "sql_gerada", "tentativas_loop": 1}
 
-    def _fake_sandbox(estado):
+    def _fake_sandbox(estado, engine=None):
         return {
             "status": "exec_ok",
             "linhas_resultado_preview": [{"valor": 1}, {"valor": 2}],
@@ -196,7 +194,7 @@ def _montar_grafo_fake(monkeypatch, tmp_path, enable_graphs: bool):
     monkeypatch.setattr(graph_module, "roteador_sandbox", _fake_roteador_sandbox)
     monkeypatch.setattr(graph_module, "roteador_grafico", _fake_roteador_grafico)
 
-    return graph_module.Graph(api_key="fake", model="fake", hitl=False, enable_graphs=enable_graphs)
+    return graph_module.Graph(api_key="fake", model="fake", db_engine=object(), hitl=False, enable_graphs=enable_graphs)
 
 
 def test_grafo_com_graficos_gera_csv_e_png(monkeypatch, tmp_path):
@@ -206,7 +204,6 @@ def test_grafo_com_graficos_gera_csv_e_png(monkeypatch, tmp_path):
     estado = {
         "pergunta_original": "Teste",
         "pergunta_atual": "Teste",
-        "db_path": "fake.db",
     }
     resultado = grafo.grafo_text_to_insight.invoke(estado, config)
 
@@ -228,7 +225,6 @@ def test_grafo_sem_graficos_bypassa(monkeypatch, tmp_path):
     estado = {
         "pergunta_original": "Teste",
         "pergunta_atual": "Teste",
-        "db_path": "fake.db",
     }
     resultado = grafo.grafo_text_to_insight.invoke(estado, config)
 

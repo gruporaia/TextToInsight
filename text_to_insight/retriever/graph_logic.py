@@ -39,7 +39,7 @@ class SchemaGraph:
                         parent_col=col_destino
                     )
             
-            #Se não houver FK, roda SchemaCrawler ou qualquer outra técnica (Isso aqui é discutível, provavelmente deveriamso passar o SC para um nó antes do RAG)
+            #Se não houver FK, a inferência de FKs virtuais (inferir_fks_virtuais) é que cria as arestas
 
     def get_schema(self, table_name: str) -> str | None:
         """

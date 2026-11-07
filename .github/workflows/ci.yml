@@ -20,11 +20,25 @@ jobs:
             model: gpt-4o-mini
           - provider: google
             model: gemini-2.5-flash
+    # PostgreSQL para os testes que precisam de um banco real (fixture pg_engine)
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       TEXT_TO_INSIGHT_TEST_PROVIDER: ${{ matrix.provider }}
       TEXT_TO_INSIGHT_TEST_MODEL: ${{ matrix.model }}
       OPENAI_API_KEY: ${{ matrix.provider == 'openai' && 'dummy-key' || '' }}
       GOOGLE_API_KEY: ${{ matrix.provider == 'google' && 'dummy-key' || '' }}
+      TEXT_TO_INSIGHT_TEST_PG_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/postgres
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -33,7 +47,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt && pip install -e .
+          pip install -r requirements.txt && pip install -e ".[postgres,mysql]"
       - name: Download test database
         run: |
           mkdir -p data
@@ -47,7 +61,7 @@ jobs:
             tests/test_biblioteca_integracao.py tests/test_data_exploration.py \
             tests/test_model_selection.py tests/test_token_tracking.py \
             tests/test_bird_eval.py tests/test_spider2_eval.py \
-            -v -s --record-mode=none -m "not real_api and not schemacrawler"
+            -v -s --record-mode=none -m "not real_api"
 
   record-vcr-cassettes:
     name: Record VCR cassettes - ${{ matrix.provider }} / ${{ matrix.model }}
@@ -74,7 +88,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt && pip install -e .
+          pip install -r requirements.txt && pip install -e ".[postgres,mysql]"
 
       #  Mesmo setup de banco dos outros jobs
       - name: Download test database
@@ -140,7 +154,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt && pip install -e .
+          pip install -r requirements.txt && pip install -e ".[postgres,mysql]"
 
       # ✅ Banco de dados presente aqui também
       - name: Download test database

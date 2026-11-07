@@ -43,15 +43,18 @@ dependencies = [
     "networkx>=3.0",
     "chromadb>=1.5.9",
     "tabulate>=0.10.0",
-    "psycopg2-binary>=2.9.0",
-    "pymysql>=1.1.0",
     "sqlalchemy>=2.0.0",
+    "platformdirs>=3.0",
 ]
 
 [project.scripts]
 text-to-insight = "text_to_insight.cli:main"
 
 [project.optional-dependencies]
+# Drivers de banco: a biblioteca recebe uma Engine do SQLAlchemy pronta, então
+# só precisa do driver de quem for usar PostgreSQL/MySQL (SQLite já vem no Python).
+postgres = ["psycopg2-binary>=2.9.0"]
+mysql = ["pymysql>=1.1.0"]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
@@ -96,5 +99,4 @@ disallow_untyped_defs = false
 [tool.pytest.ini_options]
 markers = [
     "real_api: testes que executam chamadas reais ao provedor/modelo LLM",
-    "schemacrawler: Marca os testes que dependem do SchemaCrawler e do Java."
 ]

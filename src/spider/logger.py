@@ -146,7 +146,6 @@ class SpiderExecutionLogger:
         use_cot = "ON" if config_info.get("use_cot", True) else "OFF"
         use_exploration = "ON" if config_info.get("use_data_exploration", True) else "OFF"
         exploration_selector = config_info.get("exploration_selector") or "off"
-        schemacrawler = "ON" if config_info.get("schemacrawler", False) else "OFF"
         infer_fks = "ON" if config_info.get("infer_fks", False) else "OFF"
         with_graphs = "ON" if config_info.get("with_graphs", False) else "OFF"
         timeout = config_info.get("timeout", 30)
@@ -171,7 +170,7 @@ class SpiderExecutionLogger:
             f"Seed:               {seed}",
             f"Configuration:      RAG: {use_rag} | EnrichRAG: {enrich_rag} | Evidence: {use_evidence} | CoT: {use_cot} | "
             f"DataExploration: {use_exploration} (Selector: {exploration_selector}) | "
-            f"SchemaCrawler: {schemacrawler} | InferFKs: {infer_fks} | WithGraphs: {with_graphs} | Timeout: {timeout}s{kwargs_str}",
+            f"InferFKs: {infer_fks} | WithGraphs: {with_graphs} | Timeout: {timeout}s{kwargs_str}",
             f"Filters:            DB: {db_filter} | Question: {question_filter}",
             f"Output Directory:   {self.output_dir}",
             f"Log File:           {self.log_path.name}",
