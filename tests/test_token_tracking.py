@@ -195,7 +195,7 @@ def test_planner_early_return_and_llm_call():
     res_no_schema = nos_nodo_planejador(
         {"pergunta_atual": "how many?", "contexto_schema": ""},
         llm=mock_llm,
-        hitl=False,
+        hitl=True,
     )
     assert res_no_schema["status"] == "aguardando_schema"
     assert res_no_schema["tokens_by_node"] == {}
@@ -206,7 +206,7 @@ def test_planner_early_return_and_llm_call():
     res_approved = nos_nodo_planejador(
         {"pergunta_atual": "how many?", "contexto_schema": "Tabela: users", "status": "aprovado"},
         llm=mock_llm,
-        hitl=False,
+        hitl=True,
     )
     assert res_approved["status"] == "aprovado"
     assert res_approved["tokens_by_node"] == {}
@@ -220,7 +220,7 @@ def test_planner_early_return_and_llm_call():
     res_llm = nos_nodo_planejador(
         {"pergunta_atual": "how many?", "contexto_schema": "Tabela: users", "status": "iniciado"},
         llm=mock_llm,
-        hitl=False,
+        hitl=True,
     )
     assert res_llm["status"] == "pronto_codificacao"
     assert res_llm["tokens_input"] == 100
@@ -435,18 +435,20 @@ def test_graph_generator_tokens(monkeypatch, tmp_path):
     dummy_csv = tmp_path / "data.csv"
     dummy_csv.write_text("a,b\n1,2\n", encoding="utf-8")
 
-    dummy_png = tmp_path / "graph.png"
-    dummy_png.write_text("png", encoding="utf-8")
-
     mock_llm = MagicMock()
     mock_llm.invoke.return_value = AIMessage(
         content="```python\nimport matplotlib.pyplot as plt\nplt.plot([1, 2])\n```",
         usage_metadata={"input_tokens": 60, "output_tokens": 30, "total_tokens": 90},
     )
 
+    def fake_executar_python(script, *, arquivos_entrada, arquivos_saida, timeout_s):
+        for destino in arquivos_saida.values():
+            destino.write_bytes(b"png")
+        return {"ok": True, "erro_execucao": ""}
+
     monkeypatch.setattr(
-        "text_to_insight.nodes.graph_generator._executar_script",
-        lambda script: (True, "OK"),
+        "text_to_insight.nodes.graph_generator.executar_python_isolado",
+        fake_executar_python,
     )
     monkeypatch.setattr(
         "text_to_insight.nodes.graph_generator.GRAPHS_DIR",
@@ -460,10 +462,6 @@ def test_graph_generator_tokens(monkeypatch, tmp_path):
         "linhas_resultado_preview": [{"a": 1, "b": 2}],
         "total_linhas_resultado": 10,
     }
-
-    # Mock Path.exists to report output_path exists
-    orig_exists = tmp_path.exists
-    monkeypatch.setattr("pathlib.Path.exists", lambda self: True)
 
     res = nos_nodo_gerador_grafico(estado, llm=mock_llm)
     assert res["grafico_gerado"] is True
