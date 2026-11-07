@@ -11,6 +11,7 @@ contendo todas as informações necessárias para o fluxo de execução.
 # --> Adição dos imports de Annotated e operator para possibilitar o tracking dos tokens.
 from typing import Any, Literal, TypedDict, Annotated
 import operator
+from .token_tracking import NodeTokenUsage, merge_tokens_by_node
 # Uso de Literal para reduzir erro de digitação e inconsistências de roteamento
 StatusExecucao = Literal[
 "iniciado",
@@ -25,12 +26,13 @@ StatusExecucao = Literal[
 "reprovado",
 ]
 
+
 # Criação de classe mãe que será estendida para EstadoTextToInsight para que
-# pergunta_original/pergunta_atual e db_path sejam obrigatorios
+# pergunta_original/pergunta_atual sejam obrigatorios. O banco não fica no
+# estado: a Engine SQLAlchemy do chamador é injetada direto nos nós.
 class EstadoEntrada(TypedDict):
     pergunta_original: str
     pergunta_atual: str
-    db_path: str
 
 
 class EstadoTextToInsight(EstadoEntrada, total = False):
@@ -40,10 +42,9 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     Campos obrigatórios (via EstadoEntrada):
       - pergunta_original: pergunta inicial do usuario (imutavel apos o primeiro set).
       - pergunta_atual: pergunta corrente, fonte de verdade para o fluxo.
-      - db_path: caminho para o arquivo SQLite (.db).
 
     Campos opcionais (preenchidos progressivamente pelos nós):
-      - contexto_schema: schema textual extraído do SQLite.
+      - contexto_schema: schema textual extraído do banco.
       - sql_gerada: SQL produzida pelo agente de código.
       - linhas_resultado_preview: amostra de linhas retornadas (max 30).
       - total_linhas_resultado: total de linhas do resultado SQL.
@@ -57,6 +58,7 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     contexto_rag_schema: str
     contexto_data_exploration: str
     colunas_para_explorar: dict[str, list[str]]
+    cache_data_exploration: dict[str, dict[str, Any]]
     raciocinio_agente: str  # CoT <thought> extraído do agente de código
     contexto_prompt_agente: str  # schema + data exploration enviados ao agente
     tem_descricao : bool
@@ -74,10 +76,7 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     resposta_natural: str
     historico_tentativas: Annotated[list[dict[str, str]], operator.add]
     linhas_resultado_completo: list[dict[str, Any]]
-    schemacrawler_bin : str | None
-    db_config: dict[str, Any] | None
     inferir_fks_virtuais: bool
-    usar_schemacrawler: bool
 
     # Campos para geração de gráficos
     caminho_csv_resultado: str
@@ -90,3 +89,8 @@ class EstadoTextToInsight(EstadoEntrada, total = False):
     tokens_input: Annotated[int, operator.add]
     tokens_output: Annotated[int, operator.add]
     tokens_total: Annotated[int, operator.add]
+
+    # Node-level token tracking & graph routing decision
+    tokens_by_node: Annotated[dict[str, NodeTokenUsage], merge_tokens_by_node]
+    last_attempt_tokens: NodeTokenUsage
+    graph_route_decision: str

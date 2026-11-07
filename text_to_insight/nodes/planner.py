@@ -6,9 +6,10 @@ para decidir a próxima etapa do fluxo (status de roteamento).
 """
 
 import json
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.chat_models import BaseChatModel
 
 from ..state import EstadoTextToInsight
+from ..token_tracking import build_token_usage_update
 # Importando a função de extração de tokens
 from ..utils import extrair_tokens
 
@@ -31,7 +32,7 @@ Contexto atual:
 """
 
 
-def nos_nodo_planejador(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI, hitl: bool) -> dict:
+def nos_nodo_planejador(estado: EstadoTextToInsight, llm: BaseChatModel, hitl: bool) -> dict:
     """
     Nó Planejador: decide a próxima etapa do fluxo.
 
@@ -48,11 +49,6 @@ def nos_nodo_planejador(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI
     tentativas = estado.get("tentativas_loop", 0)
     status = estado.get("status", "iniciado")
     erro = estado.get("erro_execucao", "")
-    # Contrato estável para métricas: sempre retornamos esses campos,
-    # mesmo quando o nó não chama LLM (valor zero).
-    in_tokens = 0
-    out_tokens = 0
-    total_tokens = 0
 
     print(f"[PLANEJADOR] Pergunta: {pergunta[:50]}... | Status: {status}")
 
@@ -63,9 +59,10 @@ def nos_nodo_planejador(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI
         return {
             "status": "aguardando_schema",
             "tentativas_loop": tentativas,
-            "tokens_input": in_tokens,
-            "tokens_output": out_tokens,
-            "tokens_total": total_tokens,
+            "tokens_input": 0,
+            "tokens_output": 0,
+            "tokens_total": 0,
+            "tokens_by_node": {},
         }
 
     # Se já foi aprovado, mantém
@@ -75,19 +72,26 @@ def nos_nodo_planejador(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI
         return {
             "status": "aprovado",
             "tentativas_loop": tentativas,
-            "tokens_input": in_tokens,
-            "tokens_output": out_tokens,
-            "tokens_total": total_tokens,
+            "tokens_input": 0,
+            "tokens_output": 0,
+            "tokens_total": 0,
+            "tokens_by_node": {},
         }
     
-    diretrizes = """Responda EXATAMENTE no formato JSON abaixo, sem formatação markdown (```json):
-{
-    "decisao": "escolha_uma_opcao"
-}
-Opções válidas para 'decisão':
-- "pronto_codificacao" → se temos schema, a pergunta faz sentido e devemos gerar/regenerar SQL
-- "revisando_estrategia" → se houve um erro de execução e devemos tentar uma abordagem diferente"""
-
+#     diretrizes = """Responda EXATAMENTE no formato JSON abaixo, sem formatação markdown (```json):
+# {
+#     "decisao": "escolha_uma_opcao"
+# }
+# Opções válidas para 'decisão':
+# - "pronto_codificacao" → se temos schema, a pergunta faz sentido e devemos gerar/regenerar SQL
+# - "revisando_estrategia" → se houve um erro de execução e devemos tentar uma abordagem diferente"""
+    decisao = None
+    token_update = {
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "tokens_total": 0,
+    "tokens_by_node": {},
+    }
     if hitl:
         diretrizes = """AVALIAÇÃO CRÍTICA:
 Verifique se a "Pergunta do usuário" pode ser respondida com as tabelas e colunas do Schema.
@@ -104,55 +108,54 @@ Opções válidas para 'decisão':
 - "revisando_estrategia" → se houve um erro de execução e devemos tentar uma abordagem diferente
 - "necessita_ajuda" → a pergunta não é clara, não faz sentido, falta contexto ou não há dados no schema para responder."""
 
-    # Usa LLM para decidir estratégia
-    prompt = PROMPT_PLANNER.format(
-        pergunta=pergunta,
-        schema_disponivel="Sim" if schema else "Não",
-        tentativas=tentativas,
-        status_atual=status,
-        erro=erro if erro else "Nenhum",
-        schema=contexto_rag_schema if contexto_rag_schema else schema,
-        conversa_previa=conversa_previa if conversa_previa else "Nenhuma",
-        diretrizes=diretrizes,
-    )
+      # Usa LLM para decidir estratégia
+        prompt = PROMPT_PLANNER.format(
+            pergunta=pergunta,
+            schema_disponivel="Sim" if schema else "Não",
+            tentativas=tentativas,
+            status_atual=status,
+            erro=erro if erro else "Nenhum",
+            schema=contexto_rag_schema if contexto_rag_schema else schema,
+            conversa_previa=conversa_previa if conversa_previa else "Nenhuma",
+            diretrizes=diretrizes,
+        )
 
-    resposta_llm = llm.invoke(prompt)
-    # A partir daqui houve chamada ao LLM; registramos tokens reais da resposta.
-    in_tokens, out_tokens, total_tokens = extrair_tokens(resposta_llm)
-    conteudo_bruto = resposta_llm.content.strip()
+        resposta_llm = llm.invoke(prompt)
+        token_update = build_token_usage_update("planner", resposta_llm)
+        conteudo_bruto = resposta_llm.content.strip()
 
-    # Limpeza caso o LLM retorne blocos de código markdown (```json ... ```)
-    if conteudo_bruto.startswith("```json"):
-        conteudo_bruto = conteudo_bruto[7:-3].strip()
-    elif conteudo_bruto.startswith("```"):
-        conteudo_bruto = conteudo_bruto[3:-3].strip()
+        # Limpeza caso o LLM retorne blocos de código markdown (```json ... ```)
+        if conteudo_bruto.startswith("```json"):
+            conteudo_bruto = conteudo_bruto[7:-3].strip()
+        elif conteudo_bruto.startswith("```"):
+            conteudo_bruto = conteudo_bruto[3:-3].strip()
 
-    try:
-        dados_resposta = json.loads(conteudo_bruto)
-        decisao = dados_resposta.get("decisao", "").lower()
-        pergunta_agente = dados_resposta.get("pergunta_ao_usuario", "").strip()
-    except json.JSONDecodeError:
-        print(f"[PLANEJADOR] Erro ao parsear JSON: {conteudo_bruto}")
-        # Fallback de segurança
-        decisao = "revisando_estrategia" if erro else "pronto_codificacao"
-        pergunta_agente = ""
+        try:
+            dados_resposta = json.loads(conteudo_bruto)
+            decisao = dados_resposta.get("decisao", "").lower()
+            pergunta_agente = dados_resposta.get("pergunta_ao_usuario", "").strip()
+        except json.JSONDecodeError:
+            print(f"[PLANEJADOR] Erro ao parsear JSON: {conteudo_bruto}")
+            # Fallback de segurança
+            decisao = "revisando_estrategia" if erro else "pronto_codificacao"
+            pergunta_agente = ""
 
-    # Mapeia para os estados do grafo e levanta a flag de HITL se necessário
-    if decisao == "necessita_ajuda":
-        print(f"[PLANEJADOR] Solicitando ajuda: {pergunta_agente}")
-        # Mesmo no fluxo HITL, retornamos tokens para manter consistência
-        # para CSV, dashboards e testes que consomem o estado.
-        return {
-            "status": "aguardando_input", 
-            "espera_humana": True,            # Flag que o router vai ler
-            "pergunta_ao_usuario": pergunta_agente, # A pergunta que vai aparecer no terminal
-            "tentativas_loop": tentativas,
-            "tokens_input": in_tokens,
-            "tokens_output": out_tokens,
-            "tokens_total": total_tokens,
-        }
+        # Mapeia para os estados do grafo e levanta a flag de HITL se necessário
+        if decisao == "necessita_ajuda":
+            print(f"[PLANEJADOR] Solicitando ajuda: {pergunta_agente}")
+            # Mesmo no fluxo HITL, retornamos tokens para manter consistência
+            # para CSV, dashboards e testes que consomem o estado.
+            return {
+                "status": "aguardando_input", 
+                "espera_humana": True,            # Flag que o router vai ler
+                "pergunta_ao_usuario": pergunta_agente, # A pergunta que vai aparecer no terminal
+                "tentativas_loop": tentativas,
+                **token_update,
+            }
 
     # Mapeia resposta para status válido
+    if not decisao:
+        decisao = "revisando_estrategia" if erro else "pronto_codificacao" #reflete a natureza de erro, ou schema adiquirido
     status_validos = ["pronto_codificacao", "revisando_estrategia", "aprovado"]
     if decisao not in status_validos:
         # Fallback: se tem erro, revisa; senão, gera código
@@ -164,7 +167,5 @@ Opções válidas para 'decisão':
         "status": decisao,
         "espera_humana": False,  
         "tentativas_loop": tentativas,
-        "tokens_input": in_tokens,
-        "tokens_output": out_tokens,
-        "tokens_total": total_tokens,       
+        **token_update,
     }

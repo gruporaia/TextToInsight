@@ -3,7 +3,7 @@ Grafo compilado do sistema Text-to-Insight.
 
 Fluxo MVP:
 1. Planejador: Decide estratégia (LLM)
-2. Esquema: Obtém contexto do banco (SQLite introspection)
+2. Esquema: Obtém contexto do banco (introspecção via SQLAlchemy)
 3. Agente de Código: Gera SQL (LLM)
 4. Executor: Executa SQL no banco real
 5. Salvar CSV: Exporta resultado para CSV
@@ -12,6 +12,7 @@ Fluxo MVP:
 8. Resposta: Gera resposta em linguagem natural (LLM)
 """
 
+import inspect
 from functools import partial
 
 from langgraph.graph import StateGraph, START, END
@@ -39,8 +40,8 @@ def nos_nodo_espera_humana(estado: EstadoTextToInsight):
     return estado
 
 class Graph:
-    def __init__(self, api_key: str, model: str, hitl: bool = True, enable_graphs: bool = True, use_cot: bool = True, use_data_exploration: bool = True, use_exploration_selector: str = "off", use_rag: bool = True, enrich_rag: bool = False):
-        self.llm = get_model(model, api_key)
+    def __init__(self, api_key: str, model: str, db_engine, hitl: bool = True, enable_graphs: bool = True, use_cot: bool = True, use_data_exploration: bool = True, use_exploration_selector: str = "off", use_rag: bool = True, enrich_rag: bool = False, model_kwargs: dict | None = None, cache_dir=None):
+        self.llm = get_model(model, api_key, **(model_kwargs or {}))
         self.memory = MemorySaver()
         self.enable_graphs = enable_graphs
         self.use_cot = use_cot
@@ -48,6 +49,13 @@ class Graph:
         self.use_exploration_selector = use_exploration_selector
         self.use_rag = use_rag
         self.enrich_rag = enrich_rag
+        # Engine SQLAlchemy injetada pelo chamador (dono do ciclo de vida da
+        # conexao). Nunca entra no estado do grafo: e passada via partial
+        # diretamente para os nos que precisam dela, então nunca e persistida
+        # pelo checkpointer (MemorySaver).
+        self.db_engine = db_engine
+        # Pasta de cache (schema enriquecido e ChromaDB); None = padrão do usuário.
+        self.cache_dir = cache_dir
         self.grafo_text_to_insight = self._compilar_grafo(hitl, enrich_rag)
 
     def _construir_grafo_text_to_insight(self, hitl: bool, enrich_rag: bool) -> StateGraph:
@@ -56,15 +64,18 @@ class Graph:
         """
         construtor_grafo = StateGraph(EstadoTextToInsight)
 
+        engine = self.db_engine
+        cache_dir = self.cache_dir
+
         # 1. ADICIONAR NÓS
         construtor_grafo.add_node("planejador", partial(nos_nodo_planejador, llm=self.llm, hitl=hitl))
         construtor_grafo.add_node("espera_humana", nos_nodo_espera_humana)
-        construtor_grafo.add_node("esquema", nos_nodo_esquema)
-        construtor_grafo.add_node("retriever", partial(nos_nodo_retriever, use_rag=self.use_rag))
-        construtor_grafo.add_node("exploration_selector", partial(nos_nodo_exploration_selector, llm=self.llm, exploration_selector_mode=self.use_exploration_selector))
-        construtor_grafo.add_node("data_exploration", partial(nos_nodo_data_exploration, use_data_exploration=self.use_data_exploration))
-        construtor_grafo.add_node("agente_codigo", partial(nos_nodo_agente_codigo, llm=self.llm, use_cot=self.use_cot))
-        construtor_grafo.add_node("sandbox", nos_nodo_sandbox)
+        construtor_grafo.add_node("esquema", partial(nos_nodo_esquema, engine=engine, enrich_rag=enrich_rag, cache_dir=cache_dir))
+        construtor_grafo.add_node("retriever", partial(nos_nodo_retriever, use_rag=self.use_rag, cache_dir=cache_dir))
+        construtor_grafo.add_node("exploration_selector", partial(nos_nodo_exploration_selector, llm=self.llm, exploration_selector_mode=self.use_exploration_selector, cache_dir=cache_dir))
+        construtor_grafo.add_node("data_exploration", partial(nos_nodo_data_exploration, engine=engine, use_data_exploration=self.use_data_exploration))
+        construtor_grafo.add_node("agente_codigo", partial(nos_nodo_agente_codigo, llm=self.llm, use_cot=self.use_cot, engine=engine))
+        construtor_grafo.add_node("sandbox", partial(nos_nodo_sandbox, engine=engine))
         construtor_grafo.add_node("salvar_csv", nos_nodo_salvar_csv)
         construtor_grafo.add_node("gerador_grafico", partial(nos_nodo_gerador_grafico, llm=self.llm))
         construtor_grafo.add_node("resposta", partial(nos_nodo_resposta, llm=self.llm))
@@ -74,7 +85,7 @@ class Graph:
         construtor_grafo.add_edge("espera_humana", "planejador")
         path = 'retriever'
         if enrich_rag:
-            construtor_grafo.add_node("enriquecimento_rag", partial(nos_nodo_enrich, llm=self.llm))
+            construtor_grafo.add_node("enriquecimento_rag", partial(nos_nodo_enrich, llm=self.llm, cache_dir=cache_dir))
             construtor_grafo.add_edge("enriquecimento_rag", "retriever")
             path = 'enriquecimento_rag'
 
@@ -116,18 +127,33 @@ class Graph:
             {
                 "retriever": "retriever",
                 "enriquecimento_rag": path,
+                "fim": END,
             }
         )
 
 
         # Após salvar CSV, o roteador de gráfico decide se gera visualização
+        def _graph_router_node(estado: EstadoTextToInsight) -> dict:
+            token_sink: dict = {}
+            params = inspect.signature(roteador_grafico).parameters
+            if "token_sink" in params:
+                decision = roteador_grafico(estado, llm=self.llm, token_sink=token_sink)
+            else:
+                decision = roteador_grafico(estado, llm=self.llm)
+            return {
+                "graph_route_decision": decision,
+                **token_sink,
+            }
+
+        construtor_grafo.add_node("graph_router", _graph_router_node)
+        construtor_grafo.add_edge("salvar_csv", "graph_router")
         construtor_grafo.add_conditional_edges(
-            "salvar_csv",
-            partial(roteador_grafico, llm=self.llm),
+            "graph_router",
+            lambda s: s.get("graph_route_decision", "resposta"),
             {
                 "gerador_grafico": "gerador_grafico",
                 "resposta": "resposta",
-            }
+            },
         )
 
         # Após gerar a resposta final, encerrar o grafo

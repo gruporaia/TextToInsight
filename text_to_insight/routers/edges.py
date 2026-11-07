@@ -5,10 +5,11 @@ As arestas condicionais decidem para qual nó o grafo deve prosseguir
 baseado nas condições do estado atual.
 """
 
-from typing import Literal
+from typing import Any, Literal
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from ..state import EstadoTextToInsight
+from ..token_tracking import build_token_usage_update
 from ..utils import extrair_tokens
 
 PROMPT_ROTEADOR_GRAFICO = """Você é um assistente que decide se os resultados de uma consulta SQL
@@ -102,12 +103,14 @@ def roteador_planejador(estado: EstadoTextToInsight) -> Literal["esquema", "agen
         return "agente_codigo"
 
     if status == "revisando_estrategia":
-        if len(contexto) < 1500:
+        contexto_rag = estado.get("contexto_rag_schema", "")
+        if not contexto_rag:
             print(
-                f"[ROTEADOR_PLANEJADOR] Schema pequeno ({len(contexto)} chars), "
-                f"RAG não ajudaria → agente_codigo (direto)"
+                "[ROTEADOR_PLANEJADOR] RAG não utilizado / schema já completo "
+                "→ agente_codigo (direto)"
             )
             return "agente_codigo"
+
         if tentativas_revisao >= MAX_TENTATIVAS_REVISAO:
             print(
                 f"[ROTEADOR_PLANEJADOR] Limite de {MAX_TENTATIVAS_REVISAO} expansões "
@@ -125,11 +128,18 @@ def roteador_planejador(estado: EstadoTextToInsight) -> Literal["esquema", "agen
     print(f"[ROTEADOR_PLANEJADOR] Status não reconhecido '{status}' → agente_codigo (safety net)")
     return "agente_codigo"
 
-def roteador_schema(estado: EstadoTextToInsight) -> Literal["retriever", "enriquecimento_rag"]:
+def roteador_schema(estado: EstadoTextToInsight) -> Literal["retriever", "enriquecimento_rag", "fim"]:
+    if estado.get("status", "") == "exec_erro":
+        print("[ROTEADOR_SCHEMA] Erro de execução → fim")
+        return "fim"
     tem_descricao = estado.get("tem_descricao", False)
     return "retriever" if tem_descricao else "enriquecimento_rag"
 
-def roteador_grafico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -> Literal["gerador_grafico", "resposta"]:
+def roteador_grafico(
+    estado: EstadoTextToInsight,
+    llm: Any,
+    token_sink: dict[str, Any] | None = None,
+) -> Literal["gerador_grafico", "resposta"]:
     """
     Roteador após salvar CSV: decide se gera gráfico ou vai direto para resposta.
 
@@ -162,6 +172,8 @@ def roteador_grafico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -
 
     try:
         resposta = llm.invoke(prompt)
+        if token_sink is not None:
+            token_sink.update(build_token_usage_update("graph_router", resposta))
         texto = resposta.content.strip().upper()
 
         in_tokens, out_tokens, total_tokens = extrair_tokens(resposta)

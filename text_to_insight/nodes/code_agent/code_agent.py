@@ -6,12 +6,54 @@ do contexto do schema e de feedback anterior (se houver), usando Gemini.
 """
 
 import re
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.chat_models import BaseChatModel
 
 from ...state import EstadoTextToInsight
+from ...token_tracking import build_token_usage_update
 from ...utils import extrair_tokens
 
-PROMPT_TEMPLATE_COT = """Você é um especialista em SQL para bancos SQLite.
+# Nome de exibição e observações de sintaxe por dialeto, injetados no prompt do
+# LLM para que a SQL gerada use a sintaxe correta do banco alvo (não apenas SQLite).
+_NOME_DIALETO = {
+    "sqlite": "SQLite",
+    "postgresql": "PostgreSQL",
+    "mysql": "MySQL",
+}
+
+_NOTA_DIALETO = {
+    "sqlite": (
+        "Sintaxe SQLite: use || para concatenar strings, strftime() para "
+        "datas/horas, e LIMIT/OFFSET para paginação. Identificadores não "
+        "precisam de aspas."
+    ),
+    "postgresql": (
+        "Sintaxe PostgreSQL: use || para concatenar strings, EXTRACT()/"
+        "TO_CHAR() para datas/horas, e LIMIT/OFFSET para paginação. "
+        "Identificadores com maiúsculas ou caracteres especiais exigem "
+        "aspas duplas (ex: \"NomeColuna\"); NÃO use crases (`)."
+    ),
+    "mysql": (
+        "Sintaxe MySQL: use CONCAT() para concatenar strings (NÃO use ||), "
+        "DATE_FORMAT()/EXTRACT() para datas/horas, e LIMIT/OFFSET para "
+        "paginação. Identificadores podem usar crases (`nome_coluna`); "
+        "NÃO use aspas duplas para identificadores."
+    ),
+}
+
+
+def _resolver_info_dialeto(engine=None) -> tuple[str, str]:
+    """Resolve (nome_exibicao, nota_sintaxe) do dialeto da Engine injetada.
+
+    O dialeto vem de `engine.dialect.name`. Sem engine (ex.: testes que
+    chamam o nó isolado), usa SQLite como padrão.
+    """
+    dialeto = engine.dialect.name if engine is not None else "sqlite"
+    nome = _NOME_DIALETO.get(dialeto, _NOME_DIALETO["sqlite"])
+    nota = _NOTA_DIALETO.get(dialeto, _NOTA_DIALETO["sqlite"])
+    return nome, nota
+
+
+PROMPT_TEMPLATE_COT = """Você é um especialista em SQL para bancos {dialeto}.
 
 Sua tarefa: gerar UMA única consulta SQL SELECT que responda à pergunta do usuário,
 usando o schema do banco de dados fornecido abaixo.
@@ -23,6 +65,7 @@ Regras:
 - Use nomes de tabelas e colunas EXATAMENTE como aparecem no schema.
 - Se a pergunta for ambígua, faça a interpretação mais razoável.
 - Use as estatísticas de dados (DATA EXPLORATION) para entender distribuições, formatos e valores reais das colunas.
+- {nota_dialeto}
 
 === SCHEMA DO BANCO ===
 {schema}
@@ -47,7 +90,7 @@ Seu raciocínio lógico detalhado aqui.
 Sua consulta SQL aqui
 ```"""
 
-PROMPT_TEMPLATE_NO_COT = """Você é um especialista em SQL para bancos SQLite.
+PROMPT_TEMPLATE_NO_COT = """Você é um especialista em SQL para bancos {dialeto}.
 
 Sua tarefa: gerar UMA única consulta SQL SELECT que responda à pergunta do usuário,
 usando o schema do banco de dados fornecido abaixo.
@@ -59,6 +102,7 @@ Regras:
 - Use nomes de tabelas e colunas EXATAMENTE como aparecem no schema.
 - Se a pergunta for ambígua, faça a interpretação mais razoável.
 - Use as estatísticas de dados (DATA EXPLORATION) para entender distribuições, formatos e valores reais das colunas e raciocinar sobre a natureza do D.
+- {nota_dialeto}
 
 === SCHEMA DO BANCO ===
 {schema}
@@ -105,9 +149,13 @@ def _formatar_historico_tentativas(historico: list[dict]) -> str:
     return "\n".join(partes) + "\nNÃO repita os mesmos erros. Gere uma SQL diferente e corrigida."
 
 
-def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI, use_cot: bool = True) -> dict:
+def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: BaseChatModel, use_cot: bool = True, engine=None) -> dict:
     """
     Nó Agente de Código: usa Gemini para gerar SQL a partir da pergunta + schema.
+
+    `engine` é a Engine SQLAlchemy injetada pelo chamador — usada apenas
+    para resolver o dialeto (via `engine.dialect.name`) e ajustar a sintaxe
+    do prompt.
     """
     pergunta = (
         estado.get("pergunta_atual", "")
@@ -124,10 +172,13 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativ
     print(f"[AGENTE_CODIGO] Gerando SQL (tentativa {tentativas + 1})...")
 
     historico_section = _formatar_historico_tentativas(historico)
+    dialeto_nome, nota_dialeto = _resolver_info_dialeto(engine)
 
     template = PROMPT_TEMPLATE_COT if use_cot else PROMPT_TEMPLATE_NO_COT
 
     prompt = template.format(
+        dialeto=dialeto_nome,
+        nota_dialeto=nota_dialeto,
         schema=schema_rag if schema_rag else schema,
         data_exploration=data_exploration if data_exploration else "Não disponível.",
         pergunta=pergunta,
@@ -152,7 +203,7 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativ
 
     print(f"[AGENTE_CODIGO] SQL gerada: {sql[:100]}...")
 
-    in_tokens, out_tokens, total_tokens = extrair_tokens(resposta)
+    token_update = build_token_usage_update("code_agent", resposta)
 
     # Montar contexto compacto para diagnóstico (schema + data exploration usados)
     contexto_usado = schema_rag if schema_rag else schema
@@ -165,9 +216,7 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: ChatGoogleGenerativ
         "raciocinio_agente": raciocinio,
         "contexto_prompt_agente": contexto_prompt,
         "ultimo_prompt": prompt,
-        # Retornando o número de tokens nessa chamada do Gemini
-        "tokens_input": in_tokens,
-        "tokens_output": out_tokens,
-        "tokens_total": total_tokens,
+        "last_attempt_tokens": token_update["tokens_by_node"]["code_agent"],
+        **token_update,
     }
 

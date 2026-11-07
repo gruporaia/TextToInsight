@@ -18,7 +18,7 @@ class RAGRetriever:
         #o chroma client deve ser resolvido no engine, criando uma instancia unica e compartilhada, para evitar overhead de conexões
         self.chroma_client = chroma_client
         #a collection name agora é meio inútil, mas é bom manter a flexibilidade de ter mais de uma collection, caso seja necessário indexar outros tipos de documentos no futuro
-        self.collection_name = collection_name
+        self.collection_name = collection_name or "schema_default"
         self.collection = self.chroma_client.get_or_create_collection(name=self.collection_name)
         
         self._add_documents(document_schema)

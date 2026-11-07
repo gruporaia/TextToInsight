@@ -1,47 +1,60 @@
 [build-system]
-requires = ["setuptools>=65.0", "wheel"]
+requires = ["setuptools>=77.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "text-to-insight"
 version = "0.1.0"
-description = "Sistema de agentes Supervisor/Hierárquico para transformar perguntas em código executável usando LangGraph"
+description = "Agentes LangGraph que transformam perguntas em linguagem natural em consultas SQL seguras, executadas no seu banco, com resposta em linguagem natural"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
-    {name = "Seu Nome", email = "seu.email@exemplo.com"}
+    {name = "Caio Petroncini"},
+    {name = "Julio Cesar Fuganti"},
+    {name = "Luiz Correia dos Santos"},
+    {name = "Antonio Carvalho"},
+    {name = "Bernardo Rubio"},
+    {name = "Jonas Honorato"},
 ]
-keywords = ["langgraph", "agentes", "llm", "supervisor", "hierárquico"]
+keywords = ["text-to-sql", "nl2sql", "llm", "langgraph", "rag", "sql", "agentes"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Topic :: Database",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "langgraph>=0.2.0",
-    "langchain>=0.2.0",
-    "langchain-core>=0.2.0",
-    "langchain-google-genai>=2.0.0",
-    "langchain-openai>=0.1.0",
+    "langgraph>=1.1",
+    "langchain>=1.2",
+    "langchain-core>=1.2",
+    "langchain-google-genai>=4.2",
+    "langchain-openai>=1.1",
+    "pydantic>=2.0",
     "python-dotenv>=1.0.0",
-    "pandas>=2.0.0",  # uso na geração de gráficos e análise de dados
-    "matplotlib>=3.8.0", # uso na geração de gráficos e visualizações
+    "pandas>=2.2.2",  # uso na geração de gráficos e análise de dados; 2.2.2 é a primeira compatível com numpy 2
+    "matplotlib>=3.9.0", # uso na geração de gráficos e visualizações; 3.9 é a primeira compatível com numpy 2
     "networkx>=3.0",
     "chromadb>=1.5.9",
     "tabulate>=0.10.0",
+    "sqlalchemy>=2.0.0",
+    "platformdirs>=3.0",
 ]
 
 [project.scripts]
 text-to-insight = "text_to_insight.cli:main"
 
 [project.optional-dependencies]
+# Drivers de banco: a biblioteca recebe uma Engine do SQLAlchemy pronta, então
+# só precisa do driver de quem for usar PostgreSQL/MySQL (SQLite já vem no Python).
+postgres = ["psycopg2-binary>=2.9.0"]
+mysql = ["pymysql>=1.1.0"]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
@@ -64,10 +77,9 @@ Documentation = "https://github.com/gruporaia/TextToInsight#readme"
 Repository = "https://github.com/gruporaia/TextToInsight.git"
 "Bug Tracker" = "https://github.com/gruporaia/TextToInsight/issues"
 
+# Só a biblioteca vai para o PyPI; scripts/, src/ (benchmarks) e tests/ ficam fora do wheel.
 [tool.setuptools.packages.find]
-where = ["."]
 include = ["text_to_insight*"]
-exclude = ["tests*", "build*", "meus_testes*"]
 
 [tool.black]
 line-length = 88
@@ -87,5 +99,4 @@ disallow_untyped_defs = false
 [tool.pytest.ini_options]
 markers = [
     "real_api: testes que executam chamadas reais ao provedor/modelo LLM",
-    "schemacrawler: Marca os testes que dependem do SchemaCrawler e do Java."
 ]

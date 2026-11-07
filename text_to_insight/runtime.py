@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any, Callable
 from dotenv import load_dotenv
 load_dotenv()
-import os
 from tabulate import tabulate
 
 from .utils import salvar_metricas_csv
@@ -41,7 +40,10 @@ Retorne apenas:
 """
 
 
-def construir_estado_inicial(pergunta: str, db_path: str, inferir_fks_virtuais: bool = False, usar_schemacrawler: bool = True) -> dict[str, Any]:
+def construir_estado_inicial(
+    pergunta: str,
+    inferir_fks_virtuais: bool = False,
+) -> dict[str, Any]:
     """Cria o estado inicial padrão para uma execução do grafo."""
     return {
         "pergunta_original": pergunta,
@@ -54,14 +56,13 @@ def construir_estado_inicial(pergunta: str, db_path: str, inferir_fks_virtuais: 
         "historico_conversa": [],
         "status": "iniciado",
         "tentativas_loop": 0,
-        "db_path": db_path,
         "espera_humana": False,
         "linhas_resultado_completo": [],
         "historico_tentativas": [],
+        "cache_data_exploration": {},
         "ultimo_prompt": "",
-        "schemacrawler_bin": os.getenv("SCHEMACRAWLER_BIN", ""),
         "inferir_fks_virtuais": inferir_fks_virtuais,
-        "usar_schemacrawler": usar_schemacrawler,
+        "tokens_by_node": {},
     }
 
 
@@ -473,7 +474,7 @@ def executar_fluxo(
         snapshot = grafo_app.get_state(config)
 
         if not snapshot.next:
-            resultado_final = snapshot.values
+            resultado_final = dict(snapshot.values)
             salvar_metricas_csv(resultado_final, time.perf_counter() - lat_inicio)
             return resultado_final
 

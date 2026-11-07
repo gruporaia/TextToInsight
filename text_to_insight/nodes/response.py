@@ -6,11 +6,12 @@ produzir uma resposta em linguagem natural que responda à pergunta do usuário
 com base na SQL gerada e nos resultados obtidos.
 """
 
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.chat_models import BaseChatModel
 import sys
 import os
 
 from ..state import EstadoTextToInsight
+from ..token_tracking import build_token_usage_update
 from ..utils import extrair_tokens
 
 PROMPT_RESPONSE = """Você é um assistente que transforma resultados de consultas SQL
@@ -37,7 +38,7 @@ Gere APENAS a resposta final para o usuário (sem títulos, sem marcas, sem expl
 """
 
 
-def nos_nodo_resposta(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -> dict:
+def nos_nodo_resposta(estado: EstadoTextToInsight, llm: BaseChatModel) -> dict:
     """
     Nó Resposta: quando a execução for bem-sucedida, gera uma resposta
     em linguagem natural para o usuário baseada na SQL e nos resultados.
@@ -76,6 +77,7 @@ def nos_nodo_resposta(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) 
     # Durante execução de testes (pytest) evitamos invocar a API externa
     # para não depender de cassetes adicionais. Detectamos pytest através
     # da presença do módulo em sys.modules.
+    resposta = None
     if "pytest" in sys.modules or os.getenv("CI") == "true":
         # Geração determinística simples baseada nos dados disponíveis
         if total is None or total == 0:
@@ -131,21 +133,18 @@ def nos_nodo_resposta(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) 
         # Se o estado não for um dict mutável por alguma razão, ignoramos
         pass    
 
-    # Se a variável `resposta` existir e for compatível, extraímos tokens;
-    # caso contrário retornamos zeros para os contadores.
-    in_tokens = out_tokens = total_tokens = 0
-    try:
-        # `resposta` pode não existir no caminho determinístico (pytest)
-        if 'resposta' in locals() and resposta is not None:
-            in_tokens, out_tokens, total_tokens = extrair_tokens(resposta)
-    except Exception as e:
-        print(f"[RESPOSTA] Falha ao extrair tokens: {e}")
+    if resposta is not None:
+        token_update = build_token_usage_update("response", resposta)
+    else:
+        token_update = {
+            "tokens_input": 0,
+            "tokens_output": 0,
+            "tokens_total": 0,
+            "tokens_by_node": {},
+        }
 
     return {
         "resposta_natural": texto,
         "status": "aprovado",
-
-        "tokens_input": in_tokens,
-        "tokens_output": out_tokens,
-        "tokens_total": total_tokens,
+        **token_update,
     }

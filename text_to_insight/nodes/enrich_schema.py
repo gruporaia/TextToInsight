@@ -1,13 +1,15 @@
 import re
 import json
 from pathlib import Path
-from langchain_google_genai import ChatGoogleGenerativeAI
+from typing import Any
+
+from ..cache import salvar_schema_enriquecido
 from ..state import EstadoTextToInsight
+from ..token_tracking import build_batch_token_usage_update
 
 
-def nos_nodo_enrich(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -> dict:
+def nos_nodo_enrich(estado: EstadoTextToInsight, llm: Any, cache_dir: str | Path | None = None) -> dict:
     print("[SCHEMA-ENRICHMENT] Iniciando enriquecimento do schema (Modo Seguro JSON)...")
-    db_path = Path(estado.get("db_path", "").strip())
 
     raw_schema = estado.get("contexto_schema", "").strip()
 
@@ -38,7 +40,8 @@ def nos_nodo_enrich(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) ->
     print(f"[SCHEMA-ENRICHMENT] Processando {len(table_chunks)} tabelas divididas em {len(lotes)} lotes...")
 
     llm_temp = llm.bind(temperature=0)
-    respostas = llm_temp.batch(prompts, config={"max_concurrency": 3})
+    respostas = llm_temp.batch(prompts, config={"max_concurrency": 3}) if prompts else []
+    token_update = build_batch_token_usage_update("rag_enrichment", respostas)
 
     dicionario_descricoes = {}
     for resp in respostas:
@@ -73,23 +76,14 @@ def nos_nodo_enrich(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) ->
 
     contexto_enriquecido = "\n".join(linhas_enriquecidas)
 
-    # Nome de cache inclui dialeto para consistência com schema.py.
-    # Detecta o dialeto pelo sufixo do arquivo; fallback para 'sqlite'.
-    _EXTENSAO_PARA_DIALETO = {
-        ".db":      "sqlite",
-        ".sqlite":  "sqlite",
-        ".sqlite3": "sqlite",
-        ".duckdb":  "duckdb",
-    }
-    dialeto = _EXTENSAO_PARA_DIALETO.get(db_path.suffix.lower(), "sqlite")
-    cache_path = db_path.with_name(f"{db_path.stem}_{dialeto}_enriched_schema.txt")
-
-    with open(cache_path, "w", encoding="utf-8") as f:
-        f.write(contexto_enriquecido)
-
-    print(f"[SCHEMA-ENRICHMENT] Schema enriquecido salvo em {cache_path.name}.")
+    # O cache é indexado pelo hash do schema original (o mesmo texto que o nó
+    # de schema produz), então a próxima execução sobre este banco o encontra.
+    cache_path = salvar_schema_enriquecido(cache_dir, estado.get("contexto_schema", ""), contexto_enriquecido)
+    if cache_path is not None:
+        print(f"[SCHEMA-ENRICHMENT] Schema enriquecido salvo em {cache_path}.")
 
     return {
         "tem_descricao": True,
         "contexto_schema": contexto_enriquecido,
+        **token_update,
     }

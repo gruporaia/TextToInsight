@@ -5,21 +5,19 @@ Responsabilidade única: validar e executar SQL gerada contra o banco real,
 retornando resultado estruturado.
 """
 
+from typing import Any
+
 from ..state import EstadoTextToInsight
-from .code_agent.code_sql import executar_sql_sqlite
+from .code_agent.code_sql import executar_sql_via_engine
 
 
-def nos_nodo_sandbox(estado: EstadoTextToInsight) -> dict:
+def nos_nodo_sandbox(estado: EstadoTextToInsight, engine: Any) -> dict:
     """
-    Nó Executor: executa a SQL gerada contra o banco SQLite real.
-
-    Lê `sql_gerada` e `db_path` do estado, delega para `executar_sql_sqlite`
-    (que já faz validação de segurança) e retorna o resultado estruturado.
+    Nó Executor: executa a SQL gerada na Engine SQLAlchemy injetada pelo
+    chamador (SQLite, PostgreSQL, MySQL...). A engine nunca entra no estado,
+    então nada sobre a conexão vai para o checkpoint do grafo.
     """
     sql = estado.get("sql_gerada", "").strip()
-    db_path = estado.get("db_path", "")
-
-    print(f"[EXECUTOR] Executando SQL contra {db_path}...")
 
     if not sql:
         print("[EXECUTOR] Nenhuma SQL encontrada no estado.")
@@ -29,7 +27,10 @@ def nos_nodo_sandbox(estado: EstadoTextToInsight) -> dict:
             "status": "exec_erro",
         }
 
-    resultado = executar_sql_sqlite(db_path, sql)
+    print(f"[EXECUTOR] Executando SQL contra banco via engine ({engine.dialect.name})...")
+    resultado = executar_sql_via_engine(engine, sql)
+
+    attempt_tokens = estado.get("last_attempt_tokens") or {}
 
     if resultado["ok"]:
         print(f"[EXECUTOR] SQL executada com sucesso — {resultado['total_linhas_resultado']} linhas.")
@@ -39,6 +40,9 @@ def nos_nodo_sandbox(estado: EstadoTextToInsight) -> dict:
             "prompt": estado.get("ultimo_prompt", ""),
             "contexto": estado.get("contexto_prompt_agente", ""),
             "raciocinio": estado.get("raciocinio_agente", ""),
+            "tokens_input": int(attempt_tokens.get("input", 0)),
+            "tokens_output": int(attempt_tokens.get("output", 0)),
+            "tokens_total": int(attempt_tokens.get("total", 0)),
         }
         return {
             "linhas_resultado_preview": resultado["linhas_resultado_preview"],
@@ -57,6 +61,9 @@ def nos_nodo_sandbox(estado: EstadoTextToInsight) -> dict:
             "prompt": estado.get("ultimo_prompt", ""),
             "contexto": estado.get("contexto_prompt_agente", ""),
             "raciocinio": estado.get("raciocinio_agente", ""),
+            "tokens_input": int(attempt_tokens.get("input", 0)),
+            "tokens_output": int(attempt_tokens.get("output", 0)),
+            "tokens_total": int(attempt_tokens.get("total", 0)),
         }
         return {
             "linhas_resultado_preview": [],

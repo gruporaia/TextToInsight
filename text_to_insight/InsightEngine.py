@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Callable
 
 from .graph import Graph
@@ -16,7 +17,40 @@ class InsightEngine:
     - `resume(...)` continua uma consulta que ficou pausada em HITL.
     """
 
-    def __init__(self, api_key: str, model: str, db_path: str, hitl: bool = False, show_output: bool = False, enable_graphs: bool = True, use_cot: bool = True, use_data_exploration: bool = True, use_exploration_selector: str = "off", use_rag: bool = True, enrich_rag: bool = False, inferir_fks_virtuais: bool = False, usar_schemacrawler: bool = True):
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        db_engine: Any,
+        hitl: bool = False,
+        show_output: bool = False,
+        enable_graphs: bool = True,
+        use_cot: bool = True,
+        use_data_exploration: bool = True,
+        use_exploration_selector: str = "off",
+        use_rag: bool = True,
+        enrich_rag: bool = False,
+        inferir_fks_virtuais: bool = False,
+        model_kwargs: dict | None = None,
+        cache_dir: str | Path | None = None,
+    ):
+        """
+        `db_engine` é uma Engine do SQLAlchemy construída pelo chamador, que
+        também é responsável por descartá-la com `.dispose()` quando
+        terminar. A biblioteca nunca abre conexões por conta própria: todo
+        acesso ao banco passa por essa engine. Ela nunca é copiada para o
+        estado do grafo (nada sobre a conexão vai para o checkpoint do
+        LangGraph) e o dialeto é lido diretamente dela.
+
+        `cache_dir` é a pasta onde ficam o schema enriquecido (enrich_rag) e
+        o índice do ChromaDB. Se omitida, usa a pasta de cache do usuário
+        (ex.: `~/.cache/text-to-insight` no Linux).
+        """
+        if db_engine is None or not hasattr(db_engine, "dialect"):
+            raise TypeError(
+                "`db_engine` deve ser uma Engine do SQLAlchemy, ex.: "
+                "create_engine(\"sqlite:///meu_banco.db\")."
+            )
         self._hitl_ativado = hitl
         # `show_output` controla se a engine imprime o resultado final no terminal.
         # Em cenários com CLI, normalmente deixamos False para evitar saída duplicada.
@@ -24,9 +58,11 @@ class InsightEngine:
         self._enable_graphs = enable_graphs
         self._enrich_rag = enrich_rag
         self._inferir_fks_virtuais = inferir_fks_virtuais
-        self._usar_schemacrawler = usar_schemacrawler
+        self._db_engine = db_engine
+        self._cache_dir = cache_dir
         self._model = model
-        self._db_path = db_path
+        # Parâmetros repassados ao construtor do LLM (ex.: temperature, max_tokens).
+        self._model_kwargs = dict(model_kwargs or {})
         self._use_cot = use_cot
         self._use_data_exploration = use_data_exploration
         self._use_exploration_selector = use_exploration_selector
@@ -41,7 +77,10 @@ class InsightEngine:
             use_data_exploration=self._use_data_exploration,
             use_exploration_selector=self._use_exploration_selector,
             use_rag=self._use_rag,
-            enrich_rag=self._enrich_rag
+            enrich_rag=self._enrich_rag,
+            model_kwargs=self._model_kwargs,
+            db_engine=self._db_engine,
+            cache_dir=self._cache_dir,
         )
 
         print(f"[CONFIG] HITL: {'ATIVADO' if self._hitl_ativado else 'DESATIVADO'}")
@@ -53,7 +92,8 @@ class InsightEngine:
         print(f"[CONFIG] RAG: {'ATIVADO' if self._use_rag else 'DESATIVADO'}")
         print(f"[CONFIG] ENRICH-RAG: {'ATIVADO' if self._enrich_rag else 'DESATIVADO'}")
         print(f"[CONFIG] INFERIR-FKS-VIRTUAIS: {'ATIVADO' if self._inferir_fks_virtuais else 'DESATIVADO'}")
-        print(f"[CONFIG] USAR-SCHEMACRAWLER: {'ATIVADO' if self._usar_schemacrawler else 'DESATIVADO'}")
+        print(f"[CONFIG] BANCO: {self._db_engine.dialect.name}")
+        print(f"[CONFIG] MODEL_KWARGS: {self._model_kwargs or 'PADRÃO DO PROVEDOR'}")
 
     def _config(self, thread_id: str) -> dict[str, Any]:
         # O LangGraph usa esse bloco "configurable" para identificar a conversa.
@@ -130,7 +170,7 @@ class InsightEngine:
             )
         # Caso 2: chamada nova (primeira execução para essa pergunta).
         elif query:
-            estado_execucao = construir_estado_inicial(query, self._db_path, self._inferir_fks_virtuais, self._usar_schemacrawler)
+            estado_execucao = construir_estado_inicial(query, self._inferir_fks_virtuais)
             pergunta_exibicao = query
         # Caso 3: a thread já está pausada, mas ainda sem resposta do usuário.
         elif snapshot.next:
