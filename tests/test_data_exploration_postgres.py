@@ -6,8 +6,10 @@ pulados se TEXT_TO_INSIGHT_TEST_PG_URL não estiver definida (a CI sobe um
 serviço PostgreSQL e define a variável).
 """
 
+import os
+
 import pytest
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
 
 import text_to_insight.nodes.data_exploration as de
 from text_to_insight.nodes.data_exploration import (
@@ -23,14 +25,42 @@ def _rag(*tabelas: str) -> str:
 
 
 def _explorar(engine, tabela, colunas=None):
-    """explore_table numa transação de exploração, como o nó faz."""
-    conn = engine.raw_connection()
-    try:
-        de._preparar_sessao_postgres(conn)
-        return de.explore_table(conn, tabela, colunas, dialeto="postgresql")
-    finally:
-        conn.rollback()
-        conn.close()
+    """Explora uma tabela pelo mesmo caminho do nó (conexão, transação, devolução ao pool)."""
+    parcial = {tabela: colunas} if colunas else {}
+    return de._explorar_no_banco(engine, "postgresql", [tabela], parcial, {})[tabela]
+
+
+class _CursorAlterado:
+    """Cursor que troca as consultas para as quais `trocar(sql)` devolve outra SQL."""
+
+    def __init__(self, cursor, trocar):
+        self._cursor = cursor
+        self._trocar = trocar
+
+    def execute(self, sql, *args):
+        return self._cursor.execute(self._trocar(sql) or sql, *args)
+
+    def __getattr__(self, nome):
+        return getattr(self._cursor, nome)
+
+
+class _ConexaoAlterada:
+    """Conexão do pool cujos cursores passam por `_CursorAlterado`."""
+
+    def __init__(self, conn, trocar):
+        self._conn = conn
+        self._trocar = trocar
+
+    def cursor(self):
+        return _CursorAlterado(self._conn.cursor(), self._trocar)
+
+    def __getattr__(self, nome):
+        return getattr(self._conn, nome)
+
+
+def _engine_pg(**kwargs):
+    url = os.environ["TEXT_TO_INSIGHT_TEST_PG_URL"]
+    return create_engine(url, **kwargs)
 
 
 @pytest.fixture
@@ -152,7 +182,8 @@ class TestExploracaoPostgres:
         assert coluna.null_rate == round(1 / 3, 4)
 
     def test_estatisticas_estaveis_entre_execucoes(self, pg_banco):
-        estado = {"contexto_rag_schema": _rag("produtos"), "colunas_para_explorar": {"produtos": ["preco"]}}
+        # Todas as colunas, inclusive os valores de exemplo das categóricas e datas.
+        estado = {"contexto_rag_schema": _rag("produtos")}
         a = nos_nodo_data_exploration(estado, engine=pg_banco)["cache_data_exploration"]
         b = nos_nodo_data_exploration(estado, engine=pg_banco)["cache_data_exploration"]
         assert a == b
@@ -196,6 +227,165 @@ class TestExploracaoPostgres:
         exato = nos_nodo_data_exploration(estado, engine=pg_banco)["cache_data_exploration"]["produtos"]["linhas"]
 
         assert (estimado, exato) == (200, 300)
+
+    @pytest.mark.parametrize("consulta", ["variancia", "mediana"])
+    def test_erro_numa_consulta_opcional_nao_derruba_a_coluna_seguinte(self, pg_banco, consulta):
+        # Variância e mediana podem falhar sem perder a coluna; no PostgreSQL o
+        # erro aborta a transação, que precisa voltar ao savepoint antes da
+        # próxima coluna.
+        def trocar(sql):
+            if consulta == "variancia" and sql.startswith('SELECT AVG(("preco"'):
+                return "SELECT 1/0"
+            if consulta == "mediana" and 'ORDER BY "preco"' in sql:
+                return "SELECT 1/0"
+            return None
+
+        conn = _ConexaoAlterada(pg_banco.raw_connection(), trocar)
+        try:
+            de._preparar_sessao_postgres(conn)
+            colunas = de.explore_table(conn, "produtos", ["preco", "categoria"], dialeto="postgresql").columns
+        finally:
+            conn.rollback()
+            conn.close()
+
+        assert colunas["preco"].mean == 150.75
+        assert (colunas["preco"].std_dev is None) == (consulta == "variancia")
+        assert (colunas["preco"].median is None) == (consulta == "mediana")
+        assert colunas["categoria"].cardinality == 3
+
+    def test_numeric_fora_do_alcance_do_float(self, pg_banco):
+        with pg_banco.begin() as conn:
+            conn.execute(text("CREATE TABLE enormes (enorme numeric, depois int)"))
+            conn.execute(text("INSERT INTO enormes VALUES (1e400, 1), (2e400, 3)"))
+
+        colunas = _explorar(pg_banco, "enormes").columns
+
+        assert colunas["enorme"].mean is None and colunas["enorme"].max is None
+        assert (colunas["depois"].mean, colunas["depois"].median) == (2, 2)
+
+    def test_conexao_perdida_mantem_as_tabelas_ja_exploradas(self, pg_banco, monkeypatch):
+        with pg_banco.begin() as conn:
+            conn.execute(text("CREATE TABLE depois_da_queda (a int)"))
+
+        def trocar(sql):
+            if '"Tabela Com Espaço"' in sql:
+                return "SELECT pg_terminate_backend(pg_backend_pid())"
+            return None
+
+        original = pg_banco.raw_connection
+        monkeypatch.setattr(pg_banco, "raw_connection", lambda: _ConexaoAlterada(original(), trocar))
+        r = nos_nodo_data_exploration(
+            {"contexto_rag_schema": _rag("produtos", "Tabela Com Espaço", "depois_da_queda")}, engine=pg_banco
+        )
+        monkeypatch.undo()
+
+        assert list(r["cache_data_exploration"]) == ["produtos"]
+        # A conexão morta foi descartada pelo pool; a engine continua utilizável.
+        with pg_banco.connect() as conn:
+            assert conn.execute(text("SELECT 1")).scalar() == 1
+
+    def test_tabela_nunca_analisada_conta_ate_o_limite(self, pg_banco, monkeypatch):
+        # Sem ANALYZE, reltuples é -1: a contagem roda, mas para no limite.
+        with pg_banco.begin() as conn:
+            conn.execute(text("CREATE TABLE sem_analyze AS SELECT g AS a FROM generate_series(1, 300) g"))
+            assert conn.execute(text("SELECT reltuples FROM pg_class WHERE relname = 'sem_analyze'")).scalar() < 0
+        monkeypatch.setattr(de, "LIMIAR_ESTIMATIVA_LINHAS", 100)
+
+        assert _explorar(pg_banco, "sem_analyze").row_count_estimate == 100
+
+
+class TestEngineAutocommit:
+    @pytest.fixture
+    def engine_autocommit(self, pg_banco):
+        from tests.conftest import PG_SCHEMA_TESTES
+
+        engine = _engine_pg(
+            isolation_level="AUTOCOMMIT",
+            pool_size=1,
+            max_overflow=0,
+            connect_args={"options": f"-c search_path={PG_SCHEMA_TESTES}"},
+        )
+        yield engine
+        engine.dispose()
+
+    def test_exploracao_tem_transacao_somente_leitura_e_timeout(self, engine_autocommit, monkeypatch):
+        vistos = {}
+        original = de._STAT_DISPATCHER["numeric"]
+
+        def espiao(cursor, *args, **kwargs):
+            for guc in ("transaction_read_only", "statement_timeout"):
+                cursor.execute(f"SHOW {guc}")
+                vistos[guc] = cursor.fetchone()[0]
+            return original(cursor, *args, **kwargs)
+
+        monkeypatch.setitem(de._STAT_DISPATCHER, "numeric", espiao)
+        r = nos_nodo_data_exploration(
+            {"contexto_rag_schema": _rag("produtos"), "colunas_para_explorar": {"produtos": ["preco"]}},
+            engine=engine_autocommit,
+        )
+
+        assert "preco" in r["cache_data_exploration"]["produtos"]["colunas"]
+        assert vistos == {"transaction_read_only": "on", "statement_timeout": "15s"}
+
+    def test_conexao_volta_ao_pool_em_autocommit(self, engine_autocommit):
+        nos_nodo_data_exploration({"contexto_rag_schema": _rag("produtos")}, engine=engine_autocommit)
+
+        with engine_autocommit.connect() as conn:
+            assert conn.connection.driver_connection.autocommit is True
+            # autocommit de verdade: a escrita vale sem commit explícito
+            conn.execute(text("CREATE TABLE criada_em_autocommit (a int)"))
+        with engine_autocommit.connect() as conn:
+            assert conn.execute(text("SELECT to_regclass('criada_em_autocommit') IS NOT NULL")).scalar()
+
+
+class TestSearchPath:
+    """A exploração enxerga as mesmas tabelas que o SQLAlchemy lista no nó de schema."""
+
+    SEGUNDO = "tti_testes_segundo"
+
+    @pytest.fixture
+    def engine_dois_schemas(self, pg_engine):
+        from sqlalchemy import inspect
+
+        from tests.conftest import PG_SCHEMA_TESTES
+
+        with pg_engine.begin() as conn:
+            conn.execute(text(f"DROP SCHEMA IF EXISTS {self.SEGUNDO} CASCADE"))
+            conn.execute(text(f"CREATE SCHEMA {self.SEGUNDO}"))
+            conn.execute(text(f"CREATE TABLE {self.SEGUNDO}.so_no_segundo (a int, b text)"))
+            conn.execute(text(f"INSERT INTO {self.SEGUNDO}.so_no_segundo SELECT g, 'v' || g FROM generate_series(1, 300) g"))
+            conn.execute(text(f"ANALYZE {self.SEGUNDO}.so_no_segundo"))
+            # homônimas: vale a do primeiro schema do search_path
+            conn.execute(text(f"CREATE TABLE {PG_SCHEMA_TESTES}.homonima (x int)"))
+            conn.execute(text(f"INSERT INTO {PG_SCHEMA_TESTES}.homonima VALUES (1)"))
+            conn.execute(text(f"CREATE TABLE {self.SEGUNDO}.homonima (y text)"))
+            conn.execute(text(f"INSERT INTO {self.SEGUNDO}.homonima VALUES ('a'), ('b')"))
+        engine = _engine_pg(connect_args={"options": f"-c search_path={PG_SCHEMA_TESTES},{self.SEGUNDO}"})
+        assert {"so_no_segundo", "homonima"} <= set(inspect(engine).get_table_names())
+        yield engine
+        engine.dispose()
+        with pg_engine.begin() as conn:
+            conn.execute(text(f"DROP SCHEMA IF EXISTS {self.SEGUNDO} CASCADE"))
+
+    def test_tabela_no_segundo_schema(self, engine_dois_schemas):
+        r = nos_nodo_data_exploration({"contexto_rag_schema": _rag("so_no_segundo")}, engine=engine_dois_schemas)
+        tabela = r["cache_data_exploration"]["so_no_segundo"]
+
+        assert set(tabela["colunas"]) == {"a", "b"}
+        assert tabela["linhas"] == 300
+
+    def test_estimativa_do_catalogo_no_segundo_schema(self, engine_dois_schemas, monkeypatch):
+        with engine_dois_schemas.begin() as conn:
+            conn.execute(text(f"INSERT INTO {self.SEGUNDO}.so_no_segundo SELECT g, 'w' FROM generate_series(1, 50) g"))
+        monkeypatch.setattr(de, "LIMIAR_ESTIMATIVA_LINHAS", 100)
+
+        assert _explorar(engine_dois_schemas, "so_no_segundo").row_count_estimate == 300  # do ANALYZE, não 350
+
+    def test_tabelas_homonimas_usam_a_primeira_do_search_path(self, engine_dois_schemas):
+        resultado = _explorar(engine_dois_schemas, "homonima")
+
+        assert list(resultado.columns) == ["x"]
+        assert resultado.row_count_estimate == 1
 
 
 def test_falha_de_conexao_nao_derruba_o_fluxo():

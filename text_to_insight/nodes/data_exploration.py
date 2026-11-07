@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import random
 import re
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -116,15 +118,26 @@ DIALETOS_SUPORTADOS = {"sqlite", "postgresql"}
 # estoure o tempo é pulada; as demais continuam.
 TIMEOUT_EXPLORACAO_SEGUNDOS = 15
 
-# Acima deste número de linhas (pela estimativa do PostgreSQL) não roda
-# COUNT(*): a contagem exata exigiria varrer a tabela inteira, e as
-# estatísticas já usam no máximo SAMPLE_LIMIT linhas.
+# No PostgreSQL, tabelas com estimativa do catálogo a partir deste número de
+# linhas não são contadas: a contagem exata varreria a tabela inteira, e as
+# estatísticas já usam no máximo SAMPLE_LIMIT linhas. Abaixo disso (inclusive
+# estimativa -1, de tabela nunca analisada, ou 0, de view/tabela particionada)
+# a contagem para em LIMIAR_ESTIMATIVA_LINHAS + 1 linhas.
 LIMIAR_ESTIMATIVA_LINHAS = 100_000
+
+
+class ExploracaoInterrompida(Exception):
+    """A conexão deixou de responder no meio da exploração; não adianta seguir."""
 
 
 def _q(identificador: str) -> str:
     """Identificador entre aspas duplas (SQLite e PostgreSQL), escapando aspas internas."""
     return '"' + identificador.replace('"', '""') + '"'
+
+
+def _amostra(safe_col: str, safe_tbl: str) -> str:
+    """A amostra de uma coluna: as primeiras SAMPLE_LIMIT linhas da tabela, nulos incluídos."""
+    return f"(SELECT {safe_col} FROM {safe_tbl} LIMIT {SAMPLE_LIMIT}) AS _amostra"
 
 
 def _preparar_sessao_postgres(conn: Any) -> None:
@@ -133,7 +146,8 @@ def _preparar_sessao_postgres(conn: Any) -> None:
 
     SET TRANSACTION e SET LOCAL valem só para a transação corrente, que é
     desfeita ao final: nada disso fica na conexão quando ela volta para o
-    pool do chamador.
+    pool do chamador. A conexão não pode estar em autocommit (ver
+    `_explorar_no_banco`), senão os comandos não têm efeito.
     """
     cursor = conn.cursor()
     try:
@@ -148,26 +162,62 @@ def _preparar_sessao_postgres(conn: Any) -> None:
         cursor.close()
 
 
-def _recuperar_apos_erro(conn: Any, dialeto: str) -> None:
+@contextmanager
+def _isolar_erros(cursor: Any, dialeto: str, savepoint: str):
     """
-    No PostgreSQL, um erro aborta a transação inteira e as consultas
-    seguintes falhariam todas. Desfaz e reabre a transação de exploração.
+    Roda o bloco de modo que um erro de SQL não comprometa as consultas seguintes.
+
+    No PostgreSQL um erro aborta a transação inteira; o bloco roda num
+    SAVEPOINT e, se falhar, a transação volta para ele. O erro é relançado
+    para quem chamou decidir o que fazer. Se nem o SAVEPOINT ou o ROLLBACK TO
+    SAVEPOINT funcionam, a conexão está perdida e levanta ExploracaoInterrompida.
     """
     if dialeto != "postgresql":
+        yield
         return
-    conn.rollback()
-    _preparar_sessao_postgres(conn)
+    try:
+        cursor.execute(f"SAVEPOINT {savepoint}")
+    except Exception as erro:
+        raise ExploracaoInterrompida(str(erro)) from erro
+    try:
+        yield
+    except Exception:
+        try:
+            cursor.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+        except Exception as erro_rollback:
+            raise ExploracaoInterrompida(str(erro_rollback)) from erro_rollback
+        raise
+    cursor.execute(f"RELEASE SAVEPOINT {savepoint}")
 
 
-def _listar_colunas(cursor: Any, table: str, dialeto: str) -> list[tuple[str, str]]:
-    """(nome, tipo declarado) de cada coluna, na ordem da tabela."""
-    if dialeto == "postgresql":
-        # Mesmo schema que o SQLAlchemy usa por padrão no nó de schema.
+def _resolver_relacao_postgres(cursor: Any, table: str) -> tuple[str, int]:
+    """
+    Schema e estimativa de linhas da relação que `table` (sem schema) alcança.
+
+    Usa a mesma resolução pelo search_path que o SQLAlchemy usa para listar
+    tabelas no nó de schema e que as consultas de estatística usam ao citar
+    a tabela sem schema; com tabelas homônimas, vale a primeira do search_path.
+    """
+    cursor.execute(
+        "SELECT n.nspname, c.reltuples::bigint FROM pg_class c "
+        "JOIN pg_namespace n ON n.oid = c.relnamespace "
+        "WHERE c.oid = to_regclass(%s)",
+        (_q(table),),
+    )
+    linha = cursor.fetchone()
+    if linha is None:
+        raise LookupError(f"tabela {table!r} não encontrada no search_path")
+    return linha[0], int(linha[1])
+
+
+def _listar_colunas(cursor: Any, table: str, schema_pg: str | None = None) -> list[tuple[str, str]]:
+    """(nome, tipo declarado) de cada coluna, na ordem da tabela. `schema_pg` só no PostgreSQL."""
+    if schema_pg is not None:
         cursor.execute(
             "SELECT column_name, data_type FROM information_schema.columns "
-            "WHERE table_schema = current_schema() AND table_name = %s "
+            "WHERE table_schema = %s AND table_name = %s "
             "ORDER BY ordinal_position",
-            (table,),
+            (schema_pg, table),
         )
         return [(nome, tipo or "") for nome, tipo in cursor.fetchall()]
 
@@ -176,32 +226,35 @@ def _listar_colunas(cursor: Any, table: str, dialeto: str) -> list[tuple[str, st
     return [(info[1], info[2] or "") for info in cursor.fetchall()]
 
 
-def _contar_linhas(cursor: Any, table: str, dialeto: str) -> int:
-    """Total de linhas; no PostgreSQL usa a estimativa do catálogo para tabelas grandes."""
-    if dialeto == "postgresql":
-        cursor.execute(
-            "SELECT c.reltuples::bigint FROM pg_class c "
-            "JOIN pg_namespace n ON n.oid = c.relnamespace "
-            "WHERE n.nspname = current_schema() AND c.relname = %s",
-            (table,),
-        )
-        linha = cursor.fetchone()
-        estimativa = linha[0] if linha else None
-        if estimativa is not None and estimativa >= LIMIAR_ESTIMATIVA_LINHAS:
-            return int(estimativa)
+def _contar_linhas(cursor: Any, table: str, estimativa_pg: int | None = None) -> int:
+    """
+    Total de linhas. `estimativa_pg` (reltuples do PostgreSQL) evita varrer
+    tabelas grandes; ver LIMIAR_ESTIMATIVA_LINHAS.
+    """
+    if estimativa_pg is None:
+        cursor.execute(f"SELECT COUNT(*) FROM {_q(table)}")
+        return cursor.fetchone()[0]
 
-    cursor.execute(f"SELECT COUNT(*) FROM {_q(table)}")
-    return cursor.fetchone()[0]
+    if estimativa_pg >= LIMIAR_ESTIMATIVA_LINHAS:
+        return estimativa_pg
+    cursor.execute(
+        f"SELECT COUNT(*) FROM (SELECT 1 FROM {_q(table)} LIMIT {LIMIAR_ESTIMATIVA_LINHAS + 1}) AS _contagem"
+    )
+    # Passou do limite: a estimativa estava desatualizada; o limite é o melhor piso conhecido.
+    return min(cursor.fetchone()[0], LIMIAR_ESTIMATIVA_LINHAS)
 
 
 def _safe_float(val: Any) -> float | None:
-    """Tenta converter um valor para float de forma segura."""
+    """Converte para float; None se não der ou se o valor não for finito."""
     if val is None or val == "":
         return None
     try:
-        return float(val)
+        f_val = float(val)
     except (ValueError, TypeError):
         return None
+    # numeric do PostgreSQL vai além do float (ex.: 1e400 vira inf), e NaN
+    # também é um numeric válido; nenhum dos dois serve como estatística.
+    return f_val if math.isfinite(f_val) else None
 
 
 def _safe_round(val: Any, ndigits: int = 4) -> float | None:
@@ -215,58 +268,60 @@ def _safe_round(val: Any, ndigits: int = 4) -> float | None:
 def _compute_numeric_stats(
     cursor: Any, table: str, column: str, total_rows: int, dialeto: str = "sqlite",
 ) -> NumericColumnStats:
-    """Calcula estatísticas numéricas usando SQL aggregates + amostragem para mediana."""
+    """
+    Média, mediana, desvio padrão, mínimo, máximo e taxa de nulos, todos
+    calculados sobre a mesma amostra (ver `_amostra`).
+    """
     safe_col = _q(column)
-    safe_tbl = _q(table)
+    amostra = _amostra(safe_col, _q(table))
 
     cursor.execute(
         f"SELECT AVG({safe_col}), MIN({safe_col}), MAX({safe_col}), "
-        f"COUNT(*) - COUNT({safe_col}) "
-        f"FROM (SELECT {safe_col} FROM {safe_tbl} LIMIT {SAMPLE_LIMIT}) AS _amostra"
+        f"COUNT(*) - COUNT({safe_col}), COUNT({safe_col}) "
+        f"FROM {amostra}"
     )
-    row = cursor.fetchone()
-    avg_val, min_val, max_val, null_count = row
+    avg_val, min_val, max_val, null_count, non_null_count = cursor.fetchone()
 
     sample_size = min(total_rows, SAMPLE_LIMIT)
     null_rate = round(null_count / sample_size, 4) if sample_size > 0 else 0.0
 
-    # std_dev via SQL (population std dev na amostra)
+    # Desvio padrão populacional e mediana são opcionais: se a consulta falhar,
+    # a coluna fica com as estatísticas acima.
     std_dev = None
     avg_float = _safe_float(avg_val)
     if avg_float is not None:
         try:
-            cursor.execute(
-                f"SELECT AVG(({safe_col} - {avg_float}) * ({safe_col} - {avg_float})) "
-                f"FROM (SELECT {safe_col} FROM {safe_tbl} WHERE {safe_col} IS NOT NULL LIMIT {SAMPLE_LIMIT}) AS _amostra"
-            )
-            variance = cursor.fetchone()[0]
-            var_float = _safe_float(variance)
+            with _isolar_erros(cursor, dialeto, "_tti_consulta"):
+                cursor.execute(
+                    f"SELECT AVG(({safe_col} - {avg_float}) * ({safe_col} - {avg_float})) "
+                    f"FROM {amostra} WHERE {safe_col} IS NOT NULL"
+                )
+                var_float = _safe_float(cursor.fetchone()[0])
             if var_float is not None and var_float >= 0:
                 std_dev = round(var_float ** 0.5, 4)
+        except ExploracaoInterrompida:
+            raise
         except Exception:
             std_dev = None
 
-    # mediana aproximada via ORDER BY + LIMIT/OFFSET na amostra
     median_val = None
-    try:
-        cursor.execute(
-            f"SELECT COUNT(*) FROM (SELECT {safe_col} FROM {safe_tbl} WHERE {safe_col} IS NOT NULL LIMIT {SAMPLE_LIMIT}) AS _amostra"
-        )
-        non_null_count = cursor.fetchone()[0]
-        if non_null_count > 0:
-            mid = non_null_count // 2
-            # Ordena só a amostra: a posição `mid` vem da contagem da amostra,
-            # e ordenar a tabela inteira seria caro em tabelas grandes.
-            cursor.execute(
-                f"SELECT {safe_col} FROM "
-                f"(SELECT {safe_col} FROM {safe_tbl} WHERE {safe_col} IS NOT NULL LIMIT {SAMPLE_LIMIT}) AS _amostra "
-                f"ORDER BY {safe_col} LIMIT 1 OFFSET {mid}"
-            )
-            median_row = cursor.fetchone()
-            if median_row:
-                median_val = median_row[0]
-    except Exception:
-        median_val = None
+    if non_null_count:
+        # Com quantidade par de valores, a mediana é a média dos dois centrais.
+        meio = (non_null_count - 1) // 2
+        centrais = 1 if non_null_count % 2 else 2
+        try:
+            with _isolar_erros(cursor, dialeto, "_tti_consulta"):
+                cursor.execute(
+                    f"SELECT {safe_col} FROM {amostra} WHERE {safe_col} IS NOT NULL "
+                    f"ORDER BY {safe_col} LIMIT {centrais} OFFSET {meio}"
+                )
+                valores = [_safe_float(r[0]) for r in cursor.fetchall()]
+            if valores and None not in valores:
+                median_val = sum(valores) / len(valores)
+        except ExploracaoInterrompida:
+            raise
+        except Exception:
+            median_val = None
 
     return NumericColumnStats(
         mean=_safe_round(avg_val, 4),
@@ -276,6 +331,26 @@ def _compute_numeric_stats(
         max=_safe_round(max_val, 4),
         null_rate=null_rate,
     )
+
+
+def _valores_de_exemplo(cursor: Any, table: str, column: str, tamanho_pool: int) -> list[str]:
+    """
+    Até 3 valores distintos da amostra, para o LLM ver formato e grafia.
+
+    O DISTINCT roda só sobre a amostra (numa coluna com poucos valores, um
+    DISTINCT ... LIMIT na tabela inteira a varreria toda atrás de valores que
+    não existem), e o sorteio usa uma semente fixa por coluna, para que a
+    mesma amostra dê sempre os mesmos exemplos.
+    """
+    safe_col = _q(column)
+    cursor.execute(
+        f"SELECT DISTINCT {safe_col} FROM {_amostra(safe_col, _q(table))} "
+        f"WHERE {safe_col} IS NOT NULL LIMIT {tamanho_pool}"
+    )
+    pool = sorted(str(r[0]) for r in cursor.fetchall())
+    if not pool:
+        return []
+    return random.Random(f"{table}.{column}").sample(pool, min(3, len(pool)))
 
 
 def _compute_categorical_stats(
@@ -288,7 +363,7 @@ def _compute_categorical_stats(
     # Top 5 valores mais frequentes
     cursor.execute(
         f"SELECT {safe_col}, COUNT(*) as cnt "
-        f"FROM (SELECT {safe_col} FROM {safe_tbl} LIMIT {SAMPLE_LIMIT}) AS _amostra "
+        f"FROM {_amostra(safe_col, safe_tbl)} "
         f"WHERE {safe_col} IS NOT NULL "
         f"GROUP BY {safe_col} ORDER BY cnt DESC LIMIT 5"
     )
@@ -297,7 +372,7 @@ def _compute_categorical_stats(
     # Cardinalidade
     cursor.execute(
         f"SELECT COUNT(DISTINCT {safe_col}) "
-        f"FROM (SELECT {safe_col} FROM {safe_tbl} LIMIT {SAMPLE_LIMIT}) AS _amostra"
+        f"FROM {_amostra(safe_col, safe_tbl)}"
     )
     cardinality = cursor.fetchone()[0] or 0
 
@@ -305,20 +380,12 @@ def _compute_categorical_stats(
     sample_size = min(total_rows, SAMPLE_LIMIT)
     cursor.execute(
         f"SELECT COUNT(*) - COUNT({safe_col}) "
-        f"FROM (SELECT {safe_col} FROM {safe_tbl} LIMIT {SAMPLE_LIMIT}) AS _amostra"
+        f"FROM {_amostra(safe_col, safe_tbl)}"
     )
     null_count = cursor.fetchone()[0]
     null_rate = round(null_count / sample_size, 4) if sample_size > 0 else 0.0
 
-    # 3 amostras aleatórias (via random offset para evitar viés de posição)
-    sample_values: list[str] = []
-    cursor.execute(
-        f"SELECT DISTINCT {safe_col} FROM {safe_tbl} "
-        f"WHERE {safe_col} IS NOT NULL LIMIT 50"
-    )
-    distinct_pool = [str(r[0]) for r in cursor.fetchall()]
-    if distinct_pool:
-        sample_values = random.sample(distinct_pool, min(3, len(distinct_pool)))
+    sample_values = _valores_de_exemplo(cursor, table, column, tamanho_pool=50)
 
     return CategoricalColumnStats(
         top_values=top_values,
@@ -338,7 +405,7 @@ def _compute_date_stats(
     cursor.execute(
         f"SELECT MIN({safe_col}), MAX({safe_col}), "
         f"COUNT(*) - COUNT({safe_col}) "
-        f"FROM (SELECT {safe_col} FROM {safe_tbl} LIMIT {SAMPLE_LIMIT}) AS _amostra"
+        f"FROM {_amostra(safe_col, safe_tbl)}"
     )
     row = cursor.fetchone()
     min_val, max_val, null_count = row
@@ -347,14 +414,7 @@ def _compute_date_stats(
     null_rate = round(null_count / sample_size, 4) if sample_size > 0 else 0.0
 
     # 3 amostras para inferir formato
-    sample_values: list[str] = []
-    cursor.execute(
-        f"SELECT DISTINCT {safe_col} FROM {safe_tbl} "
-        f"WHERE {safe_col} IS NOT NULL LIMIT 30"
-    )
-    pool = [str(r[0]) for r in cursor.fetchall()]
-    if pool:
-        sample_values = random.sample(pool, min(3, len(pool)))
+    sample_values = _valores_de_exemplo(cursor, table, column, tamanho_pool=30)
 
     return DateColumnStats(
         min=str(min_val) if min_val is not None else None,
@@ -383,7 +443,7 @@ def _compute_boolean_stats(
         f"SUM(CASE WHEN {cond_true} THEN 1 ELSE 0 END), "
         f"SUM(CASE WHEN {cond_false} THEN 1 ELSE 0 END), "
         f"COUNT(*) - COUNT({safe_col}) "
-        f"FROM (SELECT {safe_col} FROM {safe_tbl} LIMIT {SAMPLE_LIMIT}) AS _amostra"
+        f"FROM {_amostra(safe_col, safe_tbl)}"
     )
     row = cursor.fetchone()
     true_count, false_count, null_count = row
@@ -422,7 +482,8 @@ def explore_table(
 
     Args:
         conn: Conexão DB-API (preferencialmente read-only). No PostgreSQL, a
-            transação já deve ter sido preparada com `_preparar_sessao_postgres`.
+            conexão não pode estar em autocommit e a transação já deve ter sido
+            preparada com `_preparar_sessao_postgres` (ver `_explorar_no_banco`).
         table_name: Nome da tabela a explorar.
         columns_to_explore: Lista opcional de colunas a explorar. Se omitida (ou None), explora todas.
         row_count: Contagem de linhas já conhecida (ex: vinda do cache) para evitar SELECT COUNT(*).
@@ -432,11 +493,33 @@ def explore_table(
         TableExplorationResult com stats por coluna.
     """
     cursor = conn.cursor()
+    try:
+        # Um erro na introspecção desfaz só o que esta tabela fez; quem chama segue para a próxima.
+        with _isolar_erros(cursor, dialeto, "_tti_tabela"):
+            return _explorar_colunas(cursor, table_name, columns_to_explore, row_count, dialeto)
+    finally:
+        cursor.close()
+
+
+def _explorar_colunas(
+    cursor: Any,
+    table_name: str,
+    columns_to_explore: list[str] | None,
+    row_count: int | None,
+    dialeto: str,
+) -> TableExplorationResult:
+    schema_pg = estimativa_pg = None
+    if dialeto == "postgresql":
+        schema_pg, estimativa_pg = _resolver_relacao_postgres(cursor, table_name)
 
     # Contagem total de linhas (reaproveita do cache se já conhecida)
-    total_rows = row_count if row_count is not None else _contar_linhas(cursor, table_name, dialeto)
+    total_rows = row_count if row_count is not None else _contar_linhas(cursor, table_name, estimativa_pg)
 
-    columns_info = _listar_colunas(cursor, table_name, dialeto)
+    columns_info = _listar_colunas(cursor, table_name, schema_pg)
+    if not columns_info:
+        # Tabela que não existe (ou sem colunas visíveis): não entra no
+        # resultado, senão o cache a marcaria como explorada.
+        raise LookupError(f"nenhuma coluna encontrada para a tabela {table_name!r}")
 
     result = TableExplorationResult(
         table_name=table_name,
@@ -446,16 +529,15 @@ def explore_table(
     for col_name, col_type_raw in columns_info:
         if columns_to_explore is not None and col_name not in columns_to_explore:
             continue
-        category = _classify_column_type(col_type_raw)
-
-        compute_fn = _STAT_DISPATCHER[category]
+        compute_fn = _STAT_DISPATCHER[_classify_column_type(col_type_raw)]
         try:
-            stats = compute_fn(cursor, table_name, col_name, total_rows, dialeto=dialeto)
+            with _isolar_erros(cursor, dialeto, "_tti_coluna"):
+                stats = compute_fn(cursor, table_name, col_name, total_rows, dialeto=dialeto)
+        except ExploracaoInterrompida:
+            raise
         except Exception as e:
             # Se falhar em uma coluna (tipo sem suporte, timeout...), log e segue para as demais
             print(f"[DATA_EXPLORATION] Erro ao computar stats para {table_name}.{col_name}: {e}")
-            _recuperar_apos_erro(conn, dialeto)
-            cursor = conn.cursor()
             continue
 
         result.columns[col_name] = stats
@@ -472,17 +554,20 @@ def _explorar_tabelas(
 ) -> dict[str, TableExplorationResult]:
     results: dict[str, TableExplorationResult] = {}
     for table_name in table_names:
+        cols_to_explore = None
+        if colunas_para_explorar and table_name in colunas_para_explorar:
+            cols_to_explore = colunas_para_explorar[table_name]
+        row_count = known_row_counts.get(table_name) if known_row_counts else None
         try:
-            cols_to_explore = None
-            if colunas_para_explorar and table_name in colunas_para_explorar:
-                cols_to_explore = colunas_para_explorar[table_name]
-            row_count = known_row_counts.get(table_name) if known_row_counts else None
             results[table_name] = explore_table(
                 conn, table_name, cols_to_explore, row_count=row_count, dialeto=dialeto
             )
+        except ExploracaoInterrompida as e:
+            # Conexão perdida: as tabelas já exploradas continuam valendo.
+            print(f"[DATA_EXPLORATION] Conexão perdida em '{table_name}' ({e}) — parando a exploração.")
+            break
         except Exception as e:
             print(f"[DATA_EXPLORATION] Erro ao explorar tabela '{table_name}': {e}")
-            _recuperar_apos_erro(conn, dialeto)
             continue
     return results
 
@@ -669,18 +754,38 @@ def _explorar_no_banco(
     explorar_parcial: dict[str, list[str]],
     known_row_counts: dict[str, int],
 ) -> dict[str, TableExplorationResult]:
-    """Explora as tabelas numa conexão do pool do chamador e a devolve limpa."""
+    """
+    Explora as tabelas numa conexão do pool do chamador e a devolve como recebeu.
+
+    No PostgreSQL tudo roda numa única transação somente leitura, desfeita
+    ao final. Se a engine do chamador usa autocommit (isolation_level=
+    "AUTOCOMMIT"), ele é desligado durante a exploração, porque sem uma
+    transação o READ ONLY e os SET LOCAL não teriam efeito, e religado antes
+    de devolver a conexão.
+    """
     conn = engine.raw_connection()
+    if dialeto != "postgresql":
+        try:
+            return _explorar_tabelas(conn, alvos, explorar_parcial, known_row_counts, dialeto=dialeto)
+        finally:
+            conn.close()
+
+    driver = conn.driver_connection
+    autocommit_original = bool(getattr(driver, "autocommit", False))
     try:
-        if dialeto == "postgresql":
-            _preparar_sessao_postgres(conn)
+        if autocommit_original:
+            driver.autocommit = False
+        _preparar_sessao_postgres(conn)
         return _explorar_tabelas(conn, alvos, explorar_parcial, known_row_counts, dialeto=dialeto)
     finally:
         try:
-            if dialeto == "postgresql":
-                conn.rollback()  # encerra a transação read-only antes de devolver ao pool
-        finally:
-            conn.close()
+            conn.rollback()  # encerra a transação read-only
+            if autocommit_original:
+                driver.autocommit = True
+        except Exception:
+            # Não dá para garantir o estado da conexão: o pool a descarta.
+            conn.invalidate()
+        conn.close()
 
 
 def nos_nodo_data_exploration(
