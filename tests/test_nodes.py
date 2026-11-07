@@ -13,6 +13,7 @@ import sys
 import time
 import csv
 from pathlib import Path
+from unittest.mock import MagicMock
 import pytest
 from dotenv import load_dotenv
 
@@ -53,6 +54,40 @@ def test_planner_sem_schema(llm):
     }
     resultado = nos_nodo_planejador(estado, llm, hitl=True)
     assert resultado["status"] == "aguardando_schema"
+
+
+@pytest.mark.parametrize(
+    ("erro", "status_esperado"),
+    [
+        ("", "pronto_codificacao"),
+        ("no such column: users.name", "revisando_estrategia"),
+    ],
+)
+def test_planner_sem_hitl_decide_sem_llm(erro, status_esperado):
+    """Sem HITL, decide pelo erro e não chama o LLM nem consome tokens."""
+    from text_to_insight.nodes.planner import nos_nodo_planejador
+
+    mock_llm = MagicMock()
+    mock_llm.invoke.side_effect = AssertionError("LLM não deveria ser chamado")
+
+    resultado = nos_nodo_planejador(
+        {
+            "pergunta_atual": "Quantos usuários existem?",
+            "contexto_schema": "Tabela: users\n- id: INTEGER",
+            "status": "exec_erro" if erro else "schema_obtido",
+            "erro_execucao": erro,
+        },
+        llm=mock_llm,
+        hitl=False,
+    )
+
+    assert resultado["status"] == status_esperado
+    assert resultado["espera_humana"] is False
+    assert resultado["tokens_input"] == 0
+    assert resultado["tokens_output"] == 0
+    assert resultado["tokens_total"] == 0
+    assert resultado["tokens_by_node"] == {}
+    mock_llm.invoke.assert_not_called()
 
 
 # ============================================================
