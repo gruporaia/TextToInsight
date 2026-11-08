@@ -1,4 +1,5 @@
 import hashlib
+from functools import lru_cache
 from .graph_logic import SchemaGraph
 from .rag_logic import RAGRetriever
 from pathlib import Path
@@ -8,6 +9,12 @@ import chromadb
 
 BASE_DIR = Path(__file__).resolve().parent
 
+@lru_cache(maxsize=4)
+def get_chroma_client(path: Path | str | None = None):
+    target = Path(path) if path else (BASE_DIR / "chroma_db")
+    target.mkdir(parents=True, exist_ok=True)
+    return chromadb.PersistentClient(path=str(target))
+
 class SchemaGraphRAG:
     def __init__(self, schema: dict = None):
         #definição do grafo após o get do schema
@@ -15,7 +22,7 @@ class SchemaGraphRAG:
             schema_string = schema.get("contexto_schema", "")
             schema_hash = hashlib.md5(schema_string.encode('utf-8')).hexdigest()
             collection_name = f"schema_{schema_hash}"
-            chroma_client = chromadb.PersistentClient(path=str(BASE_DIR / "chroma_db"))
+            chroma_client = get_chroma_client()
             self.schema_graph = SchemaGraph(schema = schema_string)
             self.rag = RAGRetriever(chroma_client = chroma_client, document_schema = schema, collection_name =collection_name)
 

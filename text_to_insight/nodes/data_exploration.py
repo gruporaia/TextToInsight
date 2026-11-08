@@ -20,6 +20,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from ..retriever.engine import get_chroma_client
 from ..state import EstadoTextToInsight
 from ..token_tracking import build_token_usage_update
 from ..utils import extrair_tokens
@@ -868,8 +869,8 @@ def _exploration_selector_rag(
     context_hash = hashlib.md5(contexto_rag.encode("utf-8")).hexdigest()
     collection_name = f"cols_{context_hash}"
 
-    chroma_dir = Path(__file__).resolve().parent.parent / "retriever" / "chroma_db"
-    chroma_client = chromadb.PersistentClient(path=str(chroma_dir))
+    #chroma_dir = Path(__file__).resolve().parent.parent / "retriever" / "chroma_db"
+    chroma_client = get_chroma_client()
     collection = chroma_client.get_or_create_collection(name=collection_name)
 
     # Indexar se necessário
