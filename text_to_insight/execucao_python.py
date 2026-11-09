@@ -102,6 +102,8 @@ def executar_python_isolado(
                 timeout=timeout_s,
             )
         except subprocess.TimeoutExpired:
+            if usar_docker == True:
+                subprocess.run(["docker", "rm", "-f", nome_container], capture_output=True)
             return _resultado(False, f"Timeout: o script excedeu o limite de {timeout_s}s", "")
 
         stdout = processo.stdout.strip()

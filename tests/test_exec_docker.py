@@ -15,3 +15,10 @@ def test_docker_simples():
     resultado = executar_python_isolado('print("ola")', usar_docker=True)
     assert resultado["ok"] is True
     assert "ola" in resultado["saida_terminal"]
+
+def test_timeout_docker():
+    resultado = executar_python_isolado('while True: pass', timeout_s=3, usar_docker=True)
+    assert resultado["ok"] is False
+    assert "timeout" in resultado["erro_execucao"].lower()
+    assert subprocess.run(["docker", "ps", "-q", "--filter", "name=t2i_"],
+    capture_output=True, text=True).stdout.strip() == ""
