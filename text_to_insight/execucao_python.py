@@ -105,7 +105,8 @@ def executar_python_isolado(
             if usar_docker == True:
                 subprocess.run(["docker", "rm", "-f", nome_container], capture_output=True)
             return _resultado(False, f"Timeout: o script excedeu o limite de {timeout_s}s", "")
-
+        except FileNotFoundError:
+            return _resultado(False, "Docker não encontrado. Instale o Docker ou use o isolamento parcial", "")
         stdout = processo.stdout.strip()
         stderr = processo.stderr.strip()
 
