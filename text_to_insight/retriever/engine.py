@@ -1,4 +1,5 @@
 import hashlib
+from functools import lru_cache
 from .graph_logic import SchemaGraph
 from .rag_logic import RAGRetriever
 from pathlib import Path
