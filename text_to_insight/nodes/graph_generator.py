@@ -85,7 +85,7 @@ plt.close()
 '''
 
 
-def nos_nodo_gerador_grafico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI) -> dict:
+def nos_nodo_gerador_grafico(estado: EstadoTextToInsight, llm: ChatGoogleGenerativeAI, usar_docker: bool = False, docker_runtime: str | None = None) -> dict:
     """
     Nó Gerador de Gráficos: usa o LLM para gerar código matplotlib e o executa.
     """
@@ -130,7 +130,7 @@ def nos_nodo_gerador_grafico(estado: EstadoTextToInsight, llm: ChatGoogleGenerat
     print(script)
     print(f"[GERADOR_GRAFICO] Executando script...")
 
-    resultado = executar_python_isolado(script, arquivos_entrada={NOME_CSV: Path(csv_path)}, arquivos_saida={NOME_GRAFICO: Path(output_path)}, timeout_s=30)
+    resultado = executar_python_isolado(script, arquivos_entrada={NOME_CSV: Path(csv_path)}, arquivos_saida={NOME_GRAFICO: Path(output_path)}, timeout_s=30, usar_docker = usar_docker, docker_runtime = docker_runtime)
 
     token_update = build_token_usage_update("graph_generator", resposta)
 

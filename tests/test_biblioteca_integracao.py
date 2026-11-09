@@ -189,6 +189,22 @@ def test_engine_repassa_cache_dir_para_o_grafo(monkeypatch, tmp_path):
     assert capturado["db_engine"] is db_engine
     assert capturado["cache_dir"] == tmp_path
 
+def test_engine_repassa_opcoes_docker_para_o_grafo(monkeypatch, tmp_path):
+    insight_engine_module = importlib.import_module("text_to_insight.InsightEngine")
+    capturado = {}
+
+    class _GraphEspiao(_FakeGraph):
+        def __init__(self, *args, **kwargs):
+            capturado.update(kwargs)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(insight_engine_module, "Graph", _GraphEspiao)
+    db_engine = _engine_em_memoria()
+    InsightEngine(api_key="k", model="gemini-2.5-flash", db_engine=db_engine, usar_docker = True, docker_runtime = "runsc")
+
+    assert capturado["usar_docker"] is True
+    assert capturado["docker_runtime"] == "runsc"
+
 
 # --------------------------------------------------------------------------- #
 # `run` — caminho feliz

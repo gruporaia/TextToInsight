@@ -40,7 +40,7 @@ def nos_nodo_espera_humana(estado: EstadoTextToInsight):
     return estado
 
 class Graph:
-    def __init__(self, api_key: str, model: str, db_engine, hitl: bool = True, enable_graphs: bool = True, use_cot: bool = True, use_data_exploration: bool = True, use_exploration_selector: str = "off", use_rag: bool = True, enrich_rag: bool = False, model_kwargs: dict | None = None, cache_dir=None):
+    def __init__(self, api_key: str, model: str, db_engine, hitl: bool = True, enable_graphs: bool = True, use_cot: bool = True, use_data_exploration: bool = True, use_exploration_selector: str = "off", use_rag: bool = True, enrich_rag: bool = False, model_kwargs: dict | None = None, cache_dir=None, usar_docker: bool = False, docker_runtime: str | None = None):
         self.llm = get_model(model, api_key, **(model_kwargs or {}))
         self.memory = MemorySaver()
         self.enable_graphs = enable_graphs
@@ -49,6 +49,8 @@ class Graph:
         self.use_exploration_selector = use_exploration_selector
         self.use_rag = use_rag
         self.enrich_rag = enrich_rag
+        self.usar_docker = usar_docker
+        self.docker_runtime = docker_runtime
         # Engine SQLAlchemy injetada pelo chamador (dono do ciclo de vida da
         # conexao). Nunca entra no estado do grafo: e passada via partial
         # diretamente para os nos que precisam dela, então nunca e persistida
@@ -77,7 +79,7 @@ class Graph:
         construtor_grafo.add_node("agente_codigo", partial(nos_nodo_agente_codigo, llm=self.llm, use_cot=self.use_cot, engine=engine))
         construtor_grafo.add_node("sandbox", partial(nos_nodo_sandbox, engine=engine))
         construtor_grafo.add_node("salvar_csv", nos_nodo_salvar_csv)
-        construtor_grafo.add_node("gerador_grafico", partial(nos_nodo_gerador_grafico, llm=self.llm))
+        construtor_grafo.add_node("gerador_grafico", partial(nos_nodo_gerador_grafico, llm=self.llm, usar_docker = self.usar_docker, docker_runtime = self.docker_runtime))
         construtor_grafo.add_node("resposta", partial(nos_nodo_resposta, llm=self.llm))
 
         # 2. ARESTAS FIXAS
