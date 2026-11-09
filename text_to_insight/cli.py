@@ -39,9 +39,50 @@ def _montar_model_kwargs(args: argparse.Namespace) -> dict[str, Any]:
     return {chave: valor for chave, valor in candidatos.items() if valor is not None}
 
 
+def _normalizar_db_url(db_url: str) -> str:
+    """
+    "postgresql://" e "mysql://" sem driver explícito usam os drivers dos
+    extras do pacote (psycopg2 e pymysql). Sem isso, o SQLAlchemy tenta o
+    driver padrão dele (ex: psycopg v3), que pode não estar instalado.
+    """
+    if db_url.startswith("postgresql://"):
+        return "postgresql+psycopg2://" + db_url[len("postgresql://"):]
+    if db_url.startswith("mysql://"):
+        return "mysql+pymysql://" + db_url[len("mysql://"):]
+    return db_url
+
+
+def _criar_engine(db_path: str | None, db_url: str | None, timeout_segundos: int = 15):
+    """
+    Cria a Engine SQLAlchemy que o CLI passa para a InsightEngine.
+
+    A biblioteca não abre conexões; quem abre é o chamador, e aqui o
+    chamador é o CLI. `--db-url` tem prioridade sobre `--db-path`. Um
+    arquivo SQLite é aberto em modo somente leitura.
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.engine import make_url
+
+    if db_url:
+        dialeto = make_url(db_url).get_backend_name()
+        connect_args: dict[str, Any] = {}
+        if dialeto == "postgresql":
+            connect_args = {"connect_timeout": timeout_segundos}
+        elif dialeto == "mysql":
+            connect_args = {"connect_timeout": timeout_segundos, "read_timeout": timeout_segundos}
+        return create_engine(_normalizar_db_url(db_url), connect_args=connect_args)
+
+    if not db_path:
+        raise SystemExit("Informe o banco com --db-path (arquivo SQLite) ou --db-url / DATABASE_URL.")
+    caminho = Path(db_path).expanduser().resolve()
+    if not caminho.exists():
+        raise SystemExit(f"Arquivo de banco não encontrado: {caminho}")
+    return create_engine(f"sqlite:///file:{caminho}?mode=ro&uri=true")
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Executa o pipeline Text-to-Insight para responder perguntas sobre o banco SQLite."
+        description="Executa o pipeline Text-to-Insight para responder perguntas sobre um banco de dados."
     )
     parser.add_argument(
         "--hitl",
@@ -62,28 +103,23 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Ativa/desativa a inferência virtual de chaves estrangeiras. Padrão: off.",
     )
     parser.add_argument(
-        "--use-schemacrawler",
-        choices=["on", "off"],
-        default="off",
-        help="Ativa/desativa o uso do SchemaCrawler. Se off, usa PRAGMA SQLite. Padrão: off.",
-    )
-    parser.add_argument(
         "--thread-id",
         default="sessao_usuario_1",
         help="Identificador da thread para execução e retomada.",
     )
     parser.add_argument(
         "--db-path",
-        default="data/olist_relational.db",
-        help="Caminho para o banco SQLite.",
+        default=None,
+        help="Caminho para um arquivo SQLite (aberto somente leitura).",
     )
     parser.add_argument(
         "--db-url",
         default=os.getenv("DATABASE_URL"),
         help=(
             "URL unica de conexao (ex: postgresql://usuario:senha@host:5432/banco). "
-            "Se informado, o dialeto e detectado automaticamente pelo SQLAlchemy. "
-            "Tambem pode vir da variavel de ambiente DATABASE_URL."
+            "Tem prioridade sobre --db-path. Tambem pode vir da variavel de "
+            "ambiente DATABASE_URL. PostgreSQL e MySQL exigem os extras "
+            "text-to-insight[postgres] / text-to-insight[mysql]."
         ),
     )
     parser.add_argument(
@@ -155,7 +191,6 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
     print(f"[CONFIG] HITL: {'ATIVADO' if hitl_ativado else 'DESATIVADO'}")
     enrich_rag_ativado = args.enrich_rag == "on"
     inferir_fks_ativado = args.infer_fks == "on"
-    use_schemacrawler_ativado = args.use_schemacrawler == "on"
 
     api_key = os.getenv(args.api_key_env)
     if not api_key:
@@ -164,23 +199,16 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
             "Configure a chave da API antes de executar."
         )
 
-    # Se --db-url foi informado, o CLI constrói e é dono da Engine SQLAlchemy
-    # (inclusive do dispose() no final) e a repassa pronta para a InsightEngine,
-    # em vez de deixar a credencial/URL crua viajar dentro do estado do grafo.
-    db_engine = None
-    if args.db_url:
-        from text_to_insight.nodes.code_agent.code_sql import _criar_engine_de_url
-
-        db_engine = _criar_engine_de_url(db_url=args.db_url)
+    # O CLI constrói e é dono da Engine SQLAlchemy (inclusive do dispose() no
+    # final) e a repassa pronta para a InsightEngine.
+    db_engine = _criar_engine(args.db_path, args.db_url)
     engine = InsightEngine(
         api_key=api_key,
         model=args.model,
-        db_path=args.db_path,
         db_engine=db_engine,
         hitl=hitl_ativado,
         enrich_rag=enrich_rag_ativado,
         inferir_fks_virtuais=inferir_fks_ativado,
-        usar_schemacrawler=use_schemacrawler_ativado,
         show_output=False,
         use_cot=cot_ativado,
         use_data_exploration=data_exploration_ativado,
@@ -207,8 +235,7 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         return resultado
     finally:
         # Quem criou a engine (o CLI, neste caso) é quem a descarta.
-        if db_engine is not None:
-            db_engine.dispose()
+        db_engine.dispose()
 
 
 if __name__ == "__main__":

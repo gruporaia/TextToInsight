@@ -255,12 +255,6 @@ def parse_arguments() -> argparse.Namespace:
         help="Column exploration selector mode: off, llm, rag (default: off, accepts legacy 'heuristic')",
     )
     parser.add_argument(
-        "--schemacrawler",
-        choices=["on", "off"],
-        default="off",
-        help="Enable SchemaCrawler for schema introspection (default: off)",
-    )
-    parser.add_argument(
         "--timeout",
         type=int,
         default=30,
@@ -503,6 +497,8 @@ def main() -> None:
 
     # 5. Engine cache by db_id
     engine_cache: dict[str, Any] = {}
+    # One read-only SQLAlchemy Engine per database; the script owns it and disposes it at the end.
+    db_engines: dict[str, Any] = {}
 
     # LLM constructor kwargs (empty -> provider defaults apply)
     model_kwargs: dict[str, Any] = dict(args.model_kwargs)
@@ -530,7 +526,6 @@ def main() -> None:
     print(f"   - Chain of Thought: {args.cot}")
     print(f"   - Data Exploration: {args.data_exploration}")
     print(f"   - Exploration Selector: {args.exploration_selector}")
-    print(f"   - SchemaCrawler: {args.schemacrawler}")
     print(f"   - Infer FKs: {'on' if infer_fks_enabled else 'off'}")
     print(f"   - With Graphs: {'on' if with_graphs_enabled else 'off'}")
     print(f"   - Logging: {args.log}")
@@ -553,7 +548,6 @@ def main() -> None:
         "use_cot": (args.cot == "on"),
         "use_data_exploration": (args.data_exploration == "on"),
         "exploration_selector": args.exploration_selector,
-        "schemacrawler": (args.schemacrawler == "on"),
         "infer_fks": infer_fks_enabled,
         "with_graphs": with_graphs_enabled,
         "db_filter": args.db_filter,
@@ -604,6 +598,8 @@ def main() -> None:
                 agent_time_ms = (time.perf_counter() - agent_start) * 1000
             else:
                 # Import InsightEngine lazily only when executing live runs
+                from sqlalchemy import create_engine
+
                 from text_to_insight import InsightEngine
 
                 # Resolve db path
@@ -615,10 +611,13 @@ def main() -> None:
                 # Cache InsightEngine per database ID
                 if db_id not in engine_cache:
                     try:
+                        db_engines[db_id] = create_engine(
+                            f"sqlite:///file:{db_path_obj.resolve()}?mode=ro&uri=true"
+                        )
                         engine_cache[db_id] = InsightEngine(
                             api_key=api_key,
                             model=args.model,
-                            db_path=str(db_path_obj),
+                            db_engine=db_engines[db_id],
                             hitl=False,
                             show_output=False,
                             enable_graphs=with_graphs_enabled,
@@ -628,7 +627,6 @@ def main() -> None:
                             use_rag=(args.rag == "on"),
                             enrich_rag=(args.enrich_rag == "on"),
                             inferir_fks_virtuais=infer_fks_enabled,
-                            usar_schemacrawler=(args.schemacrawler == "on"),
                             model_kwargs=model_kwargs,
                         )
                     except Exception as e:
@@ -841,6 +839,9 @@ def main() -> None:
             print(f"     ⚠️ Error: {agent_exec_error[:80]}")
 
 
+    for db_engine in db_engines.values():
+        db_engine.dispose()
+
     total_elapsed = time.perf_counter() - start_total_time
 
     # 7. Summary & Reporting
@@ -874,7 +875,6 @@ def main() -> None:
         "use_cot": (args.cot == "on"),
         "use_data_exploration": (args.data_exploration == "on"),
         "exploration_selector": args.exploration_selector,
-        "schemacrawler": (args.schemacrawler == "on"),
         "infer_fks": infer_fks_enabled,
         "with_graphs": with_graphs_enabled,
         "use_evidence": (args.use_evidence == "on"),

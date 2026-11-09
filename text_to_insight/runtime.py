@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any, Callable
 from dotenv import load_dotenv
 load_dotenv()
-import os
 from tabulate import tabulate
 
 from .utils import salvar_metricas_csv
@@ -43,10 +42,7 @@ Retorne apenas:
 
 def construir_estado_inicial(
     pergunta: str,
-    db_path: str,
     inferir_fks_virtuais: bool = False,
-    usar_schemacrawler: bool = False,
-    db_url: str = "",
 ) -> dict[str, Any]:
     """Cria o estado inicial padrão para uma execução do grafo."""
     return {
@@ -60,37 +56,14 @@ def construir_estado_inicial(
         "historico_conversa": [],
         "status": "iniciado",
         "tentativas_loop": 0,
-        "db_path": db_path,
-        "db_url": db_url,
         "espera_humana": False,
         "linhas_resultado_completo": [],
         "historico_tentativas": [],
         "cache_data_exploration": {},
         "ultimo_prompt": "",
-        "schemacrawler_bin": os.getenv("SCHEMACRAWLER_BIN", ""),
         "inferir_fks_virtuais": inferir_fks_virtuais,
-        "usar_schemacrawler": usar_schemacrawler,
         "tokens_by_node": {},
     }
-
-
-_URL_SENHA_REGEX = re.compile(r"(://[^:/@\s]+:)[^@\s]+(@)")
-
-
-def _redigir_credenciais(estado: dict[str, Any]) -> dict[str, Any]:
-    """
-    Devolve uma copia rasa do estado com senha de `db_url`
-    mascaradas. Usar sempre antes de devolver o estado final ao chamador
-    (biblioteca) ou de persisti-lo fora do checkpointer do grafo — o estado
-    bruto guarda a senha em texto puro, e nao deve vazar pra fora do grafo.
-    """
-    estado_seguro = dict(estado)
-
-    db_url = estado_seguro.get("db_url")
-    if db_url:
-        estado_seguro["db_url"] = _URL_SENHA_REGEX.sub(r"\1***\2", db_url)
-
-    return estado_seguro
 
 
 def _montar_saida_resultado_terminal(resultado: dict[str, Any]) -> str:
@@ -423,7 +396,7 @@ def _resultado_aguardando_usuario(snapshot_values: dict[str, Any], thread_id: st
 
 
 def _resultado_hitl_bloqueado(snapshot_values: dict[str, Any]) -> dict[str, Any]:
-    resultado_final = _redigir_credenciais(snapshot_values)
+    resultado_final = dict(snapshot_values)
     resultado_final.update(
         {
             "status": HITL_BLOCKED_STATUS,
@@ -501,7 +474,7 @@ def executar_fluxo(
         snapshot = grafo_app.get_state(config)
 
         if not snapshot.next:
-            resultado_final = _redigir_credenciais(snapshot.values)
+            resultado_final = dict(snapshot.values)
             salvar_metricas_csv(resultado_final, time.perf_counter() - lat_inicio)
             return resultado_final
 

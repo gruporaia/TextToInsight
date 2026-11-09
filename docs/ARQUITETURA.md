@@ -94,7 +94,19 @@ Arquivos:
 - `text_to_insight/cli.py`
 - `main.py`
 
-`main.py` e um wrapper fino da CLI do pacote.
+`main.py` e um wrapper fino da CLI do pacote. O CLI e quem cria a Engine do
+SQLAlchemy (a partir de `--db-path` ou `--db-url`) e a descarta ao final.
+
+### 5) Conexao com o banco e cache
+
+- A `InsightEngine` recebe `db_engine`, uma Engine do SQLAlchemy criada e
+  descartada pelo chamador. A biblioteca nunca abre conexoes por conta propria.
+- `graph.py` injeta a engine nos nos que acessam o banco (schema, data
+  exploration, agente de codigo e executor) via `functools.partial`. Ela nunca
+  entra no estado, entao nada sobre a conexao vai para o checkpoint.
+- `text_to_insight/cache.py` define a pasta de cache (padrao do usuario via
+  `platformdirs`, ou `cache_dir`), com o schema enriquecido indexado pelo hash
+  do schema e o indice do ChromaDB.
 
 ## Nos do grafo
 
@@ -111,8 +123,27 @@ Arquivos:
 
 ### Schema (`text_to_insight/nodes/schema.py`)
 
-- introspeccao SQLite real em modo read-only
-- extrai tabelas, colunas e relacionamentos
+- introspeccao via `sqlalchemy.inspect` na Engine do chamador (qualquer dialeto suportado pelo SQLAlchemy)
+- extrai tabelas, colunas (tipo, PK, NOT NULL, DEFAULT) e chaves estrangeiras
+- opcionalmente infere FKs virtuais pelo nome das colunas (`inferir_fks_virtuais`)
+- com `enrich_rag` ligado, reaproveita o schema enriquecido do cache (`tem_descricao=True`)
+
+### Enriquecimento (`text_to_insight/nodes/enrich_schema.py`, opcional)
+
+- gera descricoes curtas das colunas com o LLM, em lotes, e grava o resultado no cache
+
+### Retriever (`text_to_insight/nodes/retriever.py`)
+
+- para schemas grandes, recupera so as tabelas relevantes (ChromaDB + grafo de FKs) em `contexto_rag_schema`
+
+### Seletor de colunas e Data Exploration (`text_to_insight/nodes/data_exploration.py`)
+
+- o seletor (`off`, `llm` ou `rag`) escolhe quais colunas explorar
+- a exploracao calcula estatisticas por coluna numa amostra de ate 10 mil linhas (SQLite e PostgreSQL) e guarda em `cache_data_exploration` para nao repetir trabalho dentro da mesma pergunta
+- todas as estatisticas de uma coluna (media, mediana, desvio, min, max, nulos) saem da mesma amostra, e os valores de exemplo sao sorteados com semente fixa por coluna
+- no PostgreSQL roda numa transacao somente leitura, com timeout por consulta, desfeita ao final (se a engine usa autocommit, ele e desligado durante a exploracao e religado depois); tabelas sao resolvidas pelo `search_path`, como no no de schema
+- cada tabela, coluna e consulta opcional roda num savepoint: o que falhar e pulado sem derrubar o resto, e se a conexao cair as tabelas ja exploradas sao mantidas
+- tabelas com estimativa do catalogo acima de 100 mil linhas usam a estimativa; abaixo disso (ou sem estimativa) a contagem para em 100 mil
 
 ### Agente de Codigo (`text_to_insight/nodes/code_agent/code_agent.py`)
 
@@ -120,7 +151,7 @@ Arquivos:
 
 ### Executor (`text_to_insight/nodes/sandbox.py`)
 
-- valida SQL e executa via `code_sql.py`
+- valida SQL e executa na Engine do chamador via `executar_sql_via_engine` (`code_sql.py`), com timeout e sessao somente leitura quando o dialeto permite
 - devolve preview + total de linhas completas
 - em caso de erro de sintaxe/execucao, define `status: exec_erro` e captura `erro_execucao`
 
@@ -156,7 +187,8 @@ Campos obrigatorios:
 
 - `pergunta_original`
 - `pergunta_atual`
-- `db_path`
+
+O banco nao faz parte do estado: a Engine e injetada nos nos (ver "Conexao com o banco e cache").
 
 Campos principais do fluxo:
 
@@ -164,14 +196,14 @@ Campos principais do fluxo:
 - `erro_execucao`, `saida_terminal`, `resposta_natural`
 - `status`, `tentativas_loop`, `historico_conversa`, `espera_humana`, `pergunta_ao_usuario`, `historico_tentativas`
 - `caminho_csv_resultado`, `grafico_gerado`, `caminho_grafico`
-- telemetria: `tokens_input`, `tokens_output`, `tokens_total`
+- telemetria: `tokens_input`, `tokens_output`, `tokens_total`, `tokens_by_node`
 
 ## Benchmarks
 
-- BIRD Benchmark: `scripts/test_bird_eval.py` + `src/bird/` (loader, executor read-only, metrics, csv_reporter, BENCHMARK.md)
+- BIRD Benchmark: `scripts/test_bird_eval.py` + `src/bird/` (loader, executor read-only, metrics, csv_reporter); manual em [BENCHMARK_BIRD.md](BENCHMARK_BIRD.md)
 - Spider 1.0: `scripts/test_spider_eval.py`
 - Spider 2.0 Lite: `scripts/test_spider2_eval.py`
-- Componentes Spider: `src/spider/` (loader, executor, metrics, csv_reporter, analise_empirica, BENCHMARK.md)
+- Componentes Spider: `src/spider/` (loader, executor, metrics, csv_reporter, analise_empirica); manual em [BENCHMARK_SPIDER.md](BENCHMARK_SPIDER.md)
 
 
 ## HITL e perguntas

@@ -3,7 +3,7 @@ Grafo compilado do sistema Text-to-Insight.
 
 Fluxo MVP:
 1. Planejador: Decide estratégia (LLM)
-2. Esquema: Obtém contexto do banco (SQLite introspection)
+2. Esquema: Obtém contexto do banco (introspecção via SQLAlchemy)
 3. Agente de Código: Gera SQL (LLM)
 4. Executor: Executa SQL no banco real
 5. Salvar CSV: Exporta resultado para CSV
@@ -40,7 +40,7 @@ def nos_nodo_espera_humana(estado: EstadoTextToInsight):
     return estado
 
 class Graph:
-    def __init__(self, api_key: str, model: str, hitl: bool = True, enable_graphs: bool = True, use_cot: bool = True, use_data_exploration: bool = True, use_exploration_selector: str = "off", use_rag: bool = True, enrich_rag: bool = False, model_kwargs: dict | None = None, db_engine=None):
+    def __init__(self, api_key: str, model: str, db_engine, hitl: bool = True, enable_graphs: bool = True, use_cot: bool = True, use_data_exploration: bool = True, use_exploration_selector: str = "off", use_rag: bool = True, enrich_rag: bool = False, model_kwargs: dict | None = None, cache_dir=None):
         self.llm = get_model(model, api_key, **(model_kwargs or {}))
         self.memory = MemorySaver()
         self.enable_graphs = enable_graphs
@@ -49,11 +49,13 @@ class Graph:
         self.use_exploration_selector = use_exploration_selector
         self.use_rag = use_rag
         self.enrich_rag = enrich_rag
-        # Engine SQLAlchemy opcional, injetada pelo chamador (dono do ciclo de
-        # vida da conexao). Nunca entra no estado do grafo: e passada via
-        # closure/partial diretamente para os nos que precisam dela, então
-        # nunca e persistida pelo checkpointer (MemorySaver).
+        # Engine SQLAlchemy injetada pelo chamador (dono do ciclo de vida da
+        # conexao). Nunca entra no estado do grafo: e passada via partial
+        # diretamente para os nos que precisam dela, então nunca e persistida
+        # pelo checkpointer (MemorySaver).
         self.db_engine = db_engine
+        # Pasta de cache (schema enriquecido e ChromaDB); None = padrão do usuário.
+        self.cache_dir = cache_dir
         self.grafo_text_to_insight = self._compilar_grafo(hitl, enrich_rag)
 
     def _construir_grafo_text_to_insight(self, hitl: bool, enrich_rag: bool) -> StateGraph:
@@ -62,22 +64,18 @@ class Graph:
         """
         construtor_grafo = StateGraph(EstadoTextToInsight)
 
-        # Só passamos `engine=...` para os nós que aceitam esse kwarg quando o
-        # chamador de fato injetou uma Engine SQLAlchemy. Isso mantém
-        # compatibilidade com testes/mocks que substituem esses nós por
-        # funções fake sem esse parâmetro, e evita amarrar todo mundo à nova
-        # API quando ninguém está usando `db_engine`.
-        engine_kwargs = {"engine": self.db_engine} if self.db_engine is not None else {}
+        engine = self.db_engine
+        cache_dir = self.cache_dir
 
         # 1. ADICIONAR NÓS
         construtor_grafo.add_node("planejador", partial(nos_nodo_planejador, llm=self.llm, hitl=hitl))
         construtor_grafo.add_node("espera_humana", nos_nodo_espera_humana)
-        construtor_grafo.add_node("esquema", partial(nos_nodo_esquema, **engine_kwargs))
-        construtor_grafo.add_node("retriever", partial(nos_nodo_retriever, use_rag=self.use_rag))
-        construtor_grafo.add_node("exploration_selector", partial(nos_nodo_exploration_selector, llm=self.llm, exploration_selector_mode=self.use_exploration_selector))
-        construtor_grafo.add_node("data_exploration", partial(nos_nodo_data_exploration, use_data_exploration=self.use_data_exploration, **engine_kwargs))
-        construtor_grafo.add_node("agente_codigo", partial(nos_nodo_agente_codigo, llm=self.llm, use_cot=self.use_cot, **engine_kwargs))
-        construtor_grafo.add_node("sandbox", partial(nos_nodo_sandbox, **engine_kwargs))
+        construtor_grafo.add_node("esquema", partial(nos_nodo_esquema, engine=engine, enrich_rag=enrich_rag, cache_dir=cache_dir))
+        construtor_grafo.add_node("retriever", partial(nos_nodo_retriever, use_rag=self.use_rag, cache_dir=cache_dir))
+        construtor_grafo.add_node("exploration_selector", partial(nos_nodo_exploration_selector, llm=self.llm, exploration_selector_mode=self.use_exploration_selector, cache_dir=cache_dir))
+        construtor_grafo.add_node("data_exploration", partial(nos_nodo_data_exploration, engine=engine, use_data_exploration=self.use_data_exploration))
+        construtor_grafo.add_node("agente_codigo", partial(nos_nodo_agente_codigo, llm=self.llm, use_cot=self.use_cot, engine=engine))
+        construtor_grafo.add_node("sandbox", partial(nos_nodo_sandbox, engine=engine))
         construtor_grafo.add_node("salvar_csv", nos_nodo_salvar_csv)
         construtor_grafo.add_node("gerador_grafico", partial(nos_nodo_gerador_grafico, llm=self.llm))
         construtor_grafo.add_node("resposta", partial(nos_nodo_resposta, llm=self.llm))
@@ -87,7 +85,7 @@ class Graph:
         construtor_grafo.add_edge("espera_humana", "planejador")
         path = 'retriever'
         if enrich_rag:
-            construtor_grafo.add_node("enriquecimento_rag", partial(nos_nodo_enrich, llm=self.llm, **engine_kwargs))
+            construtor_grafo.add_node("enriquecimento_rag", partial(nos_nodo_enrich, llm=self.llm, cache_dir=cache_dir))
             construtor_grafo.add_edge("enriquecimento_rag", "retriever")
             path = 'enriquecimento_rag'
 

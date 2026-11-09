@@ -22,13 +22,13 @@ python -m venv .venv
 source .venv/bin/activate
 
 pip install -r requirements.txt
-pip install -e .
+pip install -e ".[dev,postgres,mysql]"
 ```
 
 - `python -m venv .venv`: cria um ambiente isolado.
 - `source .venv/bin/activate`: ativa esse ambiente.
-- `pip install -r requirements.txt`: instala dependências de runtime e ferramentas de teste usadas no projeto.
-- `pip install -e .`: instala o TextToInsight em modo editável usando os metadados do `pyproject.toml`.
+- `pip install -r requirements.txt`: instala as versões fixadas de runtime e das ferramentas de teste (é o que a CI usa).
+- `pip install -e ".[dev,postgres,mysql]"`: instala o TextToInsight em modo editável, com as ferramentas de desenvolvimento e os drivers de PostgreSQL/MySQL (extras do `pyproject.toml`).
 
 ### Configuração
 
@@ -36,13 +36,43 @@ pip install -e .
 echo "GOOGLE_API_KEY=sua_chave" > .env
 ```
 
-Banco SQLite esperado por padrão: `data/olist_relational.db`.
+Banco de teste (Olist, ~130 MB), usado pela suíte de testes e pelos exemplos abaixo:
+
+```bash
+gh release download dados-teste -R gruporaia/TextToInsight -p olist_relational.db -D data/
+```
 
 ###  Verificação Rápida (Smoke) de import
 
 ```bash
 python -c "from text_to_insight import InsightEngine, Graph; print('OK')"
 ```
+
+## Conexão com o banco
+
+A biblioteca não abre conexões. Quem usa a `InsightEngine` cria uma Engine do
+SQLAlchemy e passa em `db_engine`; a engine é injetada direto nos nós do grafo
+(via `functools.partial` em `graph.py`) e nunca entra no estado, então nada
+sobre a conexão vai para o checkpoint do LangGraph. O dialeto do prompt vem de
+`engine.dialect.name`.
+
+Quem abre conexões são os chamadores: o CLI (`text_to_insight/cli.py`, a partir
+de `--db-path` ou `--db-url`), os scripts de avaliação em `scripts/` e os
+testes (fixture `olist_engine` em `tests/conftest.py`). Todos abrem SQLite em
+modo somente leitura (`sqlite:///file:...?mode=ro&uri=true`).
+
+## Cache em disco
+
+`text_to_insight/cache.py` concentra o que a biblioteca grava entre execuções,
+numa pasta por usuário (via `platformdirs`) ou em `InsightEngine(cache_dir=...)`:
+
+- `schemas/<hash>_enriched.txt`: schema enriquecido pelo LLM (`enrich_rag`),
+  indexado pelo hash do schema. Só é lido quando `enrich_rag` está ligado, para
+  que execuções sem enriquecimento nunca recebam descrições de execuções anteriores;
+- `chroma_db/`: índice do ChromaDB do RAG e do seletor de colunas.
+
+Nos testes, a fixture `cache_dir_isolado` (autouse) redireciona o cache para uma
+pasta temporária.
 
 ## Contrato de execução
 
@@ -71,17 +101,20 @@ Critérios mínimos:
 
 ```bash
 # adaptador local
-python main.py --hitl on "Quantos pedidos existem no banco?"
+python main.py --db-path data/olist_relational.db --hitl on "Quantos pedidos existem no banco?"
 
 # biblioteca instalada (entrypoint)
-text-to-insight --hitl off "Quais categorias vendem mais?"
+text-to-insight --db-path data/olist_relational.db --hitl off "Quais categorias vendem mais?"
 
 # com modelo OpenAI
 set -a && source .env && set +a
-python main.py --hitl off --model openai/gpt-4o-mini --api-key-env OPENAI_API_KEY "Quantos pedidos existem?"
+python main.py --db-path data/olist_relational.db --hitl off --model openai/gpt-4o-mini --api-key-env OPENAI_API_KEY "Quantos pedidos existem?"
 
-# testes locais com bancos do Spider 2 (SQLite sem FK explícita e PRAGMA nativo)
-python main.py --hitl off --infer-fks on --use-schemacrawler off "Qual a soma dos resultados?"
+# bancos sem FK declarada (ex.: Spider 2): inferência de FKs pelo nome das colunas
+python main.py --db-path caminho/do/banco.sqlite --hitl off --infer-fks on "Qual a soma dos resultados?"
+
+# PostgreSQL/MySQL via URL (ou variável DATABASE_URL)
+python main.py --db-url postgresql://usuario:senha@host:5432/banco --hitl off "Quantos clientes existem?"
 ```
 
 O resultado é exibido no terminal em formato tabular sob o bloco `RESULTADO:`, junto com SQL gerada, status de execução e resposta natural.
@@ -105,9 +138,14 @@ text_to_insight/
     runtime.py
     graph.py
     state.py
-    model_selection.py
+    cache.py
+    model_selection/
     nodes/
+    retriever/
     routers/
+scripts/          # avaliação em benchmarks (Spider, Spider 2.0, BIRD)
+src/              # componentes dos benchmarks (loaders, executores, métricas)
+docs/
 tests/
     test_componentes.py
     test_nodes.py
@@ -142,7 +180,15 @@ pytest tests/test_main_engine_integracao.py -v -s
 
 # integracao do pacote como biblioteca (sem chamadas de API, testa HITL e run/resume)
 pytest tests/test_biblioteca_integracao.py -v -s
+
+# data exploration em PostgreSQL (pulados sem TEXT_TO_INSIGHT_TEST_PG_URL)
+TEXT_TO_INSIGHT_TEST_PG_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/postgres \
+pytest tests/test_data_exploration_postgres.py -v
 ```
+
+Os testes de PostgreSQL criam e apagam o schema `tti_testes` no banco da URL;
+use um banco descartável. Na CI, o job `tests-vcr` sobe um serviço `postgres:16`
+e define a variável.
 
 ### Gravação de cassetes VCR (fluxo recomendado)
 
@@ -281,7 +327,7 @@ python scripts/test_bird_eval.py --sample-size 50 --seed 123 --rag off --output 
 ```
 
 Opções úteis: `--db-filter`, `--difficulty` (`simple`, `moderate`, `challenging`), `--stratify`, `--use-evidence` (`on`/`off`), `--dry-run`, `--output`.
-Consulte o manual operacional completo em `src/bird/BENCHMARK.md`.
+Consulte o manual operacional completo em [BENCHMARK_BIRD.md](BENCHMARK_BIRD.md). Spider 1.0 e 2.0: [BENCHMARK_SPIDER.md](BENCHMARK_SPIDER.md).
 
 
 ## CI hibrida
@@ -310,8 +356,10 @@ python -c "from text_to_insight import InsightEngine; print('wheel_ok')"
 `ModuleNotFoundError`:
 ```bash
 pip install -r requirements.txt
-pip install -e .
+pip install -e ".[dev,postgres,mysql]"
 ```
+
+`No module named 'psycopg2'` / `'pymysql'`: instale o extra do banco, ex.: `pip install "text-to-insight[postgres]"`.
 
 `429 RESOURCE_EXHAUSTED`:
 - aguardar reset de quota;
@@ -320,4 +368,4 @@ pip install -e .
 ## Configuração do .env (variáveis de ambiente)
 - `GOOGLE_API_KEY`: chave de API para Google Gemini (se usar modelo Gemini).
 - `OPENAI_API_KEY`: chave de API para OpenAI (se usar modelo OpenAI).
-- `SCHEMACRAWLER_BIN`: caminho para o binário do SchemaCrawler (se usar este recurso).
+- `DATABASE_URL`: URL do banco usada pelo CLI quando `--db-url` não é informado.

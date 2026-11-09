@@ -19,8 +19,8 @@ from text_to_insight.nodes.data_exploration import (
     TableExplorationResult,
     _classify_column_type,
     _extract_table_names_from_rag_context,
+    _explorar_tabelas,
     explore_table,
-    explore_tables,
     format_exploration_for_prompt,
     nos_nodo_data_exploration,
     nos_nodo_exploration_selector,
@@ -90,6 +90,25 @@ def sample_db(tmp_path):
     conn.commit()
     conn.close()
     return str(db_path)
+
+
+@pytest.fixture
+def sample_engine(sample_db):
+    """Engine SQLAlchemy somente leitura do banco de exemplo (como o chamador passaria)."""
+    from tests.conftest import criar_engine_sqlite
+
+    engine = criar_engine_sqlite(sample_db)
+    yield engine
+    engine.dispose()
+
+
+def explore_tables(db_path, table_names, colunas_para_explorar=None, known_row_counts=None):
+    """Explora tabelas de um arquivo SQLite numa conexão read-only própria."""
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    try:
+        return _explorar_tabelas(conn, table_names, colunas_para_explorar, known_row_counts)
+    finally:
+        conn.close()
 
 
 @pytest.fixture
@@ -237,9 +256,52 @@ class TestExploreTables:
         assert "products" in results
         assert "nonexistent" not in results
 
-    def test_nonexistent_db_returns_empty(self):
-        results = explore_tables("/tmp/nonexistent_db.db", ["products"])
+    def test_nonexistent_table_with_known_row_count_skipped(self, sample_db):
+        # Com a contagem vinda do cache não há COUNT(*) para falhar; a tabela
+        # sem colunas não pode entrar no resultado (o cache a marcaria completa).
+        results = explore_tables(sample_db, ["nonexistent"], known_row_counts={"nonexistent": 5})
         assert results == {}
+
+
+# ---------------------------------------------------------------------------
+# Amostragem das estatísticas numéricas
+# ---------------------------------------------------------------------------
+
+
+def _tabela_numerica(valores):
+    conn = sqlite3.connect(":memory:")
+    conn.execute("CREATE TABLE t (v INTEGER)")
+    conn.executemany("INSERT INTO t VALUES (?)", [(v,) for v in valores])
+    return conn
+
+
+class TestAmostraNumerica:
+    def test_mediana_usa_a_amostra_em_tabela_grande(self):
+        # 20 mil valores em ordem decrescente: a amostra são as 10 mil
+        # primeiras linhas (20000..10001), e a mediana tem que estar nela.
+        stats = explore_table(_tabela_numerica(range(20_000, 0, -1)), "t").columns["v"]
+
+        assert (stats.min, stats.max) == (10_001, 20_000)
+        assert stats.median == 15_000.5
+        assert stats.mean == 15_000.5
+
+    def test_nulos_nao_puxam_a_mediana_para_fora_da_amostra(self):
+        # A amostra tem 9999 nulos e um 1; os 1000 vêm depois dela.
+        conn = _tabela_numerica([None] * 9_999 + [1] + [1_000] * 10_000)
+        stats = explore_table(conn, "t").columns["v"]
+
+        assert (stats.mean, stats.min, stats.max, stats.median) == (1, 1, 1, 1)
+        assert stats.std_dev == 0
+        assert stats.null_rate == 0.9999
+
+    @pytest.mark.parametrize("valores, mediana", [([1, 2, 3, 4], 2.5), ([3, 1, 2], 2), ([7], 7)])
+    def test_mediana_par_e_impar(self, valores, mediana):
+        assert explore_table(_tabela_numerica(valores), "t").columns["v"].median == mediana
+
+    def test_valores_de_exemplo_sao_reprodutiveis(self, sample_conn):
+        a = explore_table(sample_conn, "products")
+        b = explore_table(sample_conn, "products")
+        assert a == b
 
 
 # ---------------------------------------------------------------------------
@@ -307,104 +369,57 @@ Tabela: orders
 
 
 class TestNodoDataExploration:
-    def test_returns_exploration_context(self, sample_db):
+    def test_returns_exploration_context(self, sample_engine):
         estado = {
-            "db_path": sample_db,
             "contexto_rag_schema": (
                 "Tabela: products\n- id: INTEGER\n\n"
                 "Tabela: orders\n- id: INTEGER\n"
             ),
         }
-        result = nos_nodo_data_exploration(estado)
+        result = nos_nodo_data_exploration(estado, engine=sample_engine)
         assert "contexto_data_exploration" in result
         assert "products" in result["contexto_data_exploration"]
         assert "orders" in result["contexto_data_exploration"]
 
-    def test_missing_rag_context_returns_empty(self, sample_db):
-        estado = {"db_path": sample_db, "contexto_rag_schema": ""}
-        result = nos_nodo_data_exploration(estado)
+    def test_missing_rag_context_returns_empty(self, sample_engine):
+        estado = {"contexto_rag_schema": ""}
+        result = nos_nodo_data_exploration(estado, engine=sample_engine)
         assert result == {}
 
-    def test_missing_db_path_returns_empty(self):
-        estado = {"db_path": "", "contexto_rag_schema": "Tabela: products\n"}
-        result = nos_nodo_data_exploration(estado)
-        assert result == {}
-
-    def test_exploration_output_fits_prompt(self, sample_db):
+    def test_exploration_output_fits_prompt(self, sample_engine):
         """O output deve ser compacto o suficiente para caber num prompt LLM."""
-        estado = {
-            "db_path": sample_db,
-            "contexto_rag_schema": "Tabela: products\n- id: INTEGER\n",
-        }
-        result = nos_nodo_data_exploration(estado)
+        estado = {"contexto_rag_schema": "Tabela: products\n- id: INTEGER\n"}
+        result = nos_nodo_data_exploration(estado, engine=sample_engine)
         text = result.get("contexto_data_exploration", "")
         # Não deveria exceder ~2000 chars para uma tabela com 7 colunas
         assert len(text) < 5000
 
-    def test_exploration_disabled(self, sample_db):
-        estado = {
-            "db_path": sample_db,
-            "contexto_rag_schema": "Tabela: products\n- id: INTEGER\n",
-        }
-        result = nos_nodo_data_exploration(estado, use_data_exploration=False)
+    def test_exploration_disabled(self, sample_engine):
+        estado = {"contexto_rag_schema": "Tabela: products\n- id: INTEGER\n"}
+        result = nos_nodo_data_exploration(estado, engine=sample_engine, use_data_exploration=False)
         assert result == {"contexto_data_exploration": ""}
 
-    def test_exploration_with_colunas_para_explorar(self, sample_db):
+    def test_exploration_with_colunas_para_explorar(self, sample_engine):
         estado = {
-            "db_path": sample_db,
             "contexto_rag_schema": "Tabela: products\n- id: INTEGER\n",
             "colunas_para_explorar": {
                 "products": ["price"]
             }
         }
-        result = nos_nodo_data_exploration(estado, use_data_exploration=True)
+        result = nos_nodo_data_exploration(estado, engine=sample_engine, use_data_exploration=True)
         text = result.get("contexto_data_exploration", "")
         assert "price" in text
         # Because we only requested "price", name or category should not be in the exploration context
         assert "name" not in text
         assert "category" not in text
 
-    # --- Bancos que não são um arquivo SQLite local: o nó deve PULAR ---------
-    # Cenário real: o usuário roda com --db-url mas --db-path sobra com um .db
-    # antigo que EXISTE. Sem o guard, o nó exploraria esse arquivo sem relação
-    # com o banco de verdade.
+    def test_skips_unsupported_dialect(self):
+        # Só SQLite e PostgreSQL são suportados: com outro dialeto o nó pula sem conectar.
+        from sqlalchemy import create_engine
 
-    @pytest.mark.parametrize(
-        "campos_do_banco",
-        [
-            {"db_url": "mysql+pymysql://u:p@localhost:3306/banco"},
-            {"db_url": "postgresql://u:p@localhost:5432/banco"},
-            {"db_url": "sqlite:///outro_arquivo.db"},
-        ],
-    )
-    def test_skips_when_backend_is_not_local_sqlite(self, sample_db, campos_do_banco):
-        # sample_db é um .db REAL e explorável: se o guard falhasse, o nó o exploraria.
-        estado = {
-            "db_path": sample_db,
-            "contexto_rag_schema": "Tabela: products\n- id: INTEGER\n",
-            **campos_do_banco,
-        }
-        result = nos_nodo_data_exploration(estado)
-        assert result == {}
-
-    def test_skips_for_duckdb_extension(self, sample_db, tmp_path):
-        # .duckdb é detectado pela extensão do db_path; o nó não sabe abrir DuckDB.
-        arquivo = tmp_path / "dados.duckdb"
-        arquivo.write_bytes(Path(sample_db).read_bytes())
-        estado = {
-            "db_path": str(arquivo),
-            "contexto_rag_schema": "Tabela: products\n- id: INTEGER\n",
-        }
-        assert nos_nodo_data_exploration(estado) == {}
-
-    def test_still_explores_local_sqlite_with_empty_db_url(self, sample_db):
-        estado = {
-            "db_path": sample_db,
-            "db_url": "",  # vazio/None não conta como db_url preenchido
-            "contexto_rag_schema": "Tabela: products\n- id: INTEGER\n",
-        }
-        result = nos_nodo_data_exploration(estado)
-        assert "products" in result["contexto_data_exploration"]
+        engine = create_engine("mysql+pymysql://u:p@localhost:3306/banco")
+        estado = {"contexto_rag_schema": "Tabela: products\n- id: INTEGER\n"}
+        assert nos_nodo_data_exploration(estado, engine=engine) == {"contexto_data_exploration": ""}
 
 
 class TestCacheDataExploration:
@@ -417,23 +432,28 @@ class TestCacheDataExploration:
         chamadas = []
         original = de.explore_table
 
-        def _espiao(conn, table_name, columns_to_explore=None, row_count=None):
+        def _espiao(conn, table_name, columns_to_explore=None, row_count=None, dialeto="sqlite"):
             chamadas.append((table_name, columns_to_explore))
-            return original(conn, table_name, columns_to_explore, row_count=row_count)
+            return original(conn, table_name, columns_to_explore, row_count=row_count, dialeto=dialeto)
 
         monkeypatch.setattr(de, "explore_table", _espiao)
         return chamadas
 
     @staticmethod
     def _rodar(sample_db, tabelas, cache=None, colunas=None):
+        from tests.conftest import criar_engine_sqlite
+
         estado = {
-            "db_path": sample_db,
             "contexto_rag_schema": "".join(f"Tabela: {t}\n- id: INTEGER\n" for t in tabelas),
             "cache_data_exploration": cache or {},
         }
         if colunas is not None:
             estado["colunas_para_explorar"] = colunas
-        return nos_nodo_data_exploration(estado)
+        engine = criar_engine_sqlite(sample_db)
+        try:
+            return nos_nodo_data_exploration(estado, engine=engine)
+        finally:
+            engine.dispose()
 
     @pytest.mark.parametrize("colunas", [None, {"products": ["price", "category"]}])
     def test_texto_igual_ao_formatador_sem_cache(self, sample_db, colunas):
@@ -500,7 +520,7 @@ class TestCacheDataExploration:
     def test_estado_inicial_zera_cache(self):
         from text_to_insight.runtime import construir_estado_inicial
 
-        assert construir_estado_inicial("pergunta", db_path="x.db")["cache_data_exploration"] == {}
+        assert construir_estado_inicial("pergunta")["cache_data_exploration"] == {}
 
     def test_nao_reexecuta_count_quando_linhas_no_cache(self, sample_db, monkeypatch):
         import sqlite3
@@ -509,9 +529,9 @@ class TestCacheDataExploration:
         row_counts_recebidos = []
         original = de.explore_table
 
-        def _espiao_row_count(conn, table_name, columns_to_explore=None, row_count=None):
+        def _espiao_row_count(conn, table_name, columns_to_explore=None, row_count=None, dialeto="sqlite"):
             row_counts_recebidos.append((table_name, row_count))
-            return original(conn, table_name, columns_to_explore, row_count=row_count)
+            return original(conn, table_name, columns_to_explore, row_count=row_count, dialeto=dialeto)
 
         monkeypatch.setattr(de, "explore_table", _espiao_row_count)
 
