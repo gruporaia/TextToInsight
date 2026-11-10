@@ -1,7 +1,11 @@
 import shutil, subprocess
 import pytest
+import os
 from pathlib import Path
 from text_to_insight.execucao_python import IMAGEM_DOCKER_PADRAO, executar_python_isolado
+
+RUNTIME_TESTE = os.environ.get("T2I_DOCKER_RUNTIME")
+
 
 def _docker_pronto(imagem=IMAGEM_DOCKER_PADRAO):
     if shutil.which("docker") is None:
@@ -13,12 +17,12 @@ def _docker_pronto(imagem=IMAGEM_DOCKER_PADRAO):
 pytestmark = pytest.mark.skipif(not _docker_pronto(), reason="Docker indisponível")
 
 def test_docker_simples():
-    resultado = executar_python_isolado('print("ola")', usar_docker=True)
+    resultado = executar_python_isolado('print("ola")', usar_docker=True, docker_runtime=RUNTIME_TESTE)
     assert resultado["ok"] is True
     assert "ola" in resultado["saida_terminal"]
 
 def test_timeout_docker():
-    resultado = executar_python_isolado('while True: pass', timeout_s=3, usar_docker=True)
+    resultado = executar_python_isolado('while True: pass', timeout_s=3, usar_docker=True, docker_runtime=RUNTIME_TESTE)
     assert resultado["ok"] is False
     assert "timeout" in resultado["erro_execucao"].lower()
     assert subprocess.run(["docker", "ps", "-q", "--filter", "name=t2i_"],
@@ -26,7 +30,7 @@ def test_timeout_docker():
 
 
 def test_docker_script_errado():
-    resultado = executar_python_isolado('raise ValueError("deu ruim")', usar_docker=True)
+    resultado = executar_python_isolado('raise ValueError("deu ruim")', usar_docker=True, docker_runtime=RUNTIME_TESTE)
     assert resultado["ok"] is False
     assert "deu ruim" in resultado["erro_execucao"]
 
@@ -37,7 +41,7 @@ def test_docker_arquivo_chega_script(tmp_path):
     script = 'print(open("entrada.txt", encoding="utf-8").read())'
 
     resultado = executar_python_isolado(
-        script, arquivos_entrada={"entrada.txt": origem}, usar_docker=True
+        script, arquivos_entrada={"entrada.txt": origem}, usar_docker=True, docker_runtime=RUNTIME_TESTE
     )
 
     assert resultado["ok"] is True, resultado["erro_execucao"]
@@ -49,7 +53,7 @@ def test_docker_copiar_arquivo_de_saida(tmp_path):
     destino = tmp_path / "resultado.txt"
 
     resultado = executar_python_isolado(
-        script, arquivos_saida={"saida.txt": destino}, usar_docker=True
+        script, arquivos_saida={"saida.txt": destino}, usar_docker=True, docker_runtime=RUNTIME_TESTE
     )
 
     assert resultado["ok"] is True, resultado["erro_execucao"]
@@ -70,6 +74,7 @@ def test_docker_grafico_real_gera_png(tmp_path):
         arquivos_saida={gg.NOME_GRAFICO: destino},
         timeout_s=60,
         usar_docker=True,
+        docker_runtime=RUNTIME_TESTE,
     )
 
     assert resultado["ok"] is True, resultado["erro_execucao"]
@@ -81,7 +86,7 @@ def test_docker_sem_rede():
         'socket.create_connection(("1.1.1.1", 80), timeout=3)\n'
         'print("CONECTOU")\n'
     )
-    resultado = executar_python_isolado(script, usar_docker=True)
+    resultado = executar_python_isolado(script, usar_docker=True, docker_runtime=RUNTIME_TESTE)
 
     assert resultado["ok"] is False
     assert "CONECTOU" not in resultado["saida_terminal"]
@@ -92,7 +97,7 @@ def test_docker_nao_le_arquivo_da_maquina(tmp_path):
     segredo.write_text("SENHA=abc123", encoding="utf-8")
     script = f"print(open({str(segredo)!r}).read())"
 
-    resultado = executar_python_isolado(script, usar_docker=True)
+    resultado = executar_python_isolado(script, usar_docker=True, docker_runtime=RUNTIME_TESTE)
 
     assert "abc123" not in resultado["saida_terminal"]
     assert "abc123" not in resultado["erro_execucao"]
@@ -102,19 +107,19 @@ def test_docker_nao_ve_variaveis_do_host(monkeypatch):
     monkeypatch.setenv("CHAVE_FALSA", "segredo123")
     script = 'import os; print(os.environ.get("CHAVE_FALSA"))'
 
-    resultado = executar_python_isolado(script, usar_docker=True)
+    resultado = executar_python_isolado(script, usar_docker=True, docker_runtime=RUNTIME_TESTE)
 
     assert resultado["ok"] is True, resultado["erro_execucao"]
     assert "segredo123" not in resultado["saida_terminal"]
 
 
 def test_docker_nao_escreve_fora_da_pasta():
-    resultado = executar_python_isolado('open("/etc/hack", "w").write("x")', usar_docker=True)
+    resultado = executar_python_isolado('open("/etc/hack", "w").write("x")', usar_docker=True, docker_runtime=RUNTIME_TESTE)
     assert resultado["ok"] is False
 
 
 def test_docker_limite_de_memoria():
-    resultado = executar_python_isolado("x = bytearray(2 * 1024**3)", usar_docker=True)
+    resultado = executar_python_isolado("x = bytearray(2 * 1024**3)", usar_docker=True, docker_runtime=RUNTIME_TESTE)
     assert resultado["ok"] is False
 
 
