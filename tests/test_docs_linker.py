@@ -104,3 +104,136 @@ def test_titulo_com_nome_de_tabela_ou_coluna_vira_descricao_dela():
     assert outros["col:pedidos.cancelado"]["tipo"] == "coluna"
     assert outros["col:pedidos.cancelado"]["tabelas_alvo"] == ["pedidos"]
     assert outros["col:pedidos.cancelado"]["colunas_alvo"] == ["pedidos.cancelado"]
+
+
+SCHEMA_GRAFO_SAMPLE = """=== SCHEMA ===
+
+Tabela: tabela_a
+- id_a: INTEGER (PK, NOT NULL)
+- id_c: INTEGER
+- status_a: TEXT
+  Foreign keys:
+  - id_c -> tabela_c.id_c
+
+Tabela: tabela_c
+- id_c: INTEGER (PK, NOT NULL)
+- id_b: INTEGER
+  Foreign keys:
+  - id_b -> tabela_b.id_b
+
+Tabela: tabela_b
+- id_b: INTEGER (PK, NOT NULL)
+- categoria_b: TEXT
+"""
+
+REGRAS_GRAFO_SAMPLE = """# Regras de Negócio da Loja
+
+1. **Regra A**: Filtra registros ativos usando `tabela_a.status_a` na `tabela_a`.
+2. **Regra B**: Agrupa resultados pela coluna `tabela_b.categoria_b` na `tabela_b`.
+3. **Regra Ponte**: Regra que menciona `tabela_a` e `tabela_b` ao mesmo tempo mas não deve substituir o JOIN físico.
+"""
+
+
+def test_grafo_heterogeneo_expande_regra_para_tabela_e_steiner_apenas_tabelas():
+    """
+    Verifica o fluxo:
+    - Nós heterogêneos ('tabela' e 'regra') e arestas 'aplica_se' / 'foreign_key'.
+    - Quando RAG retorna ['rule:regra_a', 'tabela_a', 'rule:regra_b'], as regras ativam
+      tabela_a e tabela_b, e a Steiner Tree conecta tabela_a -> tabela_c -> tabela_b
+      passando APENAS por tabelas (ignorando 'rule:regra_ponte').
+    """
+    from text_to_insight.retriever.graph_logic import SchemaGraph
+
+    trechos = extrair_trechos(REGRAS_GRAFO_SAMPLE, SCHEMA_GRAFO_SAMPLE, "regras.md")
+    sg = SchemaGraph(schema=SCHEMA_GRAFO_SAMPLE, schema_info=trechos, steiner_apenas_tabelas=True)
+
+    assert sg.graph.nodes["tabela_a"]["tipo"] == "tabela"
+    assert sg.graph.nodes["tabela_b"]["tipo"] == "tabela"
+    assert sg.graph.nodes["tabela_c"]["tipo"] == "tabela"
+    assert sg.graph.nodes["rule:regra_a"]["tipo"] == "regra"
+    assert sg.graph.nodes["rule:regra_b"]["tipo"] == "regra"
+
+    relations, missing = sg._get_relations(["rule:regra_a", "tabela_a", "rule:regra_b"])
+    assert missing == []
+
+    nos_nas_relacoes = {r[0] for r in relations} | {r[1] for r in relations}
+    assert {"rule:regra_a", "tabela_a", "rule:regra_b", "tabela_b", "tabela_c"}.issubset(nos_nas_relacoes)
+    assert "rule:regra_ponte" not in nos_nas_relacoes
+
+
+def test_grafo_heterogeneo_permite_ponte_por_regra_quando_flag_desativada():
+    """Quando steiner_apenas_tabelas=False e não há FK entre duas tabelas, permite ponte via regra."""
+    from text_to_insight.retriever.graph_logic import SchemaGraph
+
+    schema_sem_fk = """=== SCHEMA ===
+
+Tabela: tabela_isolada_1
+- id: INTEGER (PK)
+
+Tabela: tabela_isolada_2
+- id: INTEGER (PK)
+"""
+    regras_ponte = "1. **Conexao Semantica**: Relaciona `tabela_isolada_1` com `tabela_isolada_2`.\n"
+    trechos = extrair_trechos(regras_ponte, schema_sem_fk, "regras.md")
+
+    sg_bloqueado = SchemaGraph(schema=schema_sem_fk, schema_info=trechos, steiner_apenas_tabelas=True)
+    rels_bloq, _ = sg_bloqueado._get_relations(["tabela_isolada_1", "tabela_isolada_2"])
+    assert rels_bloq == []
+
+    sg_liberado = SchemaGraph(schema=schema_sem_fk, schema_info=trechos, steiner_apenas_tabelas=False)
+    rels_lib, _ = sg_liberado._get_relations(["tabela_isolada_1", "tabela_isolada_2"])
+    nos_lib = {r[0] for r in rels_lib} | {r[1] for r in rels_lib}
+    assert "rule:conexao_semantica" in nos_lib
+
+
+def test_schema_graph_rag_posiciona_regra_antes_da_tabela_e_usa_cache(tmp_path):
+    """
+    Verifica que o SchemaGraphRAG + _formatar_contexto_rag:
+    1. Lê arquivos .md de docs_dir;
+    2. Retorna as regras vinculadas posicionadas imediatamente antes das respectivas tabelas;
+    3. Inclui a tabela intermediária (tabela_c) descoberta pela Steiner Tree;
+    4. Reutiliza o cache em disco e em memória tanto para o RAG quanto para o Grafo.
+    """
+    from text_to_insight.retriever.engine import SchemaGraphRAG
+    from text_to_insight.nodes.retriever import _formatar_contexto_rag
+
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "regras.md").write_text(REGRAS_GRAFO_SAMPLE, encoding="utf-8")
+    cache_dir = tmp_path / "cache"
+
+    rag1 = SchemaGraphRAG(
+        schema={"contexto_schema": SCHEMA_GRAFO_SAMPLE},
+        docs_dir=docs_dir,
+        cache_dir=cache_dir,
+    )
+    rag2 = SchemaGraphRAG(
+        schema={"contexto_schema": SCHEMA_GRAFO_SAMPLE},
+        docs_dir=docs_dir,
+        cache_dir=cache_dir,
+    )
+    assert rag1.schema_graph is rag2.schema_graph
+    assert rag1.rag is rag2.rag
+    assert len(list((cache_dir / "rules").glob("*_trechos.json"))) == 1
+
+    retrieved, relations = rag1.retrieve("status_a na tabela_a e categoria_b na tabela_b", top_k=3)
+    ids_retornados = retrieved["ids"][0]
+
+    assert "rule:regra_a" in ids_retornados
+    assert "tabela_a" in ids_retornados
+    assert "rule:regra_b" in ids_retornados
+    assert "tabela_b" in ids_retornados
+    assert "tabela_c" in ids_retornados
+    assert ids_retornados.index("rule:regra_a") < ids_retornados.index("tabela_a")
+    assert ids_retornados.index("rule:regra_b") < ids_retornados.index("tabela_b")
+
+    prompt_formatado = _formatar_contexto_rag(retrieved, relations)
+    pos_regra_a = prompt_formatado.find("Regra (rule:regra_a -> tabela_a):")
+    pos_tabela_a = prompt_formatado.find("Tabela: tabela_a")
+    pos_regra_b = prompt_formatado.find("Regra (rule:regra_b -> tabela_b):")
+    pos_tabela_b = prompt_formatado.find("Tabela: tabela_b")
+
+    assert 0 <= pos_regra_a < pos_tabela_a
+    assert 0 <= pos_regra_b < pos_tabela_b
+    assert "Tabela: tabela_c" in prompt_formatado
+

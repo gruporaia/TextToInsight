@@ -1,5 +1,6 @@
 import re
 import unicodedata
+from pathlib import Path
 
 LIMITE_CARACTERES = 2000
 _TITULO = re.compile(r"^(#{1,6})\s+(.*?)\s*$")
@@ -118,3 +119,48 @@ def extrair_trechos(texto_markdown: str, contexto_schema: str, origem: str = "")
                             "tabelas_alvo": tabelas, "colunas_alvo": colunas, "origem_documento": origem,
                             "precisa_llm": not tabelas})
     return trechos
+
+
+def carregar_documentos_md(docs_dir: str | Path | None) -> list[dict]:
+    """
+    Lê todos os arquivos `.md` dentro de `docs_dir` (ou um arquivo `.md` único)
+    e transforma cada documento em string no formato `{"origem": ..., "contexto_regras": ...}`.
+    """
+    if not docs_dir:
+        return []
+    caminho_base = Path(docs_dir)
+    if not caminho_base.exists():
+        return []
+
+    if caminho_base.is_file():
+        arquivos = [caminho_base] if caminho_base.suffix.lower() == ".md" else []
+        raiz = caminho_base.parent
+    else:
+        arquivos = sorted(
+            arq for arq in caminho_base.rglob("*")
+            if arq.is_file() and arq.suffix.lower() == ".md"
+        )
+        raiz = caminho_base
+
+    documentos: list[dict] = []
+    for arq in arquivos:
+        try:
+            conteudo = arq.read_text(encoding="utf-8").strip()
+        except OSError as e:
+            print(f"[DOCS_LINKER] Não foi possível ler '{arq}': {e}")
+            continue
+        if conteudo:
+            documentos.append(
+                {
+                    "origem": str(arq.relative_to(raiz)),
+                    "contexto_regras": conteudo,
+                }
+            )
+    return documentos
+
+# SUPORTE GERAL:
+#TODO adicionar suporte a pdf, txt e linking automático para descrições de Tabelas em metadados do banco
+
+# ABRANGÊNCIA:
+#TODO adicionar uso de LLM para inferência da ligação de regras e tabelas/colunas alvo
+#TODO adicionar verificação das respostas da LLM cruzando tabelas/colunas com a regra para verificar integridade de resultado

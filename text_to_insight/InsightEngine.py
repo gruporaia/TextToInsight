@@ -29,9 +29,13 @@ class InsightEngine:
         use_data_exploration: bool = True,
         use_exploration_selector: str = "off",
         use_rag: bool = True,
+        use_bm25: bool = True,
+        use_embedding: bool = True,
+        steiner_apenas_tabelas: bool = True,
         enrich_rag: bool = False,
         inferir_fks_virtuais: bool = False,
         model_kwargs: dict | None = None,
+        docs_dir: str | Path | None = None,
         cache_dir: str | Path | None = None,
     ):
         """
@@ -59,6 +63,7 @@ class InsightEngine:
         self._enrich_rag = enrich_rag
         self._inferir_fks_virtuais = inferir_fks_virtuais
         self._db_engine = db_engine
+        self._docs_dir = docs_dir
         self._cache_dir = cache_dir
         self._model = model
         # Parâmetros repassados ao construtor do LLM (ex.: temperature, max_tokens).
@@ -67,6 +72,9 @@ class InsightEngine:
         self._use_data_exploration = use_data_exploration
         self._use_exploration_selector = use_exploration_selector
         self._use_rag = use_rag
+        self._use_bm25 = use_bm25
+        self._use_embedding = use_embedding
+        self._steiner_apenas_tabelas = steiner_apenas_tabelas
         # O grafo compila os nós/roteadores e guarda memória por thread_id.
         self._grafo = Graph(
             api_key=api_key,
@@ -77,9 +85,13 @@ class InsightEngine:
             use_data_exploration=self._use_data_exploration,
             use_exploration_selector=self._use_exploration_selector,
             use_rag=self._use_rag,
+            use_bm25=self._use_bm25,
+            use_embedding=self._use_embedding,
+            steiner_apenas_tabelas=self._steiner_apenas_tabelas,
             enrich_rag=self._enrich_rag,
             model_kwargs=self._model_kwargs,
             db_engine=self._db_engine,
+            docs_dir=self._docs_dir,
             cache_dir=self._cache_dir,
         )
 
@@ -90,6 +102,9 @@ class InsightEngine:
         print(f"[CONFIG] DATA_EXPLORATION: {'ATIVADO' if self._use_data_exploration else 'DESATIVADO'}")
         print(f"[CONFIG] EXPLORATION_SELECTOR: {self._use_exploration_selector.upper()}")
         print(f"[CONFIG] RAG: {'ATIVADO' if self._use_rag else 'DESATIVADO'}")
+        print(f"[CONFIG] RAG BM25: {'ATIVADO' if self._use_bm25 else 'DESATIVADO'}")
+        print(f"[CONFIG] RAG EMBEDDING: {'ATIVADO' if self._use_embedding else 'DESATIVADO'}")
+        print(f"[CONFIG] STEINER APENAS TABELAS: {'ATIVADO' if self._steiner_apenas_tabelas else 'DESATIVADO'}")
         print(f"[CONFIG] ENRICH-RAG: {'ATIVADO' if self._enrich_rag else 'DESATIVADO'}")
         print(f"[CONFIG] INFERIR-FKS-VIRTUAIS: {'ATIVADO' if self._inferir_fks_virtuais else 'DESATIVADO'}")
         print(f"[CONFIG] BANCO: {self._db_engine.dialect.name}")

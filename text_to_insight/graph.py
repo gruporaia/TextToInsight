@@ -40,7 +40,7 @@ def nos_nodo_espera_humana(estado: EstadoTextToInsight):
     return estado
 
 class Graph:
-    def __init__(self, api_key: str, model: str, db_engine, hitl: bool = True, enable_graphs: bool = True, use_cot: bool = True, use_data_exploration: bool = True, use_exploration_selector: str = "off", use_rag: bool = True, enrich_rag: bool = False, model_kwargs: dict | None = None, cache_dir=None):
+    def __init__(self, api_key: str, model: str, db_engine, hitl: bool = True, enable_graphs: bool = True, use_cot: bool = True, use_data_exploration: bool = True, use_exploration_selector: str = "off", use_rag: bool = True, use_bm25: bool = True, use_embedding: bool = True, steiner_apenas_tabelas: bool = True, enrich_rag: bool = False, model_kwargs: dict | None = None, docs_dir=None, cache_dir=None):
         self.llm = get_model(model, api_key, **(model_kwargs or {}))
         self.memory = MemorySaver()
         self.enable_graphs = enable_graphs
@@ -48,12 +48,16 @@ class Graph:
         self.use_data_exploration = use_data_exploration
         self.use_exploration_selector = use_exploration_selector
         self.use_rag = use_rag
+        self.use_bm25 = use_bm25
+        self.use_embedding = use_embedding
+        self.steiner_apenas_tabelas = steiner_apenas_tabelas
         self.enrich_rag = enrich_rag
         # Engine SQLAlchemy injetada pelo chamador (dono do ciclo de vida da
         # conexao). Nunca entra no estado do grafo: e passada via partial
         # diretamente para os nos que precisam dela, então nunca e persistida
         # pelo checkpointer (MemorySaver).
         self.db_engine = db_engine
+        self.docs_dir = docs_dir
         # Pasta de cache (schema enriquecido e ChromaDB); None = padrão do usuário.
         self.cache_dir = cache_dir
         self.grafo_text_to_insight = self._compilar_grafo(hitl, enrich_rag)
@@ -71,7 +75,7 @@ class Graph:
         construtor_grafo.add_node("planejador", partial(nos_nodo_planejador, llm=self.llm, hitl=hitl))
         construtor_grafo.add_node("espera_humana", nos_nodo_espera_humana)
         construtor_grafo.add_node("esquema", partial(nos_nodo_esquema, engine=engine, enrich_rag=enrich_rag, cache_dir=cache_dir))
-        construtor_grafo.add_node("retriever", partial(nos_nodo_retriever, use_rag=self.use_rag, cache_dir=cache_dir))
+        construtor_grafo.add_node("retriever", partial(nos_nodo_retriever, use_rag=self.use_rag, use_bm25=self.use_bm25, use_embedding=self.use_embedding, steiner_apenas_tabelas=self.steiner_apenas_tabelas, docs_dir=self.docs_dir, cache_dir=cache_dir))
         construtor_grafo.add_node("exploration_selector", partial(nos_nodo_exploration_selector, llm=self.llm, exploration_selector_mode=self.use_exploration_selector, cache_dir=cache_dir))
         construtor_grafo.add_node("data_exploration", partial(nos_nodo_data_exploration, engine=engine, use_data_exploration=self.use_data_exploration))
         construtor_grafo.add_node("agente_codigo", partial(nos_nodo_agente_codigo, llm=self.llm, use_cot=self.use_cot, engine=engine))
