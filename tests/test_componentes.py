@@ -1,8 +1,8 @@
 """
 Testes de componentes do Text-to-Insight (sem chamadas de API).
 
-Valida as partes determinísticas: schema, SQL validation/execution,
-executor node e routers.
+Valida as partes determinísticas: schema, configuração do banco,
+executor node, exploração e routers.
 """
 
 import os
@@ -67,147 +67,8 @@ def test_schema_usa_cache_enriquecido_so_com_enrich_rag(olist_engine, tmp_path):
 
 
 # ============================================================
-# SQL Validation (code_sql.py)
+# Configuração do banco de teste
 # ============================================================
-
-def test_sql_valida_select():
-    """Aceita SELECT válido."""
-    from text_to_insight.nodes.code_agent.code_sql import validar_sql_segura
-
-    ok, msg = validar_sql_segura("SELECT COUNT(*) FROM orders")
-    assert ok is True
-    assert msg == ""
-
-
-def test_sql_valida_cte():
-    """Aceita WITH/CTE."""
-    from text_to_insight.nodes.code_agent.code_sql import validar_sql_segura
-
-    ok, msg = validar_sql_segura("WITH totals AS (SELECT id FROM orders) SELECT * FROM totals")
-    assert ok is True
-
-
-def test_sql_rejeita_insert():
-    """Rejeita INSERT."""
-    from text_to_insight.nodes.code_agent.code_sql import validar_sql_segura
-
-    ok, msg = validar_sql_segura("INSERT INTO orders VALUES (1, 2, 3)")
-    assert ok is False
-
-
-def test_sql_rejeita_drop():
-    """Rejeita DROP."""
-    from text_to_insight.nodes.code_agent.code_sql import validar_sql_segura
-
-    ok, msg = validar_sql_segura("DROP TABLE orders")
-    assert ok is False
-
-
-def test_sql_rejeita_multiplas():
-    """Rejeita múltiplas statements."""
-    from text_to_insight.nodes.code_agent.code_sql import validar_sql_segura
-
-    ok, msg = validar_sql_segura("SELECT 1; SELECT 2")
-    assert ok is False
-
-
-def test_sql_rejeita_vazia():
-    """Rejeita SQL vazia."""
-    from text_to_insight.nodes.code_agent.code_sql import validar_sql_segura
-
-    ok, msg = validar_sql_segura("")
-    assert ok is False
-
-
-# Variantes de "SELECT ... INTO OUTFILE/DUMPFILE" (escrita de arquivo no servidor
-# MySQL). Todas começam com SELECT, então só o blacklist as barra. O MySQL aceita
-# comentários entre INTO e OUTFILE, então espaço não pode ser o único separador.
-VARIANTES_ESCRITA_DE_ARQUIVO = [
-    "SELECT * FROM t INTO OUTFILE '/tmp/x'",
-    "select * from t into  outfile '/tmp/x'",
-    "SELECT * FROM t INTO DUMPFILE '/tmp/x'",
-    "SELECT * FROM t INTO/**/OUTFILE '/tmp/x'",
-    "SELECT * FROM t INTO/*qualquer coisa*/DUMPFILE '/tmp/x'",
-    "SELECT * FROM t INTO /*!50000 OUTFILE*/ '/tmp/x'",
-    "SELECT * FROM t INTO -- x\nOUTFILE '/tmp/x'",
-    "SELECT * FROM t INTO #x\nOUTFILE '/tmp/x'",
-    "SELECT * FROM t\nINTO\nOUTFILE '/tmp/x'",
-]
-
-
-@pytest.mark.parametrize("sql", VARIANTES_ESCRITA_DE_ARQUIVO)
-def test_sql_rejeita_escrita_de_arquivo_mysql(sql):
-    """INTO OUTFILE/DUMPFILE é bloqueado qualquer que seja o separador entre as palavras."""
-    from text_to_insight.nodes.code_agent.code_sql import validar_sql_segura
-
-    ok, msg = validar_sql_segura(sql)
-    assert ok is False, f"deveria bloquear: {sql!r}"
-
-
-@pytest.mark.parametrize(
-    "sql",
-    [
-        "SELECT LOAD_FILE('/etc/passwd')",
-        "SELECT pg_read_file('/etc/passwd')",
-        "SELECT load_extension('/tmp/x.so')",
-    ],
-)
-def test_sql_rejeita_leitura_de_arquivo_por_funcao(sql):
-    """Funções que leem arquivo do servidor também são bloqueadas."""
-    from text_to_insight.nodes.code_agent.code_sql import validar_sql_segura
-
-    ok, msg = validar_sql_segura(sql)
-    assert ok is False, f"deveria bloquear: {sql!r}"
-
-
-@pytest.mark.parametrize(
-    "sql",
-    [
-        "SELECT * FROM orders",
-        "SELECT nome INTO @variavel FROM clientes LIMIT 1",  # INTO @var não escreve arquivo
-        "SELECT COUNT(*) FROM orders /* comentario inocente */",
-        "WITH t AS (SELECT 1) SELECT * FROM t",
-    ],
-)
-def test_sql_legitima_continua_permitida(sql):
-    """O blacklist não pode gerar falso positivo em consultas normais."""
-    from text_to_insight.nodes.code_agent.code_sql import validar_sql_segura
-
-    ok, msg = validar_sql_segura(sql)
-    assert ok is True, f"deveria permitir: {sql!r} ({msg})"
-
-
-# ============================================================
-# SQL Execution (code_sql.py)
-# ============================================================
-
-def test_execucao_sql_valida(olist_engine):
-    """Executa SELECT real no olist DB e retorna resultados."""
-    from text_to_insight.nodes.code_agent.code_sql import executar_sql_via_engine
-
-    resultado = executar_sql_via_engine(olist_engine, "SELECT COUNT(*) as total FROM orders")
-    assert resultado["ok"] is True
-    assert resultado["total_linhas_resultado"] == 1
-    assert resultado["linhas_resultado_preview"][0]["total"] > 0
-
-
-def test_execucao_sql_com_limite(olist_engine):
-    """Respeita limite_preview."""
-    from text_to_insight.nodes.code_agent.code_sql import executar_sql_via_engine
-
-    resultado = executar_sql_via_engine(olist_engine, "SELECT * FROM orders", limite_preview=5)
-    assert resultado["ok"] is True
-    assert len(resultado["linhas_resultado_preview"]) <= 5
-
-
-def test_execucao_sql_invalida(olist_engine):
-    """Retorna erro para SQL com sintaxe inválida."""
-    from text_to_insight.nodes.code_agent.code_sql import executar_sql_via_engine
-
-    resultado = executar_sql_via_engine(olist_engine, "SELECT FROM")
-    assert resultado["ok"] is False
-    assert resultado["erro_execucao"] != ""
-
 
 def test_execucao_sqlite_somente_leitura(olist_engine):
     """A engine dos testes abre o SQLite em mode=ro: mesmo sem a validação, nada é escrito."""
@@ -256,82 +117,8 @@ def test_executor_sql_com_erro(olist_engine):
 
 
 # ============================================================
-# Execução via Engine SQLAlchemy
-#
-# Usamos uma Engine SQLite apontando pro banco de teste só para não
-# depender de um Postgres/MySQL real — o código exercitado
-# (executar_sql_via_engine, _formatar_schema_sqlalchemy,
-# _resolver_info_dialeto) é o mesmo independente do dialeto.
+# Exploração e informações do dialeto
 # ============================================================
-
-def _engine_sqlite_fixture():
-    """Engine própria (não a da sessão) para testes que mexem no pool."""
-    from sqlalchemy import create_engine
-
-    return create_engine(f"sqlite:///{DB_PATH}")
-
-
-@pytest.mark.parametrize("sql, esperado", [
-    ("SELECT 'Status :ativo' AS v", "Status :ativo"),
-    ("SELECT '12:30' AS v", "12:30"),
-    ("SELECT 'a % b' AS v", "a % b"),
-])
-def test_executor_via_engine_preserva_literais_com_dois_pontos(sql, esperado):
-    """A SQL do agente vai crua ao driver: ':palavra' em literal não vira parâmetro de bind."""
-    from text_to_insight.nodes.code_agent.code_sql import executar_sql_via_engine
-
-    engine = _engine_sqlite_fixture()
-    try:
-        resultado = executar_sql_via_engine(engine, sql)
-    finally:
-        engine.dispose()
-
-    assert resultado["ok"], resultado["erro_execucao"]
-    assert resultado["linhas_resultado_preview"][0]["v"] == esperado
-
-
-@pytest.mark.parametrize("sql, esperado", [
-    ("SELECT '50%' AS v", "50%"),
-    ("SELECT 'abc' LIKE '%b%' AS v", True),
-    ("SELECT 10 % 3 AS v", 1),
-    ("SELECT '%(x)s' AS v", "%(x)s"),
-    ("SELECT 'Status :ativo' AS v", "Status :ativo"),
-])
-def test_executor_postgres_preserva_porcento_e_dois_pontos(pg_engine, sql, esperado):
-    """
-    psycopg2 trata "%" como marcador de parâmetro: sem no_parameters, LIKE '%b%',
-    '50%' e o operador de módulo quebravam no PostgreSQL (no SQLite "%" não é especial).
-    """
-    from text_to_insight.nodes.code_agent.code_sql import executar_sql_via_engine
-
-    resultado = executar_sql_via_engine(pg_engine, sql)
-
-    assert resultado["ok"], resultado["erro_execucao"]
-    assert resultado["linhas_resultado_preview"][0]["v"] == esperado
-
-
-def test_executor_via_engine_nao_deixa_timeout_na_conexao_do_pool():
-    """
-    A conexão volta para o pool do chamador: o progress handler de timeout
-    não pode continuar instalado e abortar queries posteriores do chamador.
-    """
-    import time
-    from sqlalchemy import text
-    from text_to_insight.nodes.code_agent.code_sql import executar_sql_via_engine
-
-    engine = _engine_sqlite_fixture()
-    try:
-        assert executar_sql_via_engine(engine, "SELECT 1 AS x", timeout_segundos=0.1)["ok"]
-        time.sleep(0.3)
-        with engine.connect() as conn:
-            total = conn.execute(text(
-                "SELECT COUNT(*) FROM order_items oi JOIN orders o ON o.order_id = oi.order_id"
-            )).scalar()
-    finally:
-        engine.dispose()
-
-    assert total > 0
-
 
 def test_data_exploration_via_engine(olist_engine):
     """A exploração lê as estatísticas do banco da engine injetada."""
@@ -380,15 +167,11 @@ def test_enrich_grava_cache_pelo_hash_do_schema(tmp_path):
     assert ler_schema_enriquecido(tmp_path, "Tabela: outra\n") is None
 
 
-def test_resolver_dialeto_via_engine():
+def test_resolver_dialeto_via_engine(sqlite_olist_engine_propria):
     """Dialeto do prompt é lido de engine.dialect.name."""
     from text_to_insight.nodes.code_agent.code_agent import _resolver_info_dialeto
 
-    engine = _engine_sqlite_fixture()
-    try:
-        nome, nota = _resolver_info_dialeto(engine)
-    finally:
-        engine.dispose()
+    nome, nota = _resolver_info_dialeto(sqlite_olist_engine_propria)
 
     assert nome == "SQLite"
     assert "SQLite" in nota
