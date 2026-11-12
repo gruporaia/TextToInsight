@@ -47,11 +47,13 @@ def _formatar_contexto_rag(retrieved, relations=None) -> str:
             )
 
     blocos: list[str] = []
+    regras_emitidas: set[str] = set()
 
     for r_info in regras_sem_tabela:
         r_doc = (r_info.get("documento") or "").strip()
         r_id = r_info.get("id", "regra")
-        if r_doc:
+        if r_doc and r_id not in regras_emitidas:
+            regras_emitidas.add(r_id)
             blocos.append(f"Regra ({r_id}): {r_doc}")
 
     for tabela in tabelas_ordenadas:
@@ -60,11 +62,13 @@ def _formatar_contexto_rag(retrieved, relations=None) -> str:
             continue
         regras_da_tabela = regras_por_tabela.get(tabela) or []
         if regras_da_tabela:
-            linhas_regras = [
-                f"Regra ({r['id']} -> {tabela}): {r['documento'].strip()}"
-                for r in regras_da_tabela
-                if r.get("documento")
-            ]
+            linhas_regras = []
+            for r in regras_da_tabela:
+                r_id = r.get("id", "regra")
+                r_doc = (r.get("documento") or "").strip()
+                if r_doc and r_id not in regras_emitidas:
+                    regras_emitidas.add(r_id)
+                    linhas_regras.append(f"Regra ({r_id} -> {tabela}): {r_doc}")
             if linhas_regras:
                 blocos.append("\n".join(linhas_regras) + "\n" + doc_tabela)
             else:

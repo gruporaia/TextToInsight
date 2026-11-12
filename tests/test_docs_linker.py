@@ -237,3 +237,38 @@ def test_schema_graph_rag_posiciona_regra_antes_da_tabela_e_usa_cache(tmp_path):
     assert 0 <= pos_regra_b < pos_tabela_b
     assert "Tabela: tabela_c" in prompt_formatado
 
+
+def test_schema_graph_rag_recupera_regras_das_tabelas_retornadas(tmp_path):
+    """
+    Verifica a expansão Tabela -> Regra:
+    Quando uma tabela é recuperada (mesmo por uma consulta que só cita uma coluna
+    do DDL sem termos da regra), todas as regras conectadas a ela no grafo são
+    recuperadas e associadas à tabela.
+    """
+    from text_to_insight.retriever.engine import SchemaGraphRAG
+
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "regras.md").write_text(
+        "1. **Filtro Obrigatorio**: Ignore registros legados na `tabela_c`.\n",
+        encoding="utf-8",
+    )
+    cache_dir = tmp_path / "cache"
+
+    rag = SchemaGraphRAG(
+        schema={"contexto_schema": SCHEMA_GRAFO_SAMPLE},
+        docs_dir=docs_dir,
+        cache_dir=cache_dir,
+        use_bm25=True,
+        use_embedding=False,
+    )
+
+    retrieved, _ = rag.retrieve("id_a id_b", top_k=2)
+    assert "tabela_c" in retrieved["tabelas_ordenadas"]
+    assert "rule:filtro_obrigatorio" in retrieved["ids"][0]
+    assert any(
+        r["id"] == "rule:filtro_obrigatorio"
+        for r in retrieved["regras_por_tabela"].get("tabela_c", [])
+    )
+
+

@@ -6,6 +6,7 @@ from .rag_logic import RAGRetriever
 from pathlib import Path
 import chromadb
 
+import json
 try:
     from .docs_linker import carregar_documentos_md, extrair_trechos
 except ImportError:
@@ -16,6 +17,8 @@ from ..cache import (
     resolver_cache_dir,
     salvar_trechos_regras,
 )
+
+_default_extrair_trechos = extrair_trechos
 #aqui vamos ter a integração da lógica do grafo com a lógica do RAG
 #a ideia é que o RAG seja responsável por recuperar as informações relevantes para responder às perguntas, usando o grafo como guia para navegar pelas relações entre os dados
 
@@ -50,12 +53,16 @@ def _get_cached_schema_graph(
     schema_string: str,
     rules_string: str,
     resolved_cache_dir_str: str,
+    trechos_override: tuple[str, ...] | None = None,
 ) -> SchemaGraph:
-    trechos = list(
-        _get_cached_trechos(
-            schema_hash, rules_string, schema_string, resolved_cache_dir_str
+    if trechos_override is not None:
+        trechos = [json.loads(t) for t in trechos_override]
+    else:
+        trechos = list(
+            _get_cached_trechos(
+                schema_hash, rules_string, schema_string, resolved_cache_dir_str
+            )
         )
-    )
     return SchemaGraph(
         schema=schema_string,
         schema_info=trechos,
@@ -67,12 +74,18 @@ def _get_cached_rag_retriever(
     schema_string: str,
     rules_string: str,
     resolved_cache_dir_str: str,
+    use_bm25: bool = True,
+    use_embedding: bool = True,
+    trechos_override: tuple[str, ...] | None = None,
 ) -> RAGRetriever:
-    trechos = list(
-        _get_cached_trechos(
-            schema_hash, rules_string, schema_string, resolved_cache_dir_str
+    if trechos_override is not None:
+        trechos = [json.loads(t) for t in trechos_override]
+    else:
+        trechos = list(
+            _get_cached_trechos(
+                schema_hash, rules_string, schema_string, resolved_cache_dir_str
+            )
         )
-    )
     chroma_client = get_chroma_client(resolved_cache_dir_str)
     collection_name = f"schema_{schema_hash}"
     return RAGRetriever(
@@ -80,6 +93,8 @@ def _get_cached_rag_retriever(
         document_schema={"contexto_schema": schema_string},
         schema_info=trechos,
         collection_name=collection_name,
+        use_bm25=use_bm25,
+        use_embedding=use_embedding,
     )
 
 class SchemaGraphRAG:
@@ -113,20 +128,36 @@ class SchemaGraphRAG:
             )
             schema_string = schema.get("contexto_schema", "")
 
-            schema_hash = hashlib.md5(f"{schema_string}\n---RULES---\n{rules_string}".encode('utf-8')).hexdigest()
             resolved_cache_dir_str = str(resolver_cache_dir(cache_dir).resolve())
+            trechos_override = None
+            if extrair_trechos is not _default_extrair_trechos and rules_string:
+                extraidos = extrair_trechos(rules_string, schema_string)
+                trechos_override = tuple(
+                    json.dumps(t, ensure_ascii=False, sort_keys=True) for t in extraidos
+                )
+                schema_hash = hashlib.md5(
+                    f"{schema_string}\n---CUSTOM_TRECHOS---\n{''.join(trechos_override)}".encode("utf-8")
+                ).hexdigest()
+            else:
+                schema_hash = hashlib.md5(
+                    f"{schema_string}\n---RULES---\n{rules_string}".encode("utf-8")
+                ).hexdigest()
 
             self.schema_graph = _get_cached_schema_graph(
                 schema_hash=schema_hash,
                 schema_string=schema_string,
                 rules_string=rules_string,
                 resolved_cache_dir_str=resolved_cache_dir_str,
+                trechos_override=trechos_override,
             )
             self.rag = _get_cached_rag_retriever(
                 schema_hash=schema_hash,
                 schema_string=schema_string,
                 rules_string=rules_string,
                 resolved_cache_dir_str=resolved_cache_dir_str,
+                use_bm25=use_bm25,
+                use_embedding=use_embedding,
+                trechos_override=trechos_override,
             )
 
     def retrieve(self, query: str, top_k: int = 5):
@@ -211,7 +242,23 @@ class SchemaGraphRAG:
             elif _eh_tabela(node_id) and node_id in docs_por_id and node_id not in tabelas_ordenadas:
                 tabelas_ordenadas.append(node_id)
 
-        # 2. Matching Regra -> Tabela: cada regra é associada às tabelas às quais se refere
+        # 2. Expansão Tabela -> Regra: recupera todas as regras associadas às tabelas retornadas
+        relacoes_set = set(relations)
+        for rule_id in self.schema_graph.get_rules_for_tables(tabelas_ordenadas):
+            if rule_id not in docs_por_id:
+                schema_txt = self.schema_graph.get_schema(rule_id)
+                if schema_txt:
+                    docs_por_id[rule_id] = schema_txt
+            if rule_id in docs_por_id and rule_id not in regras_ativas:
+                regras_ativas.append(rule_id)
+            for t_alvo in _alvos_da_regra(rule_id):
+                if t_alvo in tabelas_ordenadas:
+                    rel_item = (rule_id, t_alvo, "aplica_se", t_alvo)
+                    if rel_item not in relacoes_set:
+                        relacoes_set.add(rel_item)
+                        relations.append(rel_item)
+
+        # 3. Matching Regra -> Tabela: cada regra é associada às tabelas às quais se refere
         regras_por_tabela: dict[str, list[dict]] = {t: [] for t in tabelas_ordenadas}
         regras_sem_tabela: list[dict] = []
 

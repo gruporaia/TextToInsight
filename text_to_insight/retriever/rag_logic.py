@@ -1,27 +1,90 @@
+import os
 import re
 import math
 import hashlib
 import unicodedata
 from collections import Counter
+from functools import lru_cache
 from pathlib import Path
 import chromadb
+import nltk
+from nltk.corpus import stopwords
+from nltk.stem import RSLPStemmer
+from ..cache import resolver_cache_dir
 from .RAG_example import SCHEMA
 #o RAG em si vai ser configurado aqui
 
 BASE_DIR = Path(__file__).resolve().parent
 
 
-def _tokenize_bm25(text: str) -> list[str]:
-    if not text:
-        return []
-    normalized = (
-        unicodedata.normalize("NFKD", text.lower())
+def _strip_accents(text: str) -> str:
+    return (
+        unicodedata.normalize("NFKD", text)
         .encode("ascii", "ignore")
         .decode("ascii")
     )
-    words = re.findall(r"[a-z0-9]+", normalized)
-    compounds = [t for t in re.findall(r"[a-z0-9_]+", normalized) if "_" in t]
-    return words + compounds
+
+
+@lru_cache(maxsize=1)
+def _get_nltk_resources() -> tuple[RSLPStemmer, set[str]]:
+    nltk_dir = resolver_cache_dir() / "nltk_data"
+    nltk_dir.mkdir(parents=True, exist_ok=True)
+    for directory in (nltk_dir, nltk_dir.parent, nltk_dir.parent.parent):
+        try:
+            os.chmod(directory, 0o700)
+        except OSError:
+            pass
+    nltk.data.path = [
+        str(nltk_dir),
+        *[p for p in nltk.data.path if p != str(nltk_dir) and Path(p).exists()],
+    ]
+
+    for pkg, path_key in (("stopwords", "corpora/stopwords"), ("rslp", "stemmers/rslp")):
+        try:
+            nltk.data.find(path_key, paths=[str(nltk_dir)])
+        except LookupError:
+            nltk.download(pkg, download_dir=str(nltk_dir), quiet=True)
+
+    stemmer = RSLPStemmer()
+    sw_words = set(stopwords.words("portuguese")) | set(stopwords.words("english"))
+    sw_normalized = {_strip_accents(w.lower()) for w in sw_words}
+    sw_normalized.update({"quais", "quanto", "quantos", "quanta", "quantas", "onde", "cada"})
+    return stemmer, sw_normalized
+
+
+def _tokenize_bm25(text: str) -> list[str]:
+    if not text:
+        return []
+    stemmer, sw = _get_nltk_resources()
+    lower = text.lower()
+    raw_words = re.findall(r"[a-zA-ZÀ-ÿ0-9]+", lower)
+    tokens: list[str] = []
+    for w in raw_words:
+        w_ascii = _strip_accents(w)
+        if len(w_ascii) <= 1 or w_ascii in sw:
+            continue
+        tokens.append(w_ascii)
+        if not w_ascii.isdigit():
+            stem_ascii = _strip_accents(stemmer.stem(w))
+            if len(stem_ascii) > 1 and stem_ascii not in sw:
+                tokens.append(stem_ascii)
+            if w != w_ascii:
+                stem_unaccented = _strip_accents(stemmer.stem(w_ascii))
+                if (
+                    len(stem_unaccented) > 1
+                    and stem_unaccented != stem_ascii
+                    and stem_unaccented not in sw
+                ):
+                    tokens.append(stem_unaccented)
+            if w_ascii.endswith("s") and not w_ascii.endswith(("ss", "us")) and len(w_ascii) > 2:
+                singular = w_ascii[:-1]
+                if singular not in sw and singular != stem_ascii:
+                    tokens.append(singular)
+
+    norm_ascii = _strip_accents(lower)
+    compounds = [t for t in re.findall(r"[a-z0-9_]+", norm_ascii) if "_" in t]
+    tokens.extend(compounds)
+    return tokens
 
 
 class RAGRetriever:
@@ -172,8 +235,13 @@ class RAGRetriever:
             document_schema=document_schema, schema_info=schema_info
         )
 
+        if not self.use_embedding:
+            if ids:
+                self._build_bm25_index(ids, documents, metadatas)
+            return
+
         existing_count = self.collection.count()
-        if existing_count > 0 and existing_count >= len(ids):
+        if existing_count > 0 and existing_count == len(ids):
             print(f"[RAG] SCHEMA hash'{self.collection_name}' já existe, pulando...")
             if not ids:
                 stored = self.collection.get(include=["documents", "metadatas"])
@@ -184,6 +252,12 @@ class RAGRetriever:
             return
 
         print(f"[RAG] Nova SCHEMA detectado, indexando '{self.collection_name}'...")
+
+        if existing_count > 0 and ids:
+            existing_ids = set(self.collection.get(include=[])["ids"] or [])
+            stale_ids = list(existing_ids - set(ids))
+            if stale_ids:
+                self.collection.delete(ids=stale_ids)
 
         if ids:
             self.collection.upsert(ids=ids, documents=documents, metadatas=metadatas)
@@ -242,6 +316,28 @@ class RAGRetriever:
         ]
         return [doc_id for doc_id, _ in ranked], [score for _, score in ranked]
 
+    def _canonical_table(self, doc_id: str) -> str | None:
+        meta = self._metadatas_by_id.get(doc_id) or {}
+        tipo = meta.get("tipo")
+        if tipo in ("tabela", "coluna"):
+            alvos = [
+                t.strip()
+                for t in str(meta.get("tabelas_alvo", "")).split(",")
+                if t.strip()
+            ]
+            if alvos:
+                alvo = alvos[0]
+                return alvo if alvo in self._documents_by_id else doc_id
+        if doc_id.startswith("tbl:"):
+            alvo = doc_id[4:].split("#")[0]
+            return alvo if alvo in self._documents_by_id else doc_id
+        if doc_id.startswith("col:"):
+            alvo = doc_id[4:].split(".")[0]
+            return alvo if alvo in self._documents_by_id else doc_id
+        if not doc_id.startswith("rule:") and tipo != "regra":
+            return doc_id
+        return None
+
     def _retrieve(
         self,
         query: str,
@@ -254,13 +350,13 @@ class RAGRetriever:
             self.use_embedding if use_embedding is None else use_embedding
         )
 
-        chroma_count = self.collection.count()
+        chroma_count = self.collection.count() if embedding_ativo else 0
         total_docs = max(chroma_count, len(self._bm25_ids))
         if total_docs == 0 or (not bm25_ativo and not embedding_ativo):
             return {"ids": [[]], "documents": [[]], "metadatas": [[]], "distances": [[]]}
 
         n_results = min(top_k, total_docs)
-        candidate_k = min(max(top_k * 2, 10), total_docs)
+        candidate_k = min(max(top_k * 6, 50), total_docs)
 
         dense_ids: list[str] = []
         dense_distances_by_id: dict[str, float] = {}
@@ -299,23 +395,59 @@ class RAGRetriever:
         if bm25_ativo:
             bm25_ids = self._retrieve_bm25(query=query, top_k=candidate_k)
 
+        dense_tbls: list[str] = []
+        dense_rules: list[str] = []
+        for doc_id in dense_ids:
+            tbl = self._canonical_table(doc_id)
+            if tbl:
+                if tbl not in dense_tbls:
+                    dense_tbls.append(tbl)
+            elif doc_id not in dense_rules:
+                dense_rules.append(doc_id)
+
+        bm25_tbls: list[str] = []
+        bm25_rules: list[str] = []
+        for doc_id in bm25_ids:
+            tbl = self._canonical_table(doc_id)
+            if tbl:
+                if tbl not in bm25_tbls:
+                    bm25_tbls.append(tbl)
+            elif doc_id not in bm25_rules:
+                bm25_rules.append(doc_id)
+
         if embedding_ativo and bm25_ativo:
-            final_ids, final_scores = self._reciprocal_rank_fusion(
-                dense_ids=dense_ids,
-                bm25_ids=bm25_ids,
+            fused_tbls, tbl_scores = self._reciprocal_rank_fusion(
+                dense_ids=dense_tbls,
+                bm25_ids=bm25_tbls,
                 top_k=n_results,
             )
+            fused_rules, _ = self._reciprocal_rank_fusion(
+                dense_ids=dense_rules,
+                bm25_ids=bm25_rules,
+                top_k=4,
+            )
+            bm25_rule_set = set(bm25_rules[:5])
+            active_rules = [r for r in fused_rules if r in bm25_rule_set]
         elif embedding_ativo:
-            final_ids = dense_ids[:n_results]
-            final_scores = [
-                dense_distances_by_id.get(doc_id, 0.0) for doc_id in final_ids
+            fused_tbls = dense_tbls[:n_results]
+            tbl_scores = [
+                dense_distances_by_id.get(doc_id, 0.0) for doc_id in fused_tbls
             ]
+            active_rules = dense_rules[:2]
         else:
-            final_ids, final_scores = self._reciprocal_rank_fusion(
+            fused_tbls, tbl_scores = self._reciprocal_rank_fusion(
                 dense_ids=[],
-                bm25_ids=bm25_ids,
+                bm25_ids=bm25_tbls,
                 top_k=n_results,
             )
+            active_rules = bm25_rules[:4]
+
+        final_ids = list(fused_tbls[:n_results])
+        final_scores = list(tbl_scores[: len(final_ids)])
+        for rule_id in active_rules:
+            if rule_id not in final_ids:
+                final_ids.append(rule_id)
+                final_scores.append(0.0)
 
         final_documents = [self._documents_by_id.get(doc_id, "") for doc_id in final_ids]
         final_metadatas = [self._metadatas_by_id.get(doc_id, {}) for doc_id in final_ids]

@@ -81,9 +81,10 @@ class SchemaGraph:
                     origem_documento=str(item.get("origem_documento", "")),
                     precisa_llm=bool(item.get("precisa_llm", False)),
                 )
-                self.rule_schemas[rule_id] = (
-                    f"{titulo}: {descricao}" if titulo and descricao else (descricao or titulo)
-                )
+                if titulo and descricao and not descricao.lower().startswith(titulo.lower()):
+                    self.rule_schemas[rule_id] = f"{titulo}: {descricao}"
+                else:
+                    self.rule_schemas[rule_id] = descricao or titulo
 
                 for tabela_alvo in tabelas_alvo:
                     if (
@@ -100,6 +101,28 @@ class SchemaGraph:
                             child_col="aplica_se",
                             parent_col=tabela_alvo,
                         )
+
+    def get_rules_for_tables(self, tables: list[str]) -> list[str]:
+        """
+        Expansão Tabela -> Regra: retorna os IDs de todas as regras associadas
+        às tabelas informadas (via aresta 'aplica_se').
+        """
+        regras: list[str] = []
+        vistas: set[str] = set()
+        for tabela in tables:
+            if tabela not in self.graph:
+                continue
+            for u, v, data in self.graph.edges(tabela, data=True):
+                if data.get("tipo") == "aplica_se":
+                    candidato = u if v == tabela else v
+                    if (
+                        candidato in self.graph
+                        and self.graph.nodes[candidato].get("tipo") == "regra"
+                        and candidato not in vistas
+                    ):
+                        vistas.add(candidato)
+                        regras.append(candidato)
+        return regras
 
     def get_schema(self, table_name: str) -> str | None:
         """

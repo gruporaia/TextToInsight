@@ -67,7 +67,13 @@ def catalogo_do_schema(contexto_schema: str) -> dict[str, set[str]]:
 
 def _alvos(texto: str, catalogo: dict[str, set[str]]) -> tuple[list[str], list[str]]:
     tabelas, colunas = {}, {}
-    for nome in _CRASE.findall(texto) + [f"{t}.{c}" for t, c in _QUALIFICADO.findall(texto)]:
+    dono_coluna: dict[str, list[str]] = {}
+    for tab, cols in catalogo.items():
+        for col in cols:
+            dono_coluna.setdefault(col, []).append(tab)
+
+    trechos_crase = _CRASE.findall(texto)
+    for nome in trechos_crase + [f"{t}.{c}" for t, c in _QUALIFICADO.findall(texto)]:
         nome = nome.strip()
         if nome in catalogo:
             tabelas[nome] = None
@@ -76,6 +82,15 @@ def _alvos(texto: str, catalogo: dict[str, set[str]]) -> tuple[list[str], list[s
         if coluna and coluna in catalogo.get(tabela, ()):
             tabelas[tabela] = None
             colunas[nome] = None
+
+    for trecho in trechos_crase:
+        sem_qualificados = _QUALIFICADO.sub(" ", trecho)
+        for identificador in re.findall(r"[A-Za-z_]\w*", sem_qualificados):
+            if identificador in catalogo:
+                tabelas[identificador] = None
+            elif len(dono_coluna.get(identificador, ())) == 1:
+                tabelas[dono_coluna[identificador][0]] = None
+
     return list(tabelas), list(colunas)
 
 
@@ -130,6 +145,7 @@ def carregar_documentos_md(docs_dir: str | Path | None) -> list[dict]:
         return []
     caminho_base = Path(docs_dir)
     if not caminho_base.exists():
+        print(f"[DOCS_LINKER] Aviso: caminho de documentos '{docs_dir}' não encontrado.")
         return []
 
     if caminho_base.is_file():
