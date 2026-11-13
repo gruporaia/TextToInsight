@@ -56,7 +56,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Run deterministic tests
         run: |
-          pytest tests/test_componentes.py tests/test_nodes.py \
+          pytest tests/test_componentes.py tests/test_code_sql.py tests/test_nodes.py \
             tests/test_integracao.py tests/test_main_engine_integracao.py \
             tests/test_biblioteca_integracao.py tests/test_data_exploration.py \
             tests/test_data_exploration_postgres.py \

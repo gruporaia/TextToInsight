@@ -246,6 +246,18 @@ def olist_engine():
     engine.dispose()
 
 
+@pytest.fixture
+def sqlite_olist_engine_propria():
+    """Engine Olist própria por teste, para isolar alterações e inspeções do pool."""
+    from sqlalchemy import create_engine
+
+    engine = create_engine(f"sqlite:///{DB_OLIST}")
+    try:
+        yield engine
+    finally:
+        engine.dispose()
+
+
 @pytest.fixture(scope="session")
 def _cache_dir_testes(tmp_path_factory):
     return tmp_path_factory.mktemp("text_to_insight_cache")
