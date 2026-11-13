@@ -165,10 +165,10 @@ def _montar_grafo_fake(monkeypatch, tmp_path, enable_graphs: bool):
             "saida_terminal": "ok",
         }
 
-    def _fake_resposta(estado, llm=None):
+    def _fake_resposta(estado, llm=None, usar_docker=False, docker_runtime=None):
         return {"resposta_natural": "ok"}
 
-    def _fake_gerador_grafico(estado, llm=None):
+    def _fake_gerador_grafico(estado, llm=None, usar_docker = False, docker_runtime = None):
         graphs_dir = tmp_path / "graphs"
         graphs_dir.mkdir(exist_ok=True)
         output_path = graphs_dir / "grafico_teste.png"

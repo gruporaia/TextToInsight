@@ -441,7 +441,7 @@ def test_graph_generator_tokens(monkeypatch, tmp_path):
         usage_metadata={"input_tokens": 60, "output_tokens": 30, "total_tokens": 90},
     )
 
-    def fake_executar_python(script, *, arquivos_entrada, arquivos_saida, timeout_s):
+    def fake_executar_python(script, *, arquivos_entrada, arquivos_saida, timeout_s, usar_docker = False, docker_runtime = None):
         for destino in arquivos_saida.values():
             destino.write_bytes(b"png")
         return {"ok": True, "erro_execucao": ""}

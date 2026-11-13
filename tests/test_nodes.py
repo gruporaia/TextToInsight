@@ -467,3 +467,17 @@ def test_grafico_real_gera_png(tmp_path):
     assert resultado["ok"] is True, resultado["erro_execucao"]
     assert destino.exists()
     assert destino.read_bytes().startswith(b"\x89PNG")
+
+def test_gerador_repassa_cfg_docker(tmp_path, monkeypatch):
+    from text_to_insight.nodes import graph_generator as gg
+    csv = tmp_path / "resultado.csv"
+    csv.write_text("x, y\n1, 2\n, 4\n", encoding ="utf-8")
+    estado = {"caminho_csv_resultado": str(csv)}
+    recebidos = {}
+    def falso (script, **kwargs):
+        recebidos.update(kwargs)
+        return {"ok": False, "erro_execucao": "falso", "saida_terminal": ""}
+    monkeypatch.setattr(gg, "executar_python_isolado", falso)
+    gg.nos_nodo_gerador_grafico(estado, _FakeLLM("plt.plot([1, 2])"), usar_docker=True, docker_runtime="runsc")
+    assert recebidos["usar_docker"] is True
+    assert recebidos["docker_runtime"] == "runsc"

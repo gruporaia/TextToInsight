@@ -33,6 +33,8 @@ class InsightEngine:
         inferir_fks_virtuais: bool = False,
         model_kwargs: dict | None = None,
         cache_dir: str | Path | None = None,
+        usar_docker: bool = False,
+        docker_runtime: str | None= None,
     ):
         """
         `db_engine` é uma Engine do SQLAlchemy construída pelo chamador, que
@@ -61,6 +63,8 @@ class InsightEngine:
         self._db_engine = db_engine
         self._cache_dir = cache_dir
         self._model = model
+        self._usar_docker = usar_docker
+        self._docker_runtime = docker_runtime
         # Parâmetros repassados ao construtor do LLM (ex.: temperature, max_tokens).
         self._model_kwargs = dict(model_kwargs or {})
         self._use_cot = use_cot
@@ -81,6 +85,8 @@ class InsightEngine:
             model_kwargs=self._model_kwargs,
             db_engine=self._db_engine,
             cache_dir=self._cache_dir,
+            usar_docker=self._usar_docker,
+            docker_runtime=self._docker_runtime,
         )
 
         print(f"[CONFIG] HITL: {'ATIVADO' if self._hitl_ativado else 'DESATIVADO'}")
@@ -94,6 +100,8 @@ class InsightEngine:
         print(f"[CONFIG] INFERIR-FKS-VIRTUAIS: {'ATIVADO' if self._inferir_fks_virtuais else 'DESATIVADO'}")
         print(f"[CONFIG] BANCO: {self._db_engine.dialect.name}")
         print(f"[CONFIG] MODEL_KWARGS: {self._model_kwargs or 'PADRÃO DO PROVEDOR'}")
+        print(f"[CONFIG] DOCKER: {'ATIVADO' if self._usar_docker else 'DESATIVADO'}")
+        print(f"[CONFIG] DOCKER_RUNTIME: {self._docker_runtime or 'PADRÃO'}")
 
     def _config(self, thread_id: str) -> dict[str, Any]:
         # O LangGraph usa esse bloco "configurable" para identificar a conversa.
