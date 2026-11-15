@@ -19,9 +19,12 @@ from __future__ import annotations
 import contextlib
 from datetime import datetime
 import io
+import json
 from pathlib import Path
 import sys
 from typing import Any
+
+from src.bird.metrics import sanitize_model_kwargs
 
 
 class _TeeStream:
@@ -124,13 +127,18 @@ class BirdExecutionLogger:
         use_cot = "ON" if config_info.get("use_cot") else "OFF"
         use_exploration = "ON" if config_info.get("use_data_exploration") else "OFF"
         exploration_selector = config_info.get("exploration_selector") or "off"
-        schemacrawler = "ON" if config_info.get("schemacrawler") else "OFF"
         verificador = config_info.get("verificador") or "off"
         infer_fks = "ON" if config_info.get("infer_fks") else "OFF"
-        model_kwargs = config_info.get("model_kwargs") or {}
-        kwargs_str = f" | ModelKwargs: {model_kwargs}" if model_kwargs else ""
+        with_graphs_str = f" | WithGraphs: {'ON' if config_info.get('with_graphs') else 'OFF'}" if "with_graphs" in config_info else ""
+        raw_kwargs = config_info.get("model_kwargs") or {}
+        sanitized_kwargs = sanitize_model_kwargs(raw_kwargs)
+        kwargs_str = f" | ModelKwargs: {sanitized_kwargs}" if sanitized_kwargs else ""
         db_filter = config_info.get("db_filter") or "None"
         diff_filter = config_info.get("difficulty_filter") or "None"
+        q_filter = config_info.get("question_filter")
+        filter_line = f"Filters:            DB: {db_filter} | Difficulty: {diff_filter}"
+        if q_filter:
+            filter_line += f" | Question: {q_filter}"
 
         sep = "=" * 80
         header_lines = [
@@ -144,8 +152,8 @@ class BirdExecutionLogger:
             f"Seed:               {seed}",
             f"Configuration:      RAG: {use_rag} | EnrichRAG: {enrich_rag} | Evidence: {use_evidence} | CoT: {use_cot} | "
             f"DataExploration: {use_exploration} (Selector: {exploration_selector}) | "
-            f"SchemaCrawler: {schemacrawler} | InferFKs: {infer_fks} | Verificador: {verificador}{kwargs_str}",
-            f"Filters:            DB: {db_filter} | Difficulty: {diff_filter}",
+            f"InferFKs: {infer_fks}{with_graphs_str} | Verificador: {verificador}{kwargs_str}",
+            filter_line,
             f"Output Directory:   {self.output_dir}",
             f"Log File:           {self.log_path.name}",
             sep,
@@ -291,6 +299,24 @@ class BirdExecutionLogger:
             if verif.get("notas"):
                 lines.append("[OBSERVACAO DO VERIFICADOR]: " + " | ".join(verif["notas"]))
 
+        tbn = agent_result.get("tokens_by_node")
+        if isinstance(tbn, str) and tbn.strip():
+            try:
+                tbn = json.loads(tbn)
+            except Exception:
+                tbn = {}
+        if isinstance(tbn, dict) and tbn:
+            lines.append("[TOKENS BY NODE]:")
+            for node_name, node_usage in tbn.items():
+                if isinstance(node_usage, dict):
+                    n_calls = int(node_usage.get("calls") or 0)
+                    n_in = int(node_usage.get("input") or 0)
+                    n_out = int(node_usage.get("output") or 0)
+                    n_tot = int(node_usage.get("total") or (n_in + n_out))
+                    lines.append(f"  - {node_name}: Input: {n_in:,} | Output: {n_out:,} | Total: {n_tot:,} | Calls: {n_calls}")
+        else:
+            lines.append("[TOKENS BY NODE]: (none)")
+
         # 6. Block Footer
         lines.append(f"=== [END QID: {question_id}] ===\n\n")
 
@@ -331,8 +357,26 @@ class BirdExecutionLogger:
             f"Average Result F1 Score (Final):    {avg_f1 * 100:.2f}% ({avg_f1:.4f})",
             f"Self-Correction Recovery Rate:      {self_corr_pct:.2f}%",
             f"Total Tokens Consumed:              {tok_tot:,} (Input: {tok_in:,} | Output: {tok_out:,})",
+        ]
+
+        node_tokens = summary.get("node_tokens") or {}
+        if node_tokens:
+            footer_lines.append("Node-Level Token Breakdown:")
+            for node_name, node_data in node_tokens.items():
+                n_calls = int(node_data.get("calls") or 0)
+                n_tot = int(node_data.get("total_all") or 0)
+                n_in = int(node_data.get("total_input") or 0)
+                n_out = int(node_data.get("total_output") or 0)
+                n_pct = float(node_data.get("pct_of_total_tokens") or 0.0)
+                n_avg = float(node_data.get("avg_total_per_question") or 0.0)
+                footer_lines.append(
+                    f"  - {node_name:22s} Calls: {n_calls:3d} | Total: {n_tot:8,d} ({n_pct:5.1f}%) | "
+                    f"Avg/Q: {n_avg:6.1f} | In: {n_in:7,d} | Out: {n_out:6,d}"
+                )
+
+        footer_lines.extend([
             f"Total Elapsed Time:                 {total_elapsed:.1f} seconds",
             sep,
             "",
-        ]
+        ])
         self._write("\n".join(footer_lines))

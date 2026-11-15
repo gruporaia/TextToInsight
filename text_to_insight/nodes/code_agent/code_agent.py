@@ -9,6 +9,7 @@ import re
 from langchain.chat_models import BaseChatModel
 
 from ...state import EstadoTextToInsight
+from ...token_tracking import build_token_usage_update
 from ...utils import extrair_tokens
 
 # Nome de exibição e observações de sintaxe por dialeto, injetados no prompt do
@@ -40,33 +41,13 @@ _NOTA_DIALETO = {
 }
 
 
-def _resolver_info_dialeto(estado: EstadoTextToInsight, engine=None) -> tuple[str, str]:
-    """Resolve (nome_exibicao, nota_sintaxe) do dialeto configurado no estado.
+def _resolver_info_dialeto(engine=None) -> tuple[str, str]:
+    """Resolve (nome_exibicao, nota_sintaxe) do dialeto da Engine injetada.
 
-    Ordem de resolução:
-    1. `engine.dialect.name`, se uma Engine SQLAlchemy foi injetada pelo
-       chamador (caso mais confiável: vem direto da conexão, sem adivinhar).
-    2. `db_url`, cujo dialeto é lido do prefixo da URL (sem conectar).
-    3. 'sqlite' como default, preservando o comportamento anterior quando
-       nada é informado (compatibilidade retroativa).
+    O dialeto vem de `engine.dialect.name`. Sem engine (ex.: testes que
+    chamam o nó isolado), usa SQLite como padrão.
     """
-    if engine is not None:
-        dialeto = engine.dialect.name
-        nome = _NOME_DIALETO.get(dialeto, _NOME_DIALETO["sqlite"])
-        nota = _NOTA_DIALETO.get(dialeto, _NOTA_DIALETO["sqlite"])
-        return nome, nota
-
-    dialeto = ""
-    db_url = (estado.get("db_url") or "").strip()
-    if db_url:
-        try:
-            from sqlalchemy.engine import make_url
-
-            dialeto = make_url(db_url).get_backend_name()
-        except Exception:
-            dialeto = ""
-
-    dialeto = dialeto or "sqlite"
+    dialeto = engine.dialect.name if engine is not None else "sqlite"
     nome = _NOME_DIALETO.get(dialeto, _NOME_DIALETO["sqlite"])
     nota = _NOTA_DIALETO.get(dialeto, _NOTA_DIALETO["sqlite"])
     return nome, nota
@@ -172,9 +153,9 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: BaseChatModel, use_
     """
     Nó Agente de Código: usa Gemini para gerar SQL a partir da pergunta + schema.
 
-    `engine`, se informado, é a Engine SQLAlchemy injetada pelo chamador —
-    usada apenas para resolver o dialeto (via `engine.dialect.name`) e ajustar
-    a sintaxe do prompt, sem depender de `db_url` no estado.
+    `engine` é a Engine SQLAlchemy injetada pelo chamador — usada apenas
+    para resolver o dialeto (via `engine.dialect.name`) e ajustar a sintaxe
+    do prompt.
     """
     pergunta = (
         estado.get("pergunta_atual", "")
@@ -191,7 +172,7 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: BaseChatModel, use_
     print(f"[AGENTE_CODIGO] Gerando SQL (tentativa {tentativas + 1})...")
 
     historico_section = _formatar_historico_tentativas(historico)
-    dialeto_nome, nota_dialeto = _resolver_info_dialeto(estado, engine=engine)
+    dialeto_nome, nota_dialeto = _resolver_info_dialeto(engine)
 
     template = PROMPT_TEMPLATE_COT if use_cot else PROMPT_TEMPLATE_NO_COT
 
@@ -222,7 +203,7 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: BaseChatModel, use_
 
     print(f"[AGENTE_CODIGO] SQL gerada: {sql[:100]}...")
 
-    in_tokens, out_tokens, total_tokens = extrair_tokens(resposta)
+    token_update = build_token_usage_update("code_agent", resposta)
 
     # Montar contexto compacto para diagnóstico (schema + data exploration usados)
     contexto_usado = schema_rag if schema_rag else schema
@@ -235,9 +216,7 @@ def nos_nodo_agente_codigo(estado: EstadoTextToInsight, llm: BaseChatModel, use_
         "raciocinio_agente": raciocinio,
         "contexto_prompt_agente": contexto_prompt,
         "ultimo_prompt": prompt,
-        # Retornando o número de tokens nessa chamada do Gemini
-        "tokens_input": in_tokens,
-        "tokens_output": out_tokens,
-        "tokens_total": total_tokens,
+        "last_attempt_tokens": token_update["tokens_by_node"]["code_agent"],
+        **token_update,
     }
 

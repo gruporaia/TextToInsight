@@ -19,7 +19,7 @@ flowchart TD
     Executor -->|"Resultados de Execucao"| Metrics["src/bird/metrics.py (EX Multiset / Counter + F1/Recall)"]
     Metrics -->|"Linhas Canonicas"| Reporter["src/bird/csv_reporter.py"]
     CLI -->|"Captura Tee & Traço"| Logger["src/bird/logger.py (BirdExecutionLogger)"]
-    Reporter -->|"19 colunas"| CSV["reports/bird/.../*.csv"]
+    Reporter -->|"20 colunas"| CSV["reports/bird/.../*.csv"]
     Reporter -->|"Relatorio Sintetico"| MD["reports/bird/.../*.md"]
     Reporter -->|"Formato Oficial BIRD"| JSON["reports/bird/.../*.json (predict_dev.json)"]
     Logger -->|"Trilha Completa de Execucao"| LOG["reports/bird/.../*.log"]
@@ -83,7 +83,7 @@ pytest tests/test_bird_eval.py -v
 Caracteristicas da suite:
 - Nao consome chamadas de rede nem tokens de LLM.
 - Executa em menos de 1 segundo utilizando fixtures sinteticas isoladas.
-- Cobre data loader, executor seguro SQLite com timeout, metricas de comparacao de dados (Execution Accuracy agnostica a ordem e aliases, metricas de coluna Precision/Recall/F1) e geracao de CSV (19 colunas) e relatorios.
+- Cobre data loader, executor seguro SQLite com timeout, metricas de comparacao de dados (Execution Accuracy agnostica a ordem e aliases, metricas de coluna Precision/Recall/F1) e geracao de CSV (20 colunas incluindo `tokens_by_node`) e relatorios.
 
 ### 3.2. Smoke Test com Custo Zero (Modo Simulado)
 Para testar o encadeamento de ponta a ponta sem consumir credito de APIs:
@@ -117,10 +117,9 @@ O orquestrador de avaliacao e acionado via `scripts/test_bird_eval.py`.
 | `--cot` | `on`, `off` | `on` | Ativa raciocinio explicito passo a passo (Chain of Thought). |
 | `--data-exploration` | `on`, `off` | `on` | Permite que o agente consulte amostras de valores nas tabelas. |
 | `--exploration-selector` | `off`, `heuristic`, `llm` | `off` | Modo de selecao de colunas para exploracao de dados. |
-| `--verificador` | `off`, `avisar` | `off` | Confere a SQL e o resultado depois da execucao (sem LLM). Em `avisar`, os alertas aparecem no log e no fim da resposta. Filtros que a pergunta nao pediu (coluna e valor nao citados, ou `IS NOT NULL`/`> 0` sem pedido) viram uma duvida ("confira se e isso que voce quer"), sem contar como erro. |
-| `--verificador-jev` | `on`, `off` | `on` | Com o verificador ligado, Com o verificador ligado, o Jev e o verificador principal: responde as 6 checagens agrupadas em niveis (alta = 1/2, media = 3/4, baixa = 5/6). As regras rodam em segundo plano. Precisa de `TYPESAFE_API_KEY`; sem ela, segue so com as regras. |
+| `--verificador` | `off`, `avisar` | `off` | Confere a SQL e o resultado depois da execucao. Em `avisar`, os alertas aparecem no log e no fim da resposta. Filtros que a pergunta nao pediu (coluna e valor nao citados, ou `IS NOT NULL`/`> 0` sem pedido) viram uma duvida ("confira se e isso que voce quer"), sem contar como erro. |
+| `--verificador-jev` | `on`, `off` | `on` | Com o verificador ligado, o Jev e o verificador principal: responde as 6 checagens agrupadas em niveis (alta = 1/2, media = 3/4, baixa = 5/6). As regras rodam em segundo plano. Precisa de `TYPESAFE_API_KEY`; sem ela, segue so com as regras. |
 | `--verificador-colunas` | `erro`, `nota` | `erro` | Colunas a mais na resposta. `erro` vira alerta (o BIRD exige exatamente as colunas pedidas). `nota` vira so uma observacao, como no uso real. |
-| `--schemacrawler` | `on`, `off` | `off` | Ativa/desativa introspeccao via SchemaCrawler (padrao: `off`, usa PRAGMA nativo do SQLite). |
 | `--timeout` | Inteiro | `30` | Tempo limite em segundos para execucao de queries no SQLite. |
 | `--dry-run` | Flag | Desativado | Simula a geracao de SQL sem custo de API. |
 | `--log` | `on`, `off` | `on` | Controla geracao do arquivo de log detalhado de execucao (`.log`). |
@@ -165,9 +164,10 @@ python scripts/test_bird_eval.py --sample-size 20 --seed 42 --rag off --output r
 A cada bateria de testes, o sistema consolida as saidas em quatro formatos complementares:
 
 1. **Arquivo Detalhado (`.csv`):**
-   Registra linha a linha cada tentativa de cada pergunta avaliada. Quando o agente aciona o loop de auto-correcao, cada tentativa e registrada como uma linha individual contendo o mesmo `question_id` e o respectivo `attempt_number` (1, 2, 3...), garantindo ordenacao estrita e contigua por `(question_id, attempt_number)`. Contem 19 colunas tecnicas com SQL gerada, SQL gabarito, status de sandbox, mensagens de erro capturadas, metricas de coluna (precision, recall, f1), tempo de resposta e tokens consumidos.
+   Registra linha a linha cada tentativa de cada pergunta avaliada. Quando o agente aciona o loop de auto-correcao, cada tentativa e registrada como uma linha individual contendo o mesmo `question_id` e o respectivo `attempt_number` (1, 2, 3...), garantindo ordenacao estrita e contigua por `(question_id, attempt_number)`. Contem 20 colunas tecnicas com SQL gerada, SQL gabarito, status de sandbox, mensagens de erro capturadas, metricas de coluna (precision, recall, f1), tempo de resposta, tokens consumidos e `tokens_by_node` (discriminacao granular por no LLM).
 2. **Relatorio Sintetico e Diagnostico (`.md`):**
    Documento executivo e tecnico em Markdown. Alem das metricas globais consolidadas e consumo de recursos, inclui:
+   - **Secao 4.1 (Consumo de Tokens por No - Node-Level Token Consumption):** tabela consolidada contendo `Calls`, `Total Input`, `Total Output`, `Total All`, `Avg/Q Total` e `% Total` para cada um dos 7 nos canonicos (`planner`, `rag_enrichment`, `exploration_selector`, `code_agent`, `graph_router`, `graph_generator`, `response`), alem da media ponderada por pergunta.
    - **Secao 5 (Casos de Auto-Correcao Bem-Sucedida):** destaca perguntas que falharam na primeira tentativa mas convergiram nas tentativas seguintes, exibindo a evolucao das queries, o feedback recebido e a tabela Markdown com amostra do resultado conferido.
    - **Secao 6 (Analise Detalhada de Falhas):** diagnostico minucioso de cada divergencia de dados ou erro de sandbox, apresentando a query gabarito, o historico de tentativas do agente, metricas de coluna (`Recall`, `Precision`, `F1`) e **tabelas comparativas Markdown com as primeiras 10 linhas de dados retornadas por cada consulta** (Ouro vs. Agente) e o total de linhas.
 3. **Predicoes Oficiais BIRD (`.json`):**
@@ -179,7 +179,8 @@ A cada bateria de testes, o sistema consolida as saidas em quatro formatos compl
    - **Fluxo de Execucao dos Nos (Tee):** captura em tempo real todas as mensagens de console emitidas durante o ciclo de resolucao (`[PLANEJADOR]`, `[RETRIEVER]`, `[SCHEMA]`, `[DATA_EXPLORATION]`, `[EXECUTOR]`, `[CRITICO]`), sem bloquear a visualizacao ao vivo no terminal.
    - **Historico Completo de Tentativas:** registra o prompt completo enviado ao LLM, o raciocinio Chain-of-Thought / thoughts emitido pelo modelo, a consulta SQL candidata e erros de sandbox encontrados.
    - **Comparacao com a Referencia (Gold):** quantidade de linhas retornadas (Gold vs. Agente), status de equivalencia `EX MATCH`, metricas de coluna (`Recall`, `Precision`, `F1`), similaridade de texto, latencia em ms e contagem detalhada de tokens (input/output/total).
-   - **Sumario Executivo no Rodape:** consolida a acuracia final de execucao (EX), Pass@1, medias finais de Recall, Precision e F1, taxa de recuperacao por auto-correcao, consumo de tokens e tempo total de execucao.
+   - **Discriminacao de Tokens por No (`[TOKENS BY NODE]`):** tabela individual por pergunta detalhando consumo (`input`, `output`, `total`, `calls`) nos 7 nos canonicos.
+   - **Sumario Executivo no Rodape:** consolida a acuracia final de execucao (EX), Pass@1, medias finais de Recall, Precision e F1, taxa de recuperacao por auto-correcao, consumo de tokens, tabela `Node-Level Token Breakdown` e tempo total de execucao.
 
 ### 5.2. Personalizacao do Diretorio e Nome de Destino via `--output`
 O parametro `--output` aceita duas abordagens:
@@ -258,7 +259,7 @@ Essa granularidade permite aos desenvolvedores distinguir se as falhas do modelo
 
 ## 7. Guia de Diagnostico e Analise de Falhas
 
-### 7.1. Estrutura das 19 Colunas do CSV
+### 7.1. Estrutura das 20 Colunas do CSV
 
 | Coluna | Descricao e Utilidade de Analise |
 |---|---|
@@ -281,6 +282,7 @@ Essa granularidade permite aos desenvolvedores distinguir se as falhas do modelo
 | `tokens_input` | Quantidade de tokens no prompt de entrada. |
 | `tokens_output` | Quantidade de tokens na resposta gerada. |
 | `tokens_total` | Soma de tokens de entrada e saida. |
+| `tokens_by_node` | Dicionario serializado em JSON com o consumo detalhado por no (`{'input', 'output', 'total', 'calls'}`) para os 7 nos canonicos (`planner`, `rag_enrichment`, `exploration_selector`, `code_agent`, `graph_router`, `graph_generator`, `response`). Permite auditoria de custo computacional e latencia por componente. |
 
 ### 7.2. Roteiro Pratico de Inspecao de Resultados
 

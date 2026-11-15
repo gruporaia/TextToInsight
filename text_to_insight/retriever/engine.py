@@ -3,19 +3,19 @@ from .graph_logic import SchemaGraph
 from .rag_logic import RAGRetriever
 from pathlib import Path
 import chromadb
+
+from ..cache import diretorio_chroma
 #aqui vamos ter a integração da lógica do grafo com a lógica do RAG
 #a ideia é que o RAG seja responsável por recuperar as informações relevantes para responder às perguntas, usando o grafo como guia para navegar pelas relações entre os dados
 
-BASE_DIR = Path(__file__).resolve().parent
-
 class SchemaGraphRAG:
-    def __init__(self, schema: dict = None):
+    def __init__(self, schema: dict = None, cache_dir: str | Path | None = None):
         #definição do grafo após o get do schema
         if schema:
             schema_string = schema.get("contexto_schema", "")
             schema_hash = hashlib.md5(schema_string.encode('utf-8')).hexdigest()
             collection_name = f"schema_{schema_hash}"
-            chroma_client = chromadb.PersistentClient(path=str(BASE_DIR / "chroma_db"))
+            chroma_client = chromadb.PersistentClient(path=str(diretorio_chroma(cache_dir)))
             self.schema_graph = SchemaGraph(schema = schema_string)
             self.rag = RAGRetriever(chroma_client = chroma_client, document_schema = schema, collection_name =collection_name)
 

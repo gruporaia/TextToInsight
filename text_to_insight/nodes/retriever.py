@@ -6,6 +6,8 @@ tabelas relevantes para a pergunta via SchemaGraphRAG (vetor + grafo de FKs),
 formata o resultado como texto e adiciona ao campo contexto_rag_schema.
 """
 
+from pathlib import Path
+
 from ..state import EstadoTextToInsight
 from ..retriever.engine import SchemaGraphRAG
 
@@ -18,7 +20,11 @@ def _formatar_contexto_rag(retrieved, relations=None) -> str:
     )
 
 
-def nos_nodo_retriever(estado: EstadoTextToInsight, use_rag: bool = True) -> dict:
+def nos_nodo_retriever(
+    estado: EstadoTextToInsight,
+    use_rag: bool = True,
+    cache_dir: str | Path | None = None,
+) -> dict:
     pergunta = (
         estado.get("pergunta_atual", "")
         or estado.get("pergunta_original", "")
@@ -51,7 +57,7 @@ def nos_nodo_retriever(estado: EstadoTextToInsight, use_rag: bool = True) -> dic
     tentativas = estado.get("tentativas_loop", 0)
     top_k_dinamico = 8  + (tentativas * 4) # aumenta o top_k a cada tentativa de loop, para tentar recuperar mais tabelas se necessário
     
-    rag = SchemaGraphRAG(schema={"contexto_schema": schema_full})
+    rag = SchemaGraphRAG(schema={"contexto_schema": schema_full}, cache_dir=cache_dir)
     print(f"[RETRIEVER] Recuperando top_k={top_k_dinamico} tabelas (loop atual: {tentativas})...")
     retrieved, relations = rag.retrieve(pergunta, top_k=top_k_dinamico)
     

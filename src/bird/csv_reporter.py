@@ -19,6 +19,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from src.bird.metrics import sanitize_model_kwargs
+
 
 def format_result_rows_markdown_table(
     results: list[tuple[Any, ...]] | list[dict[str, Any]] | None,
@@ -71,7 +73,7 @@ class BirdCSVReporter:
     Manages CSV persistence, summary metrics aggregation, and BIRD-compatible JSON exports.
     """
 
-    # 19 standardized columns matching build_bird_comparison_row() in src/bird/metrics.py
+    # 20 standardized columns matching build_bird_comparison_row() in src/bird/metrics.py
     HEADERS: list[str] = [
         "question_id",
         "attempt_number",
@@ -92,6 +94,7 @@ class BirdCSVReporter:
         "tokens_input",
         "tokens_output",
         "tokens_total",
+        "tokens_by_node",
     ]
 
     # Standard separator used by the official BIRD evaluation harness
@@ -302,6 +305,7 @@ class BirdCSVReporter:
                 "avg_output_per_question": 0.0,
                 "avg_total_per_question": 0.0,
             },
+            "node_tokens": {},
             "latency": {
                 "avg_time_ms_per_question": 0.0,
                 "avg_time_ms_per_attempt": 0.0,
@@ -351,6 +355,11 @@ class BirdCSVReporter:
             "moderate": {"count": 0, "ex_count": 0, "sandbox_success": 0, "tokens": 0, "times": [], "precisions": [], "recalls": [], "f1s": []},
             "challenging": {"count": 0, "ex_count": 0, "sandbox_success": 0, "tokens": 0, "times": [], "precisions": [], "recalls": [], "f1s": []},
         }
+
+        # Data structure for node-level token aggregation
+        node_totals: dict[str, dict[str, int]] = defaultdict(
+            lambda: {"calls": 0, "total_input": 0, "total_output": 0, "total_all": 0}
+        )
 
         for q_id, attempts in grouped.items():
             attempts = sorted(attempts, key=lambda a: int(a.get("attempt_number", 1)))
@@ -409,6 +418,30 @@ class BirdCSVReporter:
             tier_data[tier_key]["tokens"] += q_tokens_total
             tier_data[tier_key]["times"].append(q_time_total)
 
+            # 5. Extract and aggregate node-level token usage from final attempt
+            raw_tbn = final_attempt.get("tokens_by_node")
+            tbn_dict: dict[str, Any] = {}
+            if isinstance(raw_tbn, dict):
+                tbn_dict = raw_tbn
+            elif isinstance(raw_tbn, str) and raw_tbn.strip():
+                try:
+                    loaded = json.loads(raw_tbn)
+                    if isinstance(loaded, dict):
+                        tbn_dict = loaded
+                except Exception:
+                    tbn_dict = {}
+
+            for node_name, node_data in tbn_dict.items():
+                if isinstance(node_data, dict):
+                    c = int(node_data.get("calls") or 0)
+                    inp = int(node_data.get("input") or 0)
+                    out = int(node_data.get("output") or 0)
+                    tot = int(node_data.get("total") or (inp + out))
+                    node_totals[node_name]["calls"] += c
+                    node_totals[node_name]["total_input"] += inp
+                    node_totals[node_name]["total_output"] += out
+                    node_totals[node_name]["total_all"] += tot
+
         # Global aggregations over all raw rows
         for r in target_rows:
             in_tok = int(r.get("tokens_input") or 0)
@@ -455,6 +488,50 @@ class BirdCSVReporter:
                 "avg_time_ms": round(sum(t_times) / cnt, 1) if cnt else 0.0,
             }
 
+        # Node-level token usage aggregation
+        total_run_tokens = total_tokens_all if total_tokens_all > 0 else sum(d["total_all"] for d in node_totals.values())
+
+        CANONICAL_ORDER = [
+            "planner",
+            "rag_enrichment",
+            "exploration_selector",
+            "code_agent",
+            "graph_router",
+            "graph_generator",
+            "response",
+        ]
+
+        def _sort_node_key(item: tuple[str, dict[str, Any]]) -> tuple[int, str]:
+            node_name = item[0]
+            if node_name in CANONICAL_ORDER:
+                return (CANONICAL_ORDER.index(node_name), node_name)
+            return (len(CANONICAL_ORDER), node_name)
+
+        sorted_node_totals = dict(sorted(node_totals.items(), key=_sort_node_key))
+
+        node_tokens_summary: dict[str, dict[str, Any]] = {}
+        for node_name, data in sorted_node_totals.items():
+            tot_calls = data["calls"]
+            tot_in = data["total_input"]
+            tot_out = data["total_output"]
+            tot_all = data["total_all"]
+
+            avg_in = round(tot_in / total_questions, 1) if total_questions else 0.0
+            avg_out = round(tot_out / total_questions, 1) if total_questions else 0.0
+            avg_all = round(tot_all / total_questions, 1) if total_questions else 0.0
+            pct = round((tot_all / total_run_tokens) * 100, 2) if total_run_tokens else 0.0
+
+            node_tokens_summary[node_name] = {
+                "calls": tot_calls,
+                "total_input": tot_in,
+                "total_output": tot_out,
+                "total_all": tot_all,
+                "avg_input_per_question": avg_in,
+                "avg_output_per_question": avg_out,
+                "avg_total_per_question": avg_all,
+                "pct_of_total_tokens": pct,
+            }
+
         return {
             "total_questions": total_questions,
             "total_attempts": total_attempts,
@@ -478,6 +555,7 @@ class BirdCSVReporter:
                 "avg_output_per_question": round(total_tokens_output / total_questions, 1) if total_questions else 0.0,
                 "avg_total_per_question": round(total_tokens_all / total_questions, 1) if total_questions else 0.0,
             },
+            "node_tokens": node_tokens_summary,
             "latency": {
                 "avg_time_ms_per_question": round(sum(all_times_ms) / total_questions, 1) if total_questions else 0.0,
                 "avg_time_ms_per_attempt": round(sum(all_times_ms) / total_attempts, 1) if total_attempts else 0.0,
@@ -515,17 +593,21 @@ class BirdCSVReporter:
         config_rows = [
             f"| **Timestamp** | {timestamp} |",
             f"| **Model** | `{config.get('model', 'N/A')}` |",
-            f"| **Model kwargs** | `{json.dumps(config['model_kwargs']) if config.get('model_kwargs') else 'provider defaults'}` |",
+            f"| **Model kwargs** | `{json.dumps(sanitize_model_kwargs(config['model_kwargs'])) if config.get('model_kwargs') else 'provider defaults'}` |",
             f"| **Dialect** | `{config.get('dialect', 'sqlite')}` |",
             f"| **Sample Size** | {config.get('sample_size', 'All')} |",
             f"| **Random Seed** | {config.get('seed', 'None')} |",
             f"| **Schema RAG** | `{'Enabled' if config.get('use_rag') else 'Disabled'}` |",
             f"| **Evidence / Hints** | `{'Enabled' if config.get('use_evidence', True) else 'Disabled'}` |",
         ]
+        if config.get("with_graphs"):
+            config_rows.append(f"| **With Graphs** | `Enabled` |")
         if config.get("db_filter"):
             config_rows.append(f"| **Database Filter** | `{config['db_filter']}` |")
         if config.get("difficulty_filter"):
             config_rows.append(f"| **Difficulty Filter** | `{config['difficulty_filter']}` |")
+        if config.get("question_filter"):
+            config_rows.append(f"| **Question Filter** | `{config['question_filter']}` |")
 
         config_table = "\n".join(config_rows)
 
@@ -549,6 +631,27 @@ class BirdCSVReporter:
 
         tok = summary.get("tokens", {})
         lat = summary.get("latency", {})
+
+        # Section 4.1: Node-Level Token Consumption table
+        node_tok = summary.get("node_tokens", {})
+        node_rows = []
+        if node_tok:
+            for node_name, nstats in node_tok.items():
+                calls = nstats.get("calls", 0)
+                avg_in = nstats.get("avg_input_per_question", 0.0)
+                avg_out = nstats.get("avg_output_per_question", 0.0)
+                avg_tot = nstats.get("avg_total_per_question", 0.0)
+                tot_in = nstats.get("total_input", 0)
+                tot_out = nstats.get("total_output", 0)
+                tot_all = nstats.get("total_all", 0)
+                pct = nstats.get("pct_of_total_tokens", 0.0)
+                node_rows.append(
+                    f"| `{node_name}` | {calls:,} | {avg_in:,.1f} | {avg_out:,.1f} | {avg_tot:,.1f} | {tot_in:,} | {tot_out:,} | **{tot_all:,}** | {pct:.1f}% |"
+                )
+        else:
+            node_rows.append("| *(no node token data)* | 0 | 0.0 | 0.0 | 0.0 | 0 | 0 | 0 | 0.0% |")
+
+        node_table = "\n".join(node_rows)
 
         report_sections = [
             f"""# BIRD Evaluation Report
@@ -589,7 +692,12 @@ class BirdCSVReporter:
 | **Total Tokens** | {tok.get('total_input', 0):,} | {tok.get('total_output', 0):,} | **{tok.get('total_all', 0):,}** |
 | **Average Tokens per Question** | {tok.get('avg_input_per_question', 0.0):,.1f} | {tok.get('avg_output_per_question', 0.0):,.1f} | **{tok.get('avg_total_per_question', 0.0):,.1f}** |
 | **Average Latency per Question** | - | - | **{lat.get('avg_time_ms_per_question', 0.0):,.1f} ms** |
-| **Average Latency per Attempt** | - | - | **{lat.get('avg_time_ms_per_attempt', 0.0):,.1f} ms** |"""
+| **Average Latency per Attempt** | - | - | **{lat.get('avg_time_ms_per_attempt', 0.0):,.1f} ms** |
+
+### 4.1. Node-Level Token Consumption (Average per Question & Run Total)
+| Node | Total Calls | Avg Input / Q | Avg Output / Q | Avg Total / Q | Total Input | Total Output | Total Tokens | % of Total |
+|---|---|---|---|---|---|---|---|---|
+{node_table}"""
         ]
 
         # Resolve detailed inspection cases

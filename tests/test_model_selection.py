@@ -180,7 +180,11 @@ def test_cli_flags_invalidas_sao_rejeitadas(argv):
         cli._parse_args(argv)
 
 
-def test_cli_repassa_model_kwargs_para_engine(monkeypatch):
+def test_cli_repassa_model_kwargs_para_engine(monkeypatch, tmp_path):
+    import sqlite3
+
+    banco = tmp_path / "vazio.db"
+    sqlite3.connect(banco).close()
     capturado = {}
 
     class _FakeEngine:
@@ -194,7 +198,7 @@ def test_cli_repassa_model_kwargs_para_engine(monkeypatch):
     monkeypatch.setattr(cli, "exibir_resultado_console", lambda r: None)
     monkeypatch.setenv("OPENAI_API_KEY", "fake-key")
 
-    cli.main(["--hitl", "off", "--temperature", "0.3", "--max-tokens", "100", "pergunta"])
+    cli.main(["--db-path", str(banco), "--hitl", "off", "--temperature", "0.3", "--max-tokens", "100", "pergunta"])
     assert capturado["model_kwargs"] == {"temperature": 0.3, "max_tokens": 100}
 
 
@@ -208,7 +212,7 @@ def test_graph_repassa_model_kwargs_para_get_model(monkeypatch):
         return object()
 
     monkeypatch.setattr(graph_module, "get_model", _fake_get_model)
-    graph_module.Graph(api_key="k", model="gpt-x", hitl=False, model_kwargs={"temperature": 0})
+    graph_module.Graph(api_key="k", model="gpt-x", db_engine=object(), hitl=False, model_kwargs={"temperature": 0})
     assert chamadas == [("gpt-x", "k", {"temperature": 0})]
 
 
@@ -224,7 +228,9 @@ def test_engine_repassa_model_kwargs_para_graph(monkeypatch):
             capturado.update(kwargs)
 
     monkeypatch.setattr(engine_module, "Graph", _FakeGraph)
+    from sqlalchemy import create_engine
+
     engine_module.InsightEngine(
-        api_key="k", model="gpt-x", db_path="x.db", model_kwargs={"max_tokens": 10}
+        api_key="k", model="gpt-x", db_engine=create_engine("sqlite://"), model_kwargs={"max_tokens": 10}
     )
     assert capturado["model_kwargs"] == {"max_tokens": 10}

@@ -495,7 +495,6 @@ def main():
                 engine_cache[db_id] = InsightEngine(
                     api_key=api_key,
                     model=model,
-                    db_path=db_path,
                     db_engine=db_engines[db_id],
                     hitl=False,
                     show_output=False,

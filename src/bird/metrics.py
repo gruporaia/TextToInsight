@@ -11,6 +11,7 @@ Responsible for:
 """
 
 import difflib
+import json
 import math
 import re
 from collections import Counter
@@ -22,6 +23,47 @@ _TOLERANCE = 1e-2
 
 # Regex pattern to check if a gold query explicitly requests ordered output
 ORDER_BY_PATTERN = re.compile(r"\bORDER\s+BY\b", re.IGNORECASE)
+
+
+def is_sensitive_key(key: str) -> bool:
+    """
+    Checks if a configuration or model kwarg key contains sensitive credentials.
+    Rejects keys like api_key, openai_api_key, google_api_key, token, secret, password, authorization.
+    Preserves legitimate hyperparameters like max_tokens.
+    """
+    k = str(key).lower().strip()
+    if k in (
+        "api_key",
+        "openai_api_key",
+        "google_api_key",
+        "anthropic_api_key",
+        "token",
+        "secret",
+        "password",
+        "authorization",
+        "auth",
+    ):
+        return True
+    if k.endswith(("_api_key", "_secret", "_password", "_token", "_auth")):
+        return True
+    if k.startswith(("api_key", "secret_", "password_")):
+        return True
+    return False
+
+
+def sanitize_model_kwargs(kwargs: dict[str, Any] | None) -> dict[str, Any]:
+    """
+    Redacts sensitive credential values in model kwargs with '***REDACTED***'.
+    """
+    if not kwargs:
+        return {}
+    sanitized: dict[str, Any] = {}
+    for k, v in kwargs.items():
+        if is_sensitive_key(k):
+            sanitized[k] = "***REDACTED***"
+        else:
+            sanitized[k] = v
+    return sanitized
 
 
 def normalize_sql(sql: str) -> str:
@@ -396,9 +438,10 @@ def build_bird_comparison_row(
     tokens_total: int | None = None,
     critic_verdict: str | None = None,
     critic_feedback: str | None = None,
+    tokens_by_node: dict[str, Any] | str | None = None,
 ) -> dict[str, Any]:
     """
-    Constructs a standardized 19-field dictionary for CSV reporting and audit logging.
+    Constructs a standardized 20-field dictionary for CSV reporting and audit logging.
 
     Parameters:
         question_id: BIRD question identifier integer.
@@ -422,6 +465,7 @@ def build_bird_comparison_row(
         tokens_total: Total tokens consumed (defaults to input + output).
         critic_verdict: Deprecated alias for execution_status.
         critic_feedback: Deprecated alias for error.
+        tokens_by_node: Node-level token usage dictionary or serialized JSON string (default: '{}').
 
     Returns:
         Structured dictionary ready for csv.DictWriter.
@@ -429,6 +473,21 @@ def build_bird_comparison_row(
     calc_total_tokens = tokens_total if tokens_total is not None else (tokens_input + tokens_output)
     status_str = str(critic_verdict if critic_verdict is not None else execution_status).strip()
     error_str = str(error if error else (critic_feedback or "")).strip()
+
+    if isinstance(tokens_by_node, dict):
+        tokens_by_node_str = json.dumps(tokens_by_node, ensure_ascii=False, sort_keys=True)
+    elif isinstance(tokens_by_node, str):
+        s = tokens_by_node.strip()
+        if s:
+            try:
+                parsed = json.loads(s)
+                tokens_by_node_str = json.dumps(parsed, ensure_ascii=False, sort_keys=True)
+            except Exception:
+                tokens_by_node_str = s
+        else:
+            tokens_by_node_str = "{}"
+    else:
+        tokens_by_node_str = "{}"
 
     return {
         "question_id": question_id,
@@ -450,5 +509,6 @@ def build_bird_comparison_row(
         "tokens_input": int(tokens_input),
         "tokens_output": int(tokens_output),
         "tokens_total": int(calc_total_tokens),
+        "tokens_by_node": tokens_by_node_str,
     }
 

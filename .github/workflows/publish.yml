@@ -1,0 +1,54 @@
+name: Publish to PyPI
+
+# Publica no PyPI quando uma release é publicada no GitHub (ex.: tag v1.0.0).
+# Usa Trusted Publishing: não há token do PyPI nos secrets do repositório.
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Conferir se a tag bate com a versão do pyproject.toml
+        run: |
+          versao=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$versao" != "$tag" ]; then
+            echo "A tag ($GITHUB_REF_NAME) não bate com a versão do pyproject.toml ($versao)."
+            exit 1
+          fi
+
+      - name: Gerar wheel e sdist
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Publish
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/text-to-insight
+    permissions:
+      id-token: write  # necessário para o Trusted Publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1

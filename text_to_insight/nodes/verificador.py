@@ -3,7 +3,6 @@ from __future__ import annotations
 import difflib
 import numbers
 import re
-import sqlite3
 import time
 import unicodedata
 from datetime import date, datetime, timedelta, timezone
@@ -398,20 +397,14 @@ def _executor_engine(engine) -> Callable:
 
 
 def _abrir_sonda(estado: EstadoTextToInsight, engine=None):
-    conn, fechar = _abrir_sqlite(estado, engine)
+    conn, fechar = _abrir_sqlite(engine)
     if conn is not None:
         return _Sonda("sqlite", _executor_sqlite(conn)), _checador_de_valores(conn), fechar
-    db_url = (estado.get("db_url") or "").strip()
-    fechar = None
-    if engine is None and db_url:
-        from .code_agent.code_sql import _criar_engine_de_url
-        engine = _criar_engine_de_url(db_url)
-        fechar = engine.dispose
     dialeto = _DIALETOS.get(engine.dialect.name) if engine is not None else None
     if dialeto is None:
-        return None, None, fechar
+        return None, None, None
     sonda = _Sonda(dialeto, _executor_engine(engine))
-    return sonda, _checador_pela_sonda(sonda), fechar
+    return sonda, _checador_pela_sonda(sonda), None
 
 
 def _tabelas_da_consulta(arvore) -> dict[str, str]:
@@ -545,21 +538,10 @@ def _linhas_que_nao_sao_pessoas(arvore, sonda: _Sonda) -> str:
     return ""
 
 
-def _abrir_sqlite(estado: EstadoTextToInsight, engine=None):
-    if engine is not None:
-        if engine.dialect.name != "sqlite":
-            return None, None
-        conn = engine.raw_connection()
-        return conn, conn.close
-    from .data_exploration import _backend_suporta_exploracao
-
-    db_path = (estado.get("db_path") or "").strip()
-    if not db_path or not _backend_suporta_exploracao(estado, db_path):
+def _abrir_sqlite(engine=None):
+    if engine is None or engine.dialect.name != "sqlite":
         return None, None
-    try:
-        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-    except sqlite3.Error:
-        return None, None
+    conn = engine.raw_connection()
     return conn, conn.close
 
 

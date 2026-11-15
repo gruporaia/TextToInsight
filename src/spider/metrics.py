@@ -1,88 +1,75 @@
 """
-Métricas para comparação de queries SQL.
+src/spider/metrics.py
 
-Fornece:
-- Similarity score entre duas queries (difflib-based)
-- Comparação de resultados no estilo Spider 2.0 (column-level matching)
-- F1 score de resultados (column-level precision/recall)
-- Normalização de SQL para comparação
+Metrics and evaluation utilities for SQL comparison against Spider 2.0.
 
-A lógica de comparação segue a métrica oficial do Spider 2.0:
-- Transpõe ambas as tabelas para obter vetores-coluna
-- Para cada coluna do gold, verifica se alguma coluna do pred bate
-- Usa tolerância de 1e-2 para comparações numéricas
-- Trata NaN/None com pd.isna
+Provides:
+- SQL text normalization and SequenceMatcher similarity score.
+- Column-level result comparison following official Spider 2.0 evaluation logic.
+- Column-level Precision, Recall, and F1 score calculation.
+- Comparison row builder for CSV reporting with per-node token tracking.
 """
 
+from __future__ import annotations
+
 import difflib
+import json
 import math
 import re
 from typing import Any
 
 import pandas as pd
 
-
-# ---------------------------------------------------------------------------
-# Constantes
-# ---------------------------------------------------------------------------
+# Absolute tolerance for floating-point comparisons
 _TOLERANCE = 1e-2
 
 
-# ---------------------------------------------------------------------------
-# Normalização de SQL
-# ---------------------------------------------------------------------------
 def normalize_sql(sql: str) -> str:
     """
-    Normaliza SQL para comparação mais robusta.
+    Normalizes a SQL query for robust string comparison.
 
-    - Remove espaços extras
-    - Converte para upper case
-    - Remove comentários
-    - Remove trailing semicolon
+    - Strips line comments (-- ...) and block comments (/* ... */)
+    - Strips trailing semicolons and whitespace
+    - Uppercases tokens
+    - Collapses consecutive whitespace characters
 
-    Args:
-        sql: SQL a normalizar
+    Parameters:
+        sql: Raw SQL query string.
 
     Returns:
-        SQL normalizado
+        Normalized SQL string.
     """
-    # Remove comentários de linha
+    if not sql:
+        return ""
+    # Remove line comments
     sql = re.sub(r"--.*$", "", sql, flags=re.MULTILINE)
-
-    # Remove comentários de bloco
+    # Remove block comments
     sql = re.sub(r"/\*.*?\*/", "", sql, flags=re.DOTALL)
-
-    # Remove trailing semicolon
+    # Remove trailing semicolons and whitespace
     sql = sql.rstrip("; \n\t")
-
     # Uppercase
     sql = sql.upper()
-
-    # Remove espaços múltiplos
+    # Collapse multiple whitespace
     sql = re.sub(r"\s+", " ", sql).strip()
-
     return sql
 
 
 def sql_similarity_score(sql1: str, sql2: str) -> float:
     """
-    Calcula similarity score entre dois SQLs usando SequenceMatcher.
+    Computes text similarity score between two SQL queries using difflib.SequenceMatcher.
 
-    Args:
-        sql1: Primeira query
-        sql2: Segunda query
+    Parameters:
+        sql1: First SQL query.
+        sql2: Second SQL query.
 
     Returns:
-        Score de 0 a 1 (1 = idênticos)
+        Similarity score between 0.0 and 1.0 (1.0 = identical).
     """
     norm1 = normalize_sql(sql1)
     norm2 = normalize_sql(sql2)
 
-    # Se ambas vazias, considerar idênticas
     if not norm1 and not norm2:
         return 1.0
-
-    # Se uma vazia e outra não, completamente diferentes
     if not norm1 or not norm2:
         return 0.0
 
@@ -90,18 +77,12 @@ def sql_similarity_score(sql1: str, sql2: str) -> float:
     return matcher.ratio()
 
 
-# ---------------------------------------------------------------------------
-# Helpers internos — lógica Spider 2.0
-# ---------------------------------------------------------------------------
-def _vectors_match(v1: list, v2: list, tol: float = _TOLERANCE, ignore_order: bool = False) -> bool:
+def _vectors_match(v1: list[Any], v2: list[Any], tol: float = _TOLERANCE, ignore_order: bool = False) -> bool:
     """
-    Compara dois vetores (colunas transpostas) elemento a elemento,
-    seguindo a lógica oficial do Spider 2.0.
-
-    - Aceita tolerância absoluta ``tol`` para pares numéricos.
-    - Trata ``pd.isna`` como iguais entre si.
-    - Se ``ignore_order`` estiver ativado, ordena ambos os vetores antes
-      de comparar.
+    Compares two column vectors element-by-element following official Spider 2.0 rules:
+    - Accepts absolute numeric tolerance tol for numbers.
+    - Treats NaN / None values as equal.
+    - Sorts vectors before comparison if ignore_order is True.
     """
     if ignore_order:
         v1 = sorted(v1, key=lambda x: (x is None, str(x), isinstance(x, (int, float))))
@@ -122,15 +103,12 @@ def _vectors_match(v1: list, v2: list, tol: float = _TOLERANCE, ignore_order: bo
 
 
 def _results_to_dataframe(results: list[dict[str, Any]]) -> pd.DataFrame:
-    """Converte list[dict] (formato do SpiderQueryExecutor) para DataFrame."""
+    """Converts a list of dictionary rows into a pandas DataFrame."""
     if not results:
         return pd.DataFrame()
     return pd.DataFrame(results)
 
 
-# ---------------------------------------------------------------------------
-# Comparação principal — Spider 2.0
-# ---------------------------------------------------------------------------
 def compare_pandas_table(
     pred: pd.DataFrame,
     gold: pd.DataFrame,
@@ -138,22 +116,19 @@ def compare_pandas_table(
     ignore_order: bool = False,
 ) -> int:
     """
-    Compara pred vs gold seguindo a métrica oficial do Spider 2.0.
+    Compares predicted DataFrame against gold DataFrame following Spider 2.0 official logic.
 
-    Para cada coluna do gold (opcionalmente filtrada por ``condition_cols``),
-    verifica se **alguma** coluna do pred é equivalente (dentro de tolerância
-    numérica e tratando NaN).
+    For each column in gold (optionally filtered by condition_cols), checks whether
+    at least one column in pred matches within numeric tolerance.
 
-    Args:
-        pred: DataFrame com resultados do agente.
-        gold: DataFrame com resultados esperados.
-        condition_cols: Índices das colunas do gold a avaliar.
-                        Se ``None`` ou vazio, avalia todas.
-        ignore_order: Se True, ordena os valores de cada coluna antes
-                      de comparar (útil quando não há ORDER BY).
+    Parameters:
+        pred: Predicted result DataFrame.
+        gold: Gold expected DataFrame.
+        condition_cols: Indices of gold columns to evaluate. If None, evaluates all.
+        ignore_order: If True, sorts values before comparing.
 
     Returns:
-        1 se todas as colunas do gold foram encontradas no pred, 0 caso contrário.
+        1 if all gold columns are matched in pred, otherwise 0.
     """
     if condition_cols:
         gold_cols = gold.iloc[:, condition_cols]
@@ -173,22 +148,12 @@ def compare_pandas_table(
 def compare_multi_pandas_table(
     pred: pd.DataFrame,
     multi_gold: list[pd.DataFrame],
-    multi_condition_cols: list | None = None,
+    multi_condition_cols: list[Any] | None = None,
     multi_ignore_order: bool = False,
 ) -> int:
     """
-    Compara pred contra *múltiplas* respostas ouro válidas (Spider 2.0).
-
-    Retorna 1 se o pred bater com **pelo menos uma** das respostas ouro.
-
-    Args:
-        pred: DataFrame com resultados do agente.
-        multi_gold: Lista de DataFrames de respostas ouro.
-        multi_condition_cols: Lista de listas de índices, uma por gold.
-        multi_ignore_order: Se True, aplica ignore_order em todas.
-
-    Returns:
-        1 se match com alguma resposta ouro, 0 caso contrário.
+    Compares predicted DataFrame against multiple valid gold answers.
+    Returns 1 if pred matches at least one gold table.
     """
     if (
         multi_condition_cols is None
@@ -206,41 +171,30 @@ def compare_multi_pandas_table(
     return 0
 
 
-# ---------------------------------------------------------------------------
-# Funções de interface pública (mantêm assinatura list[dict])
-# ---------------------------------------------------------------------------
 def results_exact_match(
     results_gold: list[dict[str, Any]],
     results_agent: list[dict[str, Any]],
     ignore_order: bool = True,
 ) -> bool:
     """
-    Compara se dois conjuntos de resultados são equivalentes usando
-    a métrica oficial do Spider 2.0 (column-level matching).
+    Determines whether agent results match gold results according to official Spider 2.0 column matching.
 
-    Ignora nomes de colunas — apenas os *valores* das colunas importam.
-    Usa tolerância de 1e-2 para números e trata None/NaN como iguais.
-
-    Args:
-        results_gold: Resultados da query ouro (list[dict]).
-        results_agent: Resultados da query do agente (list[dict]).
-        ignore_order: Se True (padrão), a ordem das linhas é ignorada.
+    Parameters:
+        results_gold: Gold query results as list[dict].
+        results_agent: Agent query results as list[dict].
+        ignore_order: Whether to ignore row ordering (default True).
 
     Returns:
-        True se todas as colunas do gold foram encontradas no pred.
+        True if exact match, otherwise False.
     """
-    # Ambos vazios
     if not results_gold and not results_agent:
         return True
-
-    # Um vazio e outro não
     if not results_gold or not results_agent:
         return False
 
     gold_df = _results_to_dataframe(results_gold)
     pred_df = _results_to_dataframe(results_agent)
 
-    # Número de linhas diferente → impossível match
     if len(gold_df) != len(pred_df):
         return False
 
@@ -253,34 +207,18 @@ def results_f1_score(
     ignore_order: bool = True,
 ) -> dict[str, float]:
     """
-    Calcula Precision, Recall e F1 a nível de coluna, seguindo a lógica
-    do Spider 2.0.
+    Calculates column-level Precision, Recall, and F1 score following Spider 2.0 logic.
 
-    Para cada coluna do gold, verifica se alguma coluna do pred é
-    equivalente (tolerância numérica de 1e-2, NaN-aware).
-
-    - Precision: das colunas que o agente retornou, quantas batem com
-      alguma coluna do gold?
-    - Recall: das colunas do gold, quantas foram cobertas pelo agente?
-    - F1: média harmônica de precision e recall.
-
-    Quando o número de linhas difere, as linhas excedentes são tratadas
-    como colunas não-matching, penalizando precision ou recall conforme
-    o caso.
-
-    Args:
-        results_gold: Resultados da query ouro (list[dict]).
-        results_agent: Resultados da query do agente (list[dict]).
-        ignore_order: Se True (padrão), a ordem das linhas é ignorada.
+    Parameters:
+        results_gold: Gold query results as list[dict].
+        results_agent: Agent query results as list[dict].
+        ignore_order: Whether to ignore row ordering (default True).
 
     Returns:
-        Dict com chaves: precision, recall, f1 (floats de 0 a 1).
+        Dict with keys: "precision", "recall", "f1" (floats between 0.0 and 1.0).
     """
-    # Ambos vazios → match perfeito
     if not results_gold and not results_agent:
         return {"precision": 1.0, "recall": 1.0, "f1": 1.0}
-
-    # Um vazio e outro não
     if not results_gold:
         return {"precision": 0.0, "recall": 1.0, "f1": 0.0}
     if not results_agent:
@@ -289,9 +227,6 @@ def results_f1_score(
     gold_df = _results_to_dataframe(results_gold)
     pred_df = _results_to_dataframe(results_agent)
 
-    # Número de linhas diferente — padroniza para o mesmo tamanho usando NaN
-    # para viabilizar a comparação coluna-a-coluna. As colunas onde os NaNs
-    # extras forem injetados não vão bater, o que penaliza corretamente.
     max_rows = max(len(gold_df), len(pred_df))
     if len(gold_df) < max_rows:
         padding = pd.DataFrame(
@@ -312,13 +247,10 @@ def results_f1_score(
     total_gold = len(t_gold_list)
     total_pred = len(t_pred_list)
 
-    # Recall: quantas colunas do gold batem com alguma coluna do pred?
     gold_matched = sum(
         1 for g in t_gold_list
         if any(_vectors_match(g, p, ignore_order=ignore_order) for p in t_pred_list)
     )
-
-    # Precision: quantas colunas do pred batem com alguma coluna do gold?
     pred_matched = sum(
         1 for p in t_pred_list
         if any(_vectors_match(p, g, ignore_order=ignore_order) for g in t_gold_list)
@@ -339,11 +271,8 @@ def results_f1_score(
     }
 
 
-# ---------------------------------------------------------------------------
-# Construtor de linha para CSV de avaliação
-# ---------------------------------------------------------------------------
 def build_comparison_row(
-    id_exemplo: int,
+    id_exemplo: int | str,
     tentativa_numero: int,
     db_id: str,
     pergunta: str,
@@ -366,38 +295,47 @@ def build_comparison_row(
     resultado_exato_match_1a_tentativa: bool | None = None,
     resultado_f1_1a_tentativa: float = 0.0,
     query_1a_tentativa: str = "",
+    tokens_by_node: dict[str, Any] | str | None = None,
 ) -> dict[str, Any]:
     """
-    Constrói uma linha para o CSV de avaliação.
+    Constructs a canonical evaluation row for CSV reporting.
 
-    Args:
-        id_exemplo: ID sequencial da pergunta
-        tentativa_numero: Qual tentativa (1, 2, 3...)
-        db_id: Banco de dados
-        pergunta: Pergunta em linguagem natural
-        query_ouro: Query padrão do spider
-        query_agente: Query gerada pelo agente NESTA tentativa
-        tempo_agente_ms: Tempo de execução em ms
-        veredito_critico: "aprovado" / "reprovado" / "erro"
-        feedback_critico: Feedback recebido (ou "Aprovado" se aprovado)
-        erro_execucao: Mensagem de erro (vazio se OK)
-        resultado_exato_match: True/False se resultado foi exato (None se erro)
-        similarity_score: Score 0-1
-        resultado_f1: F1 score row-level (0-1)
-        resultado_precision: Precision row-level (0-1)
-        resultado_recall: Recall row-level (0-1)
-        tokens_input: Total de tokens de entrada consumidos
-        tokens_output: Total de tokens de saída consumidos
-        tokens_total: Total de tokens consumidos
-        viz_acionado: Se o agente de visualização foi acionado
-        viz_sucesso: Se o gráfico foi gerado com sucesso
-        resultado_exato_match_1a_tentativa: Exact match da 1ª tentativa (para ablação)
-        resultado_f1_1a_tentativa: F1 score da 1ª tentativa (para ablação)
-        query_1a_tentativa: SQL gerada na 1ª tentativa
+    Parameters:
+        id_exemplo: Instance or Question ID.
+        tentativa_numero: Attempt index (1-based).
+        db_id: Database ID.
+        pergunta: Natural language user question.
+        query_ouro: Gold reference SQL query.
+        query_agente: Agent-generated SQL candidate.
+        tempo_agente_ms: Execution latency in milliseconds.
+        veredito_critico: Critic verdict.
+        feedback_critico: Critic feedback text.
+        erro_execucao: Execution error message, if any.
+        resultado_exato_match: True/False for execution match, None if error.
+        similarity_score: Sequence similarity score.
+        resultado_f1: Column-level F1 score.
+        resultado_precision: Column-level Precision.
+        resultado_recall: Column-level Recall.
+        tokens_input: Cumulative input tokens.
+        tokens_output: Cumulative output tokens.
+        tokens_total: Cumulative total tokens.
+        viz_acionado: Whether visualization was requested.
+        viz_sucesso: Whether visualization succeeded.
+        resultado_exato_match_1a_tentativa: Pass@1 exact match indicator.
+        resultado_f1_1a_tentativa: Pass@1 F1 score.
+        query_1a_tentativa: SQL candidate from attempt 1.
+        tokens_by_node: Node-level token usage dictionary or serialized JSON string.
 
     Returns:
-        Dict com chaves para CSV
+        Dictionary conforming to CSVReporter.HEADERS.
     """
+    if isinstance(tokens_by_node, dict):
+        tokens_by_node_str = json.dumps(tokens_by_node, ensure_ascii=False, sort_keys=True)
+    elif isinstance(tokens_by_node, str):
+        tokens_by_node_str = tokens_by_node
+    else:
+        tokens_by_node_str = "{}"
+
     return {
         "id_exemplo": id_exemplo,
         "tentativa_numero": tentativa_numero,
@@ -422,6 +360,5 @@ def build_comparison_row(
         "resultado_exato_match_1a_tentativa": resultado_exato_match_1a_tentativa if resultado_exato_match_1a_tentativa is not None else "",
         "resultado_f1_1a_tentativa": resultado_f1_1a_tentativa,
         "query_1a_tentativa": query_1a_tentativa,
+        "tokens_by_node": tokens_by_node_str,
     }
-
-

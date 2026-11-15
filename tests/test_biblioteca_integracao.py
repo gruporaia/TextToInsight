@@ -117,11 +117,17 @@ def patched_runtime(monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "fake-key")
 
 
+def _engine_em_memoria():
+    from sqlalchemy import create_engine
+
+    return create_engine("sqlite://")
+
+
 def _fabricar_engine(hitl: bool = False) -> InsightEngine:
     return InsightEngine(
         api_key="fake-key",
         model="gemini-2.5-flash",
-        db_path="data/olist_relational.db",
+        db_engine=_engine_em_memoria(),
         hitl=hitl,
         show_output=False,
     )
@@ -147,14 +153,41 @@ def test_simbolos_publicos_expostos_no_topo_do_pacote():
 
 def test_engine_constroi_com_defaults_documentados(patched_runtime):
     """O construtor aceita só os campos obrigatórios e aplica defaults sensatos."""
+    db_engine = _engine_em_memoria()
     engine = InsightEngine(
         api_key="fake-key",
         model="gemini-2.5-flash",
-        db_path="data/olist_relational.db",
+        db_engine=db_engine,
     )
     assert engine._hitl_ativado is False
     assert engine._show_output is False
-    assert engine._db_path == "data/olist_relational.db"
+    assert engine._db_engine is db_engine
+    assert engine._cache_dir is None
+
+
+@pytest.mark.parametrize("db_engine", [None, "data/olist_relational.db"])
+def test_engine_exige_engine_sqlalchemy(patched_runtime, db_engine):
+    """A biblioteca não abre conexões: sem uma Engine do SQLAlchemy, o construtor falha cedo."""
+    with pytest.raises(TypeError, match="db_engine"):
+        InsightEngine(api_key="fake-key", model="gemini-2.5-flash", db_engine=db_engine)
+
+
+def test_engine_repassa_cache_dir_para_o_grafo(monkeypatch, tmp_path):
+    """`cache_dir` chega ao Graph, que o repassa aos nós com cache em disco."""
+    insight_engine_module = importlib.import_module("text_to_insight.InsightEngine")
+    capturado = {}
+
+    class _GraphEspiao(_FakeGraph):
+        def __init__(self, *args, **kwargs):
+            capturado.update(kwargs)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(insight_engine_module, "Graph", _GraphEspiao)
+    db_engine = _engine_em_memoria()
+    InsightEngine(api_key="k", model="gemini-2.5-flash", db_engine=db_engine, cache_dir=tmp_path)
+
+    assert capturado["db_engine"] is db_engine
+    assert capturado["cache_dir"] == tmp_path
 
 
 # --------------------------------------------------------------------------- #

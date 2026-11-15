@@ -3,6 +3,7 @@ import time
 from datetime import date, timedelta
 
 import pytest
+from sqlalchemy import create_engine
 
 from text_to_insight.nodes import verificador as ver
 
@@ -19,6 +20,13 @@ def banco(tmp_path):
     c.executemany('INSERT INTO "Patient" VALUES (?, ?, ?)', [(1, "M", "Ana"), (2, "F", "Bia")])
     c.commit(); c.close()
     return str(caminho)
+
+
+@pytest.fixture
+def motor(banco):
+    engine = create_engine(f"sqlite:///{banco}")
+    yield engine
+    engine.dispose()
 
 
 def _regras(alertas):
@@ -50,9 +58,8 @@ def test_coluna_de_apoio():
     assert "coluna_de_apoio" in regras
 
 
-def test_valor_inexistente_no_banco(banco):
-    estado = {"db_path": banco}
-    conn, fechar = ver._abrir_sqlite(estado)
+def test_valor_inexistente_no_banco(motor):
+    conn, fechar = ver._abrir_sqlite(motor)
     try:
         existe = ver._checador_de_valores(conn)
         sql = "SELECT COUNT(DISTINCT p.ID) FROM Patient p JOIN Laboratory l ON l.ID = p.ID WHERE p.SEX = 'M' AND l.CENTROMEA IN ('-', '+-')"
@@ -66,8 +73,8 @@ def test_valor_inexistente_no_banco(banco):
         fechar()
 
 
-def test_valor_com_aspas_e_nome_estranho_nao_quebram(banco):
-    conn, fechar = ver._abrir_sqlite({"db_path": banco})
+def test_valor_com_aspas_e_nome_estranho_nao_quebram(motor):
+    conn, fechar = ver._abrir_sqlite(motor)
     try:
         existe = ver._checador_de_valores(conn)
         assert existe("SEX", "M' OR '1'='1", False) is False
@@ -85,13 +92,13 @@ def test_no_so_roda_em_execucao_ok_e_fecha_sem_banco():
     assert _regras(out["alertas_verificador"]) == ["resultado_vazio"]
 
 
-def test_no_com_banco(banco):
+def test_no_com_banco(motor):
     estado = {
-        "status": "exec_ok", "db_path": banco, "pergunta_atual": "How many of them are male?",
+        "status": "exec_ok", "pergunta_atual": "How many of them are male?",
         "sql_gerada": "SELECT COUNT(*) FROM Laboratory WHERE CENTROMEA IN ('-', '+-')",
         "linhas_resultado_completo": [{"n": 0}],
     }
-    regras = _regras(ver.nos_nodo_verificador(estado)["alertas_verificador"])
+    regras = _regras(ver.nos_nodo_verificador(estado, engine=motor, usar_jev=False)["alertas_verificador"])
     assert regras == ["resultado_zero", "valor_inexistente"]
 
 
@@ -124,7 +131,7 @@ def test_aviso_na_resposta():
 def test_grafo_inclui_o_verificador_so_quando_ligado(modo, graficos):
     from text_to_insight.graph import Graph
 
-    g = Graph("chave-falsa", "openai/gpt-4o-mini", hitl=False, enable_graphs=graficos, verificador=modo)
+    g = Graph("chave-falsa", "openai/gpt-4o-mini", create_engine("sqlite://"), hitl=False, enable_graphs=graficos, verificador=modo)
     desenho = g.grafo_text_to_insight.get_graph()
     nos = desenho.nodes
     assert ("verificador" in nos) is (modo != "off")
@@ -256,15 +263,15 @@ def test_aviso_comeca_pelo_jev_e_regras_viram_detalhe():
 
 def test_jev_vem_ligado_por_padrao_quando_o_verificador_liga():
     from text_to_insight.graph import Graph
-    g = Graph("chave-falsa", "openai/gpt-4o-mini", hitl=False, enable_graphs=False, verificador="avisar")
+    g = Graph("chave-falsa", "openai/gpt-4o-mini", create_engine("sqlite://"), hitl=False, enable_graphs=False, verificador="avisar")
     assert g.grafo_text_to_insight.builder.nodes["verificador"].runnable.func.keywords["usar_jev"] is True
-    g = Graph("chave-falsa", "openai/gpt-4o-mini", hitl=False, enable_graphs=False, verificador="avisar", verificador_jev=False)
+    g = Graph("chave-falsa", "openai/gpt-4o-mini", create_engine("sqlite://"), hitl=False, enable_graphs=False, verificador="avisar", verificador_jev=False)
     assert g.grafo_text_to_insight.builder.nodes["verificador"].runnable.func.keywords["usar_jev"] is False
 
 
 def test_grafo_repassa_o_jev_ao_verificador():
     from text_to_insight.graph import Graph
-    g = Graph("chave-falsa", "openai/gpt-4o-mini", hitl=False, enable_graphs=False, verificador="avisar", verificador_jev=True)
+    g = Graph("chave-falsa", "openai/gpt-4o-mini", create_engine("sqlite://"), hitl=False, enable_graphs=False, verificador="avisar", verificador_jev=True)
     no = g.grafo_text_to_insight.builder.nodes["verificador"].runnable
     assert no.func.keywords["usar_jev"] is True and no.func.keywords["modo"] == "avisar"
 
@@ -362,9 +369,9 @@ def test_jev_baixa_sem_regra_vira_observacao(monkeypatch):
 
 def test_grafo_repassa_o_modo_das_colunas():
     from text_to_insight.graph import Graph
-    g = Graph("chave-falsa", "openai/gpt-4o-mini", hitl=False, enable_graphs=False, verificador="avisar", verificador_colunas="erro")
+    g = Graph("chave-falsa", "openai/gpt-4o-mini", create_engine("sqlite://"), hitl=False, enable_graphs=False, verificador="avisar", verificador_colunas="erro")
     assert g.grafo_text_to_insight.builder.nodes["verificador"].runnable.func.keywords["colunas_extras"] == "erro"
-    g = Graph("chave-falsa", "openai/gpt-4o-mini", hitl=False, enable_graphs=False, verificador="avisar")
+    g = Graph("chave-falsa", "openai/gpt-4o-mini", create_engine("sqlite://"), hitl=False, enable_graphs=False, verificador="avisar")
     assert g.grafo_text_to_insight.builder.nodes["verificador"].runnable.func.keywords["colunas_extras"] == "nota"
 
 

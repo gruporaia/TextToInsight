@@ -12,8 +12,8 @@ import os
 import sys
 import time
 import csv
-import subprocess
 from pathlib import Path
+from unittest.mock import MagicMock
 import pytest
 from dotenv import load_dotenv
 
@@ -25,8 +25,14 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "olist_relationa
 
 def _obter_schema_real() -> str:
     """Helper: extrai schema real do olist DB (sem API, só SQLite)."""
+    from tests.conftest import criar_engine_sqlite
     from text_to_insight.nodes.schema import nos_nodo_esquema
-    resultado = nos_nodo_esquema({"db_path": DB_PATH, "pergunta_atual": "teste"})
+
+    engine = criar_engine_sqlite(DB_PATH)
+    try:
+        resultado = nos_nodo_esquema({"pergunta_atual": "teste"}, engine=engine)
+    finally:
+        engine.dispose()
     return resultado["contexto_schema"]
 
 
@@ -48,6 +54,40 @@ def test_planner_sem_schema(llm):
     }
     resultado = nos_nodo_planejador(estado, llm, hitl=True)
     assert resultado["status"] == "aguardando_schema"
+
+
+@pytest.mark.parametrize(
+    ("erro", "status_esperado"),
+    [
+        ("", "pronto_codificacao"),
+        ("no such column: users.name", "revisando_estrategia"),
+    ],
+)
+def test_planner_sem_hitl_decide_sem_llm(erro, status_esperado):
+    """Sem HITL, decide pelo erro e não chama o LLM nem consome tokens."""
+    from text_to_insight.nodes.planner import nos_nodo_planejador
+
+    mock_llm = MagicMock()
+    mock_llm.invoke.side_effect = AssertionError("LLM não deveria ser chamado")
+
+    resultado = nos_nodo_planejador(
+        {
+            "pergunta_atual": "Quantos usuários existem?",
+            "contexto_schema": "Tabela: users\n- id: INTEGER",
+            "status": "exec_erro" if erro else "schema_obtido",
+            "erro_execucao": erro,
+        },
+        llm=mock_llm,
+        hitl=False,
+    )
+
+    assert resultado["status"] == status_esperado
+    assert resultado["espera_humana"] is False
+    assert resultado["tokens_input"] == 0
+    assert resultado["tokens_output"] == 0
+    assert resultado["tokens_total"] == 0
+    assert resultado["tokens_by_node"] == {}
+    mock_llm.invoke.assert_not_called()
 
 
 # ============================================================
@@ -179,16 +219,15 @@ def test_code_agent_com_feedback_regenera(llm):
 # EXECUTOR — com DB real (sem API)
 # ============================================================
 
-def test_executor_com_sql_real():
+def test_executor_com_sql_real(olist_engine):
     """Executor executa SQL gerada manualmente contra olist DB."""
     from text_to_insight.nodes.sandbox import nos_nodo_sandbox
 
     estado = {
         "sql_gerada": "SELECT COUNT(*) as total_pedidos FROM orders",
-        "db_path": DB_PATH,
         "pergunta_atual": "Quantos pedidos existem?",
     }
-    resultado = nos_nodo_sandbox(estado)
+    resultado = nos_nodo_sandbox(estado, engine=olist_engine)
 
     assert resultado["status"] == "exec_ok"
     assert resultado["total_linhas_resultado"] >= 1
@@ -204,7 +243,7 @@ def test_executor_com_sql_real():
 
 @pytest.mark.vcr
 @pytest.mark.timeout(90)
-def test_cadeia_code_agent_executor(llm):
+def test_cadeia_code_agent_executor(llm, olist_engine):
     """Code Agent gera SQL, Executor executa — testa a conexão entre os dois."""
     from text_to_insight.nodes.code_agent.code_agent import nos_nodo_agente_codigo
     from text_to_insight.nodes.sandbox import nos_nodo_sandbox
@@ -228,10 +267,9 @@ def test_cadeia_code_agent_executor(llm):
     # Passo 2: Executor executa a SQL gerada
     estado_exec = {
         "sql_gerada": resultado_code["sql_gerada"],
-        "db_path": DB_PATH,
         "pergunta_atual": "Quantos clientes existem no banco?",
     }
-    resultado_exec = nos_nodo_sandbox(estado_exec)
+    resultado_exec = nos_nodo_sandbox(estado_exec, engine=olist_engine)
     print(f"  → Status execução: {resultado_exec['status']}")
     print(f"  → Preview: {resultado_exec.get('linhas_resultado_preview', [])}")
 
@@ -264,10 +302,10 @@ def test_extrair_codigo_python_sem_markdown():
 def test_construir_script_inclui_csv_e_saida():
     from text_to_insight.nodes import graph_generator as gg
 
-    # Validate that the script includes the CSV load, plotting code, and output path.
-    script = gg._construir_script("/tmp/dados.csv", "/tmp/saida.png", "plt.plot([1],[2])")
-    assert "pd.read_csv(\"/tmp/dados.csv\")" in script
-    assert "plt.savefig(\"/tmp/saida.png\"" in script
+    # Validate that the script includes the CSV load, plotting code.
+    script = gg._construir_script("plt.plot([1],[2])")
+    assert 'pd.read_csv("dados.csv")' in script
+    assert 'plt.savefig("grafico.png"' in script
     assert "plt.plot([1],[2])" in script
     assert "matplotlib.use('Agg')" in script
 
@@ -410,77 +448,22 @@ def test_roteador_grafico_decisao_nao():
     assert roteador_grafico(estado, llm) == "resposta"
     assert llm.called is True
 
-
-# ============================================================
-# GRAFICOS — executador de script (subprocesso)
-# ============================================================
-
-def test_executar_script_sucesso():
+def test_grafico_real_gera_png(tmp_path):
     from text_to_insight.nodes import graph_generator as gg
+    from text_to_insight.execucao_python import executar_python_isolado
 
-    # Minimal script that signals success via GRAPH_OK.
-    ok, saida = gg._executar_script("print('GRAPH_OK')")
-    assert ok is True
-    assert "GRAPH_OK" in saida
+    csv = tmp_path / "resultado da query.csv"
+    csv.write_text("x,y\n1,2\n2,4\n3,6\n", encoding="utf-8")
+    destino = tmp_path / "saida.png"
 
+    script = gg._construir_script("plt.plot(df['x'], df['y'])")
+    resultado = executar_python_isolado(
+        script,
+        arquivos_entrada={gg.NOME_CSV: csv},
+        arquivos_saida={gg.NOME_GRAFICO: destino},
+        timeout_s=30,
+    )
 
-def test_executar_script_timeout(monkeypatch):
-    from text_to_insight.nodes import graph_generator as gg
-
-    # Simulate a subprocess timeout to validate the error path.
-    def _fake_run(*args, **kwargs):
-        raise subprocess.TimeoutExpired(cmd=args[0], timeout=30)
-
-    monkeypatch.setattr(gg.subprocess, "run", _fake_run)
-    ok, saida = gg._executar_script("print('GRAPH_OK')")
-
-    assert ok is False
-    assert "Timeout" in saida
-
-
-def test_executar_script_falha_retorno(monkeypatch):
-    from text_to_insight.nodes import graph_generator as gg
-
-    # Simulate a non-zero return code and stderr output.
-    def _fake_run(*args, **kwargs):
-        return subprocess.CompletedProcess(args=args[0], returncode=1, stdout="", stderr="erro")
-
-    monkeypatch.setattr(gg.subprocess, "run", _fake_run)
-    ok, saida = gg._executar_script("print('GRAPH_OK')")
-
-    assert ok is False
-    assert "erro" in saida
-
-
-def test_executar_script_limpa_temporario(monkeypatch, tmp_path):
-    from text_to_insight.nodes import graph_generator as gg
-
-    temp_path = tmp_path / "temp_script.py"
-
-    class _TempFile:
-        def __init__(self, path: Path):
-            self.name = str(path)
-            self._fh = open(self.name, "w", encoding="utf-8")
-
-        def write(self, data: str) -> None:
-            self._fh.write(data)
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            self._fh.close()
-
-    def _fake_named_tempfile(*args, **kwargs):
-        # Use a deterministic temp path to verify cleanup.
-        return _TempFile(temp_path)
-
-    def _fake_run(*args, **kwargs):
-        return subprocess.CompletedProcess(args=args[0], returncode=0, stdout="GRAPH_OK", stderr="")
-
-    monkeypatch.setattr(gg.tempfile, "NamedTemporaryFile", _fake_named_tempfile)
-    monkeypatch.setattr(gg.subprocess, "run", _fake_run)
-
-    ok, _ = gg._executar_script("print('GRAPH_OK')")
-    assert ok is True
-    assert temp_path.exists() is False
+    assert resultado["ok"] is True, resultado["erro_execucao"]
+    assert destino.exists()
+    assert destino.read_bytes().startswith(b"\x89PNG")
