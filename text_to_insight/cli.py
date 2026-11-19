@@ -181,6 +181,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Colunas a mais na resposta: nota (só uma observação) ou erro (alerta, para benchmarks como o BIRD). Padrão: nota.",
     )
     parser.add_argument(
+        "--verificador-limiar-jev",
+        type=float,
+        default=0.0,
+        help="Probabilidade mínima para o Jev sozinho virar alerta; abaixo disso vira só uma observação. Padrão: 0 (sem limiar).",
+    )
+    parser.add_argument(
         "pergunta",
         nargs="*",
         help="Pergunta em linguagem natural. Se omitida, usa uma pergunta padrão.",
@@ -235,6 +241,7 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         verificador=args.verificador,
         verificador_jev=args.verificador_jev == "on",
         verificador_colunas=args.verificador_colunas,
+        verificador_limiar_jev=args.verificador_limiar_jev,
     )
 
     # show_output=False para evitar prints duplicados no console, já que exibir_resultado_console é chamado manualmente.

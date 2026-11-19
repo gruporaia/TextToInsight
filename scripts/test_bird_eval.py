@@ -273,6 +273,12 @@ def parse_arguments() -> argparse.Namespace:
         help="Colunas a mais: erro (alerta; o BIRD exige exatamente as colunas pedidas) ou nota (default: erro)",
     )
     parser.add_argument(
+        "--verificador-limiar-jev",
+        type=float,
+        default=0.0,
+        help="Probabilidade mínima para o Jev sozinho virar alerta; abaixo disso vira observação (default: 0, sem limiar)",
+    )
+    parser.add_argument(
         "--timeout",
         type=int,
         default=30,
@@ -546,7 +552,7 @@ def main() -> None:
     print(f"   - Exploration Selector: {args.exploration_selector}")
     print(f"   - Infer FKs: {'on' if infer_fks_enabled else 'off'}")
     print(f"   - With Graphs: {'on' if with_graphs_enabled else 'off'}")
-    print(f"   - Verificador: {args.verificador} (Jev: {args.verificador_jev})")
+    print(f"   - Verificador: {args.verificador} (Jev: {args.verificador_jev}, limiar: {args.verificador_limiar_jev})")
     print(f"   - Logging: {args.log}")
     if args.question_filter:
         print(f"   - Question Filter: {args.question_filter}")
@@ -651,6 +657,7 @@ def main() -> None:
                             verificador=args.verificador,
                             verificador_jev=(args.verificador_jev == "on"),
                             verificador_colunas=args.verificador_colunas,
+                            verificador_limiar_jev=args.verificador_limiar_jev,
                         )
                     except Exception as e:
                         print(f"     ❌ Failed to instantiate InsightEngine for db '{db_id}': {e}")

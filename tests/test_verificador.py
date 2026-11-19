@@ -177,7 +177,7 @@ def _estado_ok(**extra):
 
 def test_niveis_so_pelas_regras():
     v = ver.combinar([], None)
-    assert v == {"alerta": False, "nivel": "nenhum", "nivel_jev": "", "probs_jev": {}, "niveis_regras": [], "origem": ""}
+    assert v == {"alerta": False, "nivel": "nenhum", "nivel_jev": "", "probs_jev": {}, "niveis_regras": [], "origem": "", "jev_abaixo_do_limiar": False}
     alertas = [{"regra": "resultado_zero", "mensagem": "zero"}, {"regra": "valor_inexistente", "mensagem": "valor"}]
     v = ver.combinar(alertas, None)
     assert v["alerta"] is True and v["niveis_regras"] == ["alta", "media"] and v["origem"] == "regras"
@@ -373,6 +373,34 @@ def test_grafo_repassa_o_modo_das_colunas():
     assert g.grafo_text_to_insight.builder.nodes["verificador"].runnable.func.keywords["colunas_extras"] == "erro"
     g = Graph("chave-falsa", "openai/gpt-4o-mini", create_engine("sqlite://"), hitl=False, enable_graphs=False, verificador="avisar")
     assert g.grafo_text_to_insight.builder.nodes["verificador"].runnable.func.keywords["colunas_extras"] == "nota"
+
+
+def test_limiar_do_jev_corta_alerta_com_pouca_certeza():
+    media = _respostas_jev({"alta": 0.1, "media": 0.6, "baixa": 0.1, "nenhum": 0.2})["answers"]
+    v = ver.combinar([], media, "nota")
+    assert v["alerta"] is True and v["jev_abaixo_do_limiar"] is False
+    v = ver.combinar([], media, "nota", limiar_jev=0.7)
+    assert v["alerta"] is False and v["origem"] == "" and v["jev_abaixo_do_limiar"] is True
+    assert ver.combinar([], media, "nota", limiar_jev=0.6)["alerta"] is True
+    v = ver.combinar([{"regra": "resultado_vazio", "mensagem": "vazio"}], media, "nota", limiar_jev=0.7)
+    assert v["alerta"] is True and v["origem"] == "regras" and v["nivel"] == "alta"
+
+
+def test_jev_abaixo_do_limiar_vira_observacao(monkeypatch):
+    media = _respostas_jev({"alta": 0.1, "media": 0.6, "baixa": 0.1, "nenhum": 0.2})["answers"]
+    monkeypatch.setattr(ver, "_julgar_com_jev", lambda estado: media)
+    out = ver.nos_nodo_verificador(_estado_ok(), usar_jev=True, colunas_extras="nota", limiar_jev=0.7)
+    assert out["verificacao"]["alerta"] is False
+    aviso = ver.texto_do_aviso(out["alertas_verificador"], out["verificacao"])
+    assert "pode estar errada" not in aviso and "pouca certeza (60%)" in aviso
+
+
+def test_grafo_repassa_o_limiar_do_jev():
+    from text_to_insight.graph import Graph
+    g = Graph("chave-falsa", "openai/gpt-4o-mini", create_engine("sqlite://"), hitl=False, enable_graphs=False, verificador="avisar", verificador_limiar_jev=0.7)
+    assert g.grafo_text_to_insight.builder.nodes["verificador"].runnable.func.keywords["limiar_jev"] == 0.7
+    g = Graph("chave-falsa", "openai/gpt-4o-mini", create_engine("sqlite://"), hitl=False, enable_graphs=False, verificador="avisar")
+    assert g.grafo_text_to_insight.builder.nodes["verificador"].runnable.func.keywords["limiar_jev"] == 0.0
 
 
 @pytest.mark.parametrize("pergunta", ["Quantos ingressos teve cada conferência?", "Quantos materiais por categoria?", "How many tickets for each event?"])

@@ -41,7 +41,7 @@ def nos_nodo_espera_humana(estado: EstadoTextToInsight):
     return estado
 
 class Graph:
-    def __init__(self, api_key: str, model: str, db_engine, hitl: bool = True, enable_graphs: bool = True, use_cot: bool = True, use_data_exploration: bool = True, use_exploration_selector: str = "off", use_rag: bool = True, enrich_rag: bool = False, model_kwargs: dict | None = None, cache_dir=None, verificador: str = "off", verificador_jev: bool = True, verificador_colunas: str = "nota"):
+    def __init__(self, api_key: str, model: str, db_engine, hitl: bool = True, enable_graphs: bool = True, use_cot: bool = True, use_data_exploration: bool = True, use_exploration_selector: str = "off", use_rag: bool = True, enrich_rag: bool = False, model_kwargs: dict | None = None, cache_dir=None, verificador: str = "off", verificador_jev: bool = True, verificador_colunas: str = "nota", verificador_limiar_jev: float = 0.0):
         self.llm = get_model(model, api_key, **(model_kwargs or {}))
         self.memory = MemorySaver()
         self.enable_graphs = enable_graphs
@@ -60,6 +60,7 @@ class Graph:
         self.verificador = verificador
         self.verificador_jev = verificador_jev
         self.verificador_colunas = verificador_colunas
+        self.verificador_limiar_jev = verificador_limiar_jev
         self.grafo_text_to_insight = self._compilar_grafo(hitl, enrich_rag)
 
     def _construir_grafo_text_to_insight(self, hitl: bool, enrich_rag: bool) -> StateGraph:
@@ -86,7 +87,7 @@ class Graph:
         destino_apos_sandbox = "salvar_csv" if self.enable_graphs else "resposta"
         mapa_sandbox = {"salvar_csv": "salvar_csv", "resposta": "resposta", "planejador": "planejador"}
         if self.verificador != "off":
-            construtor_grafo.add_node("verificador", partial(nos_nodo_verificador, modo=self.verificador, usar_jev=self.verificador_jev, colunas_extras=self.verificador_colunas, engine=engine))
+            construtor_grafo.add_node("verificador", partial(nos_nodo_verificador, modo=self.verificador, usar_jev=self.verificador_jev, colunas_extras=self.verificador_colunas, limiar_jev=self.verificador_limiar_jev, engine=engine))
             construtor_grafo.add_edge("verificador", destino_apos_sandbox)
             mapa_sandbox.update({"salvar_csv": "verificador", "resposta": "verificador"})
 

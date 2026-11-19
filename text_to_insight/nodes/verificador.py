@@ -670,7 +670,7 @@ def estado_para_jev(estado: EstadoTextToInsight) -> dict[str, str]:
     return state
 
 
-def combinar(alertas: list[dict[str, str]], respostas_jev: dict | None, colunas_extras: str = "erro") -> dict[str, Any]:
+def combinar(alertas: list[dict[str, str]], respostas_jev: dict | None, colunas_extras: str = "erro", limiar_jev: float = 0.0) -> dict[str, Any]:
     from .jev_cliente import media_das_duas_ordens
     niveis_regras = sorted({NIVEL_DA_REGRA[a["regra"]] for a in alertas}, key=NIVEIS.index)
     resultado: dict[str, Any] = {"alerta": bool(alertas), "nivel": "", "nivel_jev": "", "probs_jev": {},
@@ -679,7 +679,9 @@ def combinar(alertas: list[dict[str, str]], respostas_jev: dict | None, colunas_
         probs = media_das_duas_ordens(respostas_jev, "grupo", NIVEIS)
         nivel_jev = max(probs, key=probs.get)
         resultado.update(nivel_jev=nivel_jev, probs_jev={k: round(v, 3) for k, v in probs.items()})
-    jev_apontou = resultado["nivel_jev"] not in ("", "nenhum") and not (colunas_extras == "nota" and resultado["nivel_jev"] == "baixa")
+    jev_viu = resultado["nivel_jev"] not in ("", "nenhum") and not (colunas_extras == "nota" and resultado["nivel_jev"] == "baixa")
+    jev_apontou = jev_viu and resultado["probs_jev"][resultado["nivel_jev"]] >= limiar_jev
+    resultado["jev_abaixo_do_limiar"] = jev_viu and not jev_apontou
     resultado["alerta"] = bool(alertas) or jev_apontou
     resultado["origem"] = " e ".join(x for x, ok in (("jev", jev_apontou), ("regras", bool(alertas))) if ok)
     resultado["nivel"] = resultado["nivel_jev"] if jev_apontou else (niveis_regras[0] if niveis_regras else "nenhum")
@@ -699,7 +701,7 @@ def _julgar_com_jev(estado: EstadoTextToInsight) -> dict | None:
         return None
 
 
-def nos_nodo_verificador(estado: EstadoTextToInsight, modo: str = "avisar", engine=None, usar_jev: bool = True, colunas_extras: str = "nota") -> dict:
+def nos_nodo_verificador(estado: EstadoTextToInsight, modo: str = "avisar", engine=None, usar_jev: bool = True, colunas_extras: str = "nota", limiar_jev: float = 0.0) -> dict:
     if modo == "off" or estado.get("status") != "exec_ok":
         return {"alertas_verificador": [], "verificacao": {}}
     pergunta = estado.get("pergunta_atual", "") or estado.get("pergunta_original", "") or estado.get("pergunta_usuario", "")
@@ -731,12 +733,15 @@ def nos_nodo_verificador(estado: EstadoTextToInsight, modo: str = "avisar", engi
 
     respostas_jev = _julgar_com_jev(estado) if usar_jev else None
     try:
-        verificacao = combinar(alertas, respostas_jev, colunas_extras)
+        verificacao = combinar(alertas, respostas_jev, colunas_extras, limiar_jev)
     except Exception as e:
         print(f"[VERIFICADOR] Resposta do Jev inesperada ({type(e).__name__}) — seguindo só com as regras.")
-        verificacao = combinar(alertas, None, colunas_extras)
+        verificacao = combinar(alertas, None, colunas_extras, limiar_jev)
     if colunas_extras == "nota" and verificacao["nivel_jev"] == "baixa" and not notas:
         notas.append("a resposta pode ter colunas que a pergunta não pediu")
+    if verificacao["jev_abaixo_do_limiar"]:
+        nivel = verificacao["nivel_jev"]
+        notas.append(f"a checagem automática viu um possível problema, mas com pouca certeza ({verificacao['probs_jev'][nivel]:.0%}): {DESCRICAO_DO_NIVEL[nivel]}")
 
     probs = verificacao["probs_jev"]
     jev = (f"{verificacao['nivel_jev']} (" + " / ".join(f"{k} {v:.0%}" for k, v in probs.items()) + ")") if probs else "sem Jev"

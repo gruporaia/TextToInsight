@@ -70,6 +70,7 @@ Toda SQL gerada passa por uma validação (apenas `SELECT`/`WITH`, uma única in
 | `verificador` | `"off"` | Confere a SQL e o resultado depois da execução. Com `"avisar"`, acrescenta um aviso no fim da resposta quando algo parece errado. |
 | `verificador_jev` | `True` | Com o verificador ligado, usa o Jev (TypeSafe) como verificador principal. Precisa de `TYPESAFE_API_KEY`; sem ela, rodam só as regras. |
 | `verificador_colunas` | `"nota"` | Colunas a mais na resposta: `"nota"` vira só uma observação, `"erro"` vira alerta (útil em benchmarks como o BIRD). |
+| `verificador_limiar_jev` | `0.0` | Probabilidade mínima para o Jev sozinho virar alerta. Abaixo disso, o que ele viu entra só como observação. Com `0.0`, vale o nível mais provável, como antes. |
 
 Por padrão o cache fica em `~/.cache/text-to-insight` (Linux), `~/Library/Caches/text-to-insight` (macOS) ou `%LOCALAPPDATA%\text-to-insight\Cache` (Windows). O schema enriquecido é indexado pelo conteúdo do schema: se o banco mudar, ele é gerado de novo.
 
@@ -107,7 +108,7 @@ text-to-insight --db-url postgresql://usuario:senha@host:5432/banco --hitl off \
     "Qual o ticket médio por estado?"
 ```
 
-`text-to-insight --help` lista as demais opções (`--hitl`, `--enrich-rag`, `--infer-fks`, `--cot`, `--data-exploration`, `--exploration-selector`, `--verificador`, `--verificador-jev`, `--verificador-colunas`, `--temperature`, `--max-tokens`).
+`text-to-insight --help` lista as demais opções (`--hitl`, `--enrich-rag`, `--infer-fks`, `--cot`, `--data-exploration`, `--exploration-selector`, `--verificador`, `--verificador-jev`, `--verificador-colunas`, `--verificador-limiar-jev`, `--temperature`, `--max-tokens`).
 
 ## Desenvolvimento
 

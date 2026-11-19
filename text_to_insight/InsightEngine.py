@@ -36,6 +36,7 @@ class InsightEngine:
         verificador: str = "off",
         verificador_jev: bool = True,
         verificador_colunas: str = "nota",
+        verificador_limiar_jev: float = 0.0,
     ):
         """
         `db_engine` é uma Engine do SQLAlchemy construída pelo chamador, que
@@ -87,6 +88,7 @@ class InsightEngine:
             verificador=verificador,
             verificador_jev=verificador_jev,
             verificador_colunas=verificador_colunas,
+            verificador_limiar_jev=verificador_limiar_jev,
         )
 
         print(f"[CONFIG] HITL: {'ATIVADO' if self._hitl_ativado else 'DESATIVADO'}")
@@ -99,7 +101,8 @@ class InsightEngine:
         print(f"[CONFIG] ENRICH-RAG: {'ATIVADO' if self._enrich_rag else 'DESATIVADO'}")
         print(f"[CONFIG] INFERIR-FKS-VIRTUAIS: {'ATIVADO' if self._inferir_fks_virtuais else 'DESATIVADO'}")
         print(f"[CONFIG] BANCO: {self._db_engine.dialect.name}")
-        print(f"[CONFIG] VERIFICADOR: {verificador.upper()}" + (" + JEV" if verificador != "off" and verificador_jev else ""))
+        print(f"[CONFIG] VERIFICADOR: {verificador.upper()}" + (" + JEV" if verificador != "off" and verificador_jev else "")
+              + (f" (LIMIAR {verificador_limiar_jev})" if verificador != "off" and verificador_jev and verificador_limiar_jev else ""))
         print(f"[CONFIG] MODEL_KWARGS: {self._model_kwargs or 'PADRÃO DO PROVEDOR'}")
 
     def _config(self, thread_id: str) -> dict[str, Any]:
