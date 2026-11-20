@@ -180,3 +180,65 @@ def test_cli_db_url_tem_prioridade_e_usa_driver_dos_extras():
         assert str(engine.url) == "sqlite://"
     finally:
         engine.dispose()
+
+
+def test_cli_docs_dir_propaga_para_insight_engine_e_graph(monkeypatch, tmp_path):
+    from pathlib import Path
+    from text_to_insight import cli
+
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "regras.md").write_text("1. **Regra**: teste.\n", encoding="utf-8")
+
+    captured = []
+
+    class _CapturingGraph(_FakeGraph):
+        def __init__(self, api_key, model, hitl=True, **kwargs):
+            captured.append(kwargs)
+            super().__init__(api_key, model, hitl=hitl, **kwargs)
+
+    insight_engine_module = importlib.import_module("text_to_insight.InsightEngine")
+    monkeypatch.setattr(insight_engine_module, "Graph", _CapturingGraph)
+    monkeypatch.setattr("text_to_insight.runtime.salvar_metricas_csv", lambda *a, **kw: None)
+    monkeypatch.setenv("OPENAI_API_KEY", "fake-key")
+
+    args = cli._parse_args(["--db-path", DB_OLIST, "--docs-dir", str(docs_dir), "Quantos pedidos?"])
+    assert args.docs_dir == str(docs_dir)
+
+    resultado = main_entry.main(["--db-path", DB_OLIST, "--docs-dir", str(docs_dir), "Quantos pedidos?"])
+    assert resultado["status"] == "aprovado"
+    assert captured[-1]["docs_dir"] == Path(docs_dir).resolve()
+
+
+def test_cli_docs_dir_inexistente_falha_com_mensagem(tmp_path):
+    import pytest
+    from text_to_insight import cli
+
+    inexistente = tmp_path / "pasta_inexistente"
+    with pytest.raises(SystemExit, match="docs-dir"):
+        cli._resolver_docs_dir(str(inexistente))
+
+
+def test_insight_engine_propaga_docs_dir_como_path(monkeypatch, olist_engine, tmp_path):
+    from pathlib import Path
+
+    captured = []
+
+    class _CapturingGraph(_FakeGraph):
+        def __init__(self, api_key, model, hitl=True, **kwargs):
+            captured.append(kwargs)
+            super().__init__(api_key, model, hitl=hitl, **kwargs)
+
+    insight_engine_module = importlib.import_module("text_to_insight.InsightEngine")
+    monkeypatch.setattr(insight_engine_module, "Graph", _CapturingGraph)
+
+    docs_dir = tmp_path / "meus_docs"
+    docs_dir.mkdir()
+    eng = InsightEngine(
+        api_key="fake-key",
+        model="gemini-2.5-flash",
+        db_engine=olist_engine,
+        docs_dir=str(docs_dir),
+    )
+    assert eng._docs_dir == Path(docs_dir)
+    assert captured[-1]["docs_dir"] == Path(docs_dir)

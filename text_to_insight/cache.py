@@ -18,6 +18,7 @@ Conteúdo da pasta:
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 
 from platformdirs import user_cache_dir
@@ -60,3 +61,32 @@ def salvar_schema_enriquecido(cache_dir: str | Path | None, contexto_schema: str
 def diretorio_chroma(cache_dir: str | Path | None = None) -> Path:
     """Pasta do ChromaDB persistente (RAG e seletor de colunas)."""
     return resolver_cache_dir(cache_dir) / "chroma_db"
+
+
+def caminho_trechos_regras(cache_dir: str | Path | None, chave_hash: str) -> Path:
+    """Arquivo de cache dos trechos de regras extraídos correspondente a `chave_hash`."""
+    return resolver_cache_dir(cache_dir) / "rules" / f"{chave_hash}_trechos.json"
+
+
+def ler_trechos_regras(cache_dir: str | Path | None, chave_hash: str) -> list[dict] | None:
+    """Devolve os trechos de regras em cache para este hash, se existirem."""
+    caminho = caminho_trechos_regras(cache_dir, chave_hash)
+    try:
+        dados = json.loads(caminho.read_text(encoding="utf-8"))
+        return dados if isinstance(dados, list) else None
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        return None
+
+
+def salvar_trechos_regras(
+    cache_dir: str | Path | None, chave_hash: str, trechos: list[dict]
+) -> Path | None:
+    """Grava os trechos de regras extraídos no cache. Falha de escrita não interrompe a execução."""
+    caminho = caminho_trechos_regras(cache_dir, chave_hash)
+    try:
+        caminho.parent.mkdir(parents=True, exist_ok=True)
+        caminho.write_text(json.dumps(trechos, ensure_ascii=False), encoding="utf-8")
+    except OSError as e:
+        print(f"[CACHE] Não foi possível gravar os trechos de regras em {caminho}: {e}")
+        return None
+    return caminho
