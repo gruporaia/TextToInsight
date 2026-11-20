@@ -85,7 +85,8 @@ def _alvos(texto: str, catalogo: dict[str, set[str]]) -> tuple[list[str], list[s
 
     for trecho in trechos_crase:
         sem_qualificados = _QUALIFICADO.sub(" ", trecho)
-        for identificador in re.findall(r"[A-Za-z_]\w*", sem_qualificados):
+        sem_casts = re.sub(r"::[A-Za-z_]\w*", " ", sem_qualificados)
+        for identificador in re.findall(r"[A-Za-z_]\w*", sem_casts):
             if identificador in catalogo:
                 tabelas[identificador] = None
             elif len(dono_coluna.get(identificador, ())) == 1:
@@ -143,7 +144,7 @@ def carregar_documentos_md(docs_dir: str | Path | None) -> list[dict]:
     """
     if not docs_dir:
         return []
-    caminho_base = Path(docs_dir)
+    caminho_base = Path(docs_dir).expanduser()
     if not caminho_base.exists():
         print(f"[DOCS_LINKER] Aviso: caminho de documentos '{docs_dir}' não encontrado.")
         return []

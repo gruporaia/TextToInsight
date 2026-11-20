@@ -34,13 +34,41 @@ from .nodes import (
 )
 from .routers import roteador_sandbox, roteador_planejador, roteador_grafico, roteador_schema
 from .model_selection import get_model
+from .retriever.reranker import DEFAULT_PRUNER_MODEL
 
 def nos_nodo_espera_humana(estado: EstadoTextToInsight):
     """Nó estrutural: serve apenas como breakpoint para o HITL."""
     return estado
 
 class Graph:
-    def __init__(self, api_key: str, model: str, db_engine, hitl: bool = True, enable_graphs: bool = True, use_cot: bool = True, use_data_exploration: bool = True, use_exploration_selector: str = "off", use_rag: bool = True, use_bm25: bool = True, use_embedding: bool = True, steiner_apenas_tabelas: bool = True, enrich_rag: bool = False, model_kwargs: dict | None = None, docs_dir=None, cache_dir=None):
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        db_engine,
+        hitl: bool = True,
+        enable_graphs: bool = True,
+        use_cot: bool = True,
+        use_data_exploration: bool = True,
+        use_exploration_selector: str = "off",
+        use_rag: bool = True,
+        use_bm25: bool = True,
+        use_embedding: bool = True,
+        steiner_apenas_tabelas: bool = True,
+        nao_expandir_regras_tabelas: bool = False,
+        use_fk_boost: bool = True,
+        use_llm_pruner: bool = True,
+        pruner_model: str = DEFAULT_PRUNER_MODEL,
+        pruner_api_key: str | None = None,
+        pruner_pool_k: int = 12,
+        pruner_reasoning_effort: str | None = None,
+        enrich_rag: bool = False,
+        model_kwargs: dict | None = None,
+        docs_dir=None,
+        cache_dir=None,
+    ):
+        self._api_key = api_key
+        self._model_name = model
         self.llm = get_model(model, api_key, **(model_kwargs or {}))
         self.memory = MemorySaver()
         self.enable_graphs = enable_graphs
@@ -51,6 +79,13 @@ class Graph:
         self.use_bm25 = use_bm25
         self.use_embedding = use_embedding
         self.steiner_apenas_tabelas = steiner_apenas_tabelas
+        self.nao_expandir_regras_tabelas = nao_expandir_regras_tabelas
+        self.use_fk_boost = use_fk_boost
+        self.use_llm_pruner = use_llm_pruner
+        self.pruner_model = pruner_model
+        self.pruner_api_key = pruner_api_key
+        self.pruner_pool_k = pruner_pool_k
+        self.pruner_reasoning_effort = pruner_reasoning_effort
         self.enrich_rag = enrich_rag
         # Engine SQLAlchemy injetada pelo chamador (dono do ciclo de vida da
         # conexao). Nunca entra no estado do grafo: e passada via partial
@@ -75,7 +110,27 @@ class Graph:
         construtor_grafo.add_node("planejador", partial(nos_nodo_planejador, llm=self.llm, hitl=hitl))
         construtor_grafo.add_node("espera_humana", nos_nodo_espera_humana)
         construtor_grafo.add_node("esquema", partial(nos_nodo_esquema, engine=engine, enrich_rag=enrich_rag, cache_dir=cache_dir))
-        construtor_grafo.add_node("retriever", partial(nos_nodo_retriever, use_rag=self.use_rag, use_bm25=self.use_bm25, use_embedding=self.use_embedding, steiner_apenas_tabelas=self.steiner_apenas_tabelas, docs_dir=self.docs_dir, cache_dir=cache_dir))
+        construtor_grafo.add_node(
+            "retriever",
+            partial(
+                nos_nodo_retriever,
+                use_rag=self.use_rag,
+                use_bm25=self.use_bm25,
+                use_embedding=self.use_embedding,
+                steiner_apenas_tabelas=self.steiner_apenas_tabelas,
+                nao_expandir_regras_tabelas=self.nao_expandir_regras_tabelas,
+                use_fk_boost=self.use_fk_boost,
+                use_llm_pruner=self.use_llm_pruner,
+                pruner_model=self.pruner_model,
+                pruner_api_key=self.pruner_api_key,
+                pruner_fallback_api_key=self._api_key,
+                pruner_fallback_model_name=self._model_name,
+                pruner_pool_k=self.pruner_pool_k,
+                pruner_reasoning_effort=self.pruner_reasoning_effort,
+                docs_dir=self.docs_dir,
+                cache_dir=cache_dir,
+            ),
+        )
         construtor_grafo.add_node("exploration_selector", partial(nos_nodo_exploration_selector, llm=self.llm, exploration_selector_mode=self.use_exploration_selector, cache_dir=cache_dir))
         construtor_grafo.add_node("data_exploration", partial(nos_nodo_data_exploration, engine=engine, use_data_exploration=self.use_data_exploration))
         construtor_grafo.add_node("agente_codigo", partial(nos_nodo_agente_codigo, llm=self.llm, use_cot=self.use_cot, engine=engine))

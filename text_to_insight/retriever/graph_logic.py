@@ -13,11 +13,13 @@ class SchemaGraph:
         schema: str = None,
         schema_info: list[dict] | dict = None,
         steiner_apenas_tabelas: bool = True,
+        nao_expandir_regras_tabelas: bool = False,
     ):
         self.graph = nx.MultiGraph()
         self.table_schemas = {}
         self.rule_schemas = {}
         self.steiner_apenas_tabelas = steiner_apenas_tabelas
+        self.nao_expandir_regras_tabelas = nao_expandir_regras_tabelas
         if schema or schema_info:
             self._add_schema(schema=schema, schema_info=schema_info)
 
@@ -27,11 +29,11 @@ class SchemaGraph:
             table_chunks = [t.strip() for t in re.findall(regex_pattern, schema)]
 
             for table in table_chunks:
-                name_match = re.search(r"Tabela:\s+(\w+)", table)
+                name_match = re.search(r"^Tabela:[ \t]*(.+?)[ \t]*$", table, re.MULTILINE)
                 if not name_match:
                     continue
 
-                tabela_nome = name_match.group(1)
+                tabela_nome = name_match.group(1).strip()
                 self.graph.add_node(tabela_nome, tipo="tabela")
                 self.table_schemas[tabela_nome] = table
 
@@ -102,11 +104,23 @@ class SchemaGraph:
                             parent_col=tabela_alvo,
                         )
 
-    def get_rules_for_tables(self, tables: list[str]) -> list[str]:
+    def get_rules_for_tables(
+        self,
+        tables: list[str],
+        nao_expandir_regras_tabelas: bool | None = None,
+    ) -> list[str]:
         """
         Expansão Tabela -> Regra: retorna os IDs de todas as regras associadas
         às tabelas informadas (via aresta 'aplica_se').
+        Se `nao_expandir_regras_tabelas=True`, bloqueia essa expansão.
         """
+        bloquear = (
+            self.nao_expandir_regras_tabelas
+            if nao_expandir_regras_tabelas is None
+            else nao_expandir_regras_tabelas
+        )
+        if bloquear:
+            return []
         regras: list[str] = []
         vistas: set[str] = set()
         for tabela in tables:
@@ -143,11 +157,18 @@ class SchemaGraph:
                 return rule_text
         return None
 
-    def _get_relations(self, nodes: list, steiner_apenas_tabelas: bool | None = None):
+    def _get_relations(
+        self,
+        nodes: list,
+        steiner_apenas_tabelas: bool | None = None,
+        max_tabelas_por_regra: int | None = None,
+    ):
         """
         Recebe uma lista de nós (tabelas e/ou regras recuperadas pelo RAG).
         1. As regras retornadas referenciam suas respectivas tabelas (aresta "aplica_se",
-           no sentido regra -> tabela).
+           no sentido regra -> tabela). Quando `max_tabelas_por_regra` é definido,
+           regras muito amplas (ex.: avisos de desambiguação citando 3+ tabelas) não
+           puxam todas as tabelas mencionadas para evitar explosão de ruído.
         2. A partir das tabelas (recuperadas diretamente ou ativadas por regras),
            executa a Árvore de Steiner:
            - Se `steiner_apenas_tabelas=True` (padrão): percorre APENAS nós do tipo "tabela"
@@ -172,6 +193,7 @@ class SchemaGraph:
                 if node not in target_tables:
                     target_tables.append(node)
             elif node_tipo == "regra":
+                alvos_validos = []
                 for u, v, data in self.graph.edges(node, data=True):
                     if data.get("tipo") == "aplica_se":
                         tabela_alvo = v if u == node else u
@@ -179,16 +201,25 @@ class SchemaGraph:
                             tabela_alvo in self.graph
                             and self.graph.nodes[tabela_alvo].get("tipo") == "tabela"
                         ):
-                            relations.add(
-                                (
-                                    node,
-                                    tabela_alvo,
-                                    data.get("child_col", "aplica_se"),
-                                    data.get("parent_col", tabela_alvo),
-                                )
-                            )
-                            if tabela_alvo not in target_tables:
-                                target_tables.append(tabela_alvo)
+                            alvos_validos.append((tabela_alvo, data))
+
+                if (
+                    max_tabelas_por_regra is not None
+                    and len(alvos_validos) > max_tabelas_por_regra
+                ):
+                    continue
+
+                for tabela_alvo, data in alvos_validos:
+                    relations.add(
+                        (
+                            node,
+                            tabela_alvo,
+                            data.get("child_col", "aplica_se"),
+                            data.get("parent_col", tabela_alvo),
+                        )
+                    )
+                    if tabela_alvo not in target_tables:
+                        target_tables.append(tabela_alvo)
 
         if len(target_tables) < 2:
             return list(relations), list(missing_nodes)

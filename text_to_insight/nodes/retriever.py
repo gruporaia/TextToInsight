@@ -7,9 +7,11 @@ formata o resultado como texto e adiciona ao campo contexto_rag_schema.
 """
 
 from pathlib import Path
+from typing import Any
 
 from ..state import EstadoTextToInsight
 from ..retriever.engine import SchemaGraphRAG
+from ..retriever.reranker import DEFAULT_PRUNER_MODEL, _empty_token_update
 
 
 def _formatar_contexto_rag(retrieved, relations=None) -> str:
@@ -89,6 +91,16 @@ def nos_nodo_retriever(
     use_bm25: bool = True,
     use_embedding: bool = True,
     steiner_apenas_tabelas: bool = True,
+    nao_expandir_regras_tabelas: bool = False,
+    use_fk_boost: bool = True,
+    use_llm_pruner: bool = True,
+    pruner_llm: Any = None,
+    pruner_model: str = DEFAULT_PRUNER_MODEL,
+    pruner_api_key: str | None = None,
+    pruner_fallback_api_key: str | None = None,
+    pruner_fallback_model_name: str | None = None,
+    pruner_pool_k: int = 12,
+    pruner_reasoning_effort: str | None = None,
     docs_dir: str | Path | None = None,
     cache_dir: str | Path | None = None,
 ) -> dict:
@@ -107,6 +119,7 @@ def nos_nodo_retriever(
             "contexto_rag_schema": "",
             "status": "schema_vazio",
             "tentativas_revisao_retriever": tentativas_revisao + 1,
+            **_empty_token_update(),
         }
     regras_estado = estado.get("regras") or estado.get("contexto_regras")
     if isinstance(regras_estado, str):
@@ -117,18 +130,21 @@ def nos_nodo_retriever(
     # if use_rag is False, the RAG is disabled so we want pass the full schema
     # but if the schema is not so big (less than 5000 chars) and there are no external rules, we can also pass the full schema to avoid RAG overhead
     if (not use_rag) or (schema_size < 5000 and not tem_regras):
-        print("[RETRIEVER] RAG desativado. Passando o schema completo.")
+        print(f"[RETRIEVER] RAG desativado. Passando o schema completo ({schema_size} chars).")
         return {
             # contexto_rag_schema empty because we are not using RAG, the string must be empty because the code_agent will use this variable to check if RAG is used or not 
             "contexto_rag_schema": "", # (empty string returns False)
             "status": "schema_obtido",
             "tentativas_revisao_retriever": tentativas_revisao + 1,
+            **_empty_token_update(),
         }
 
     print(f"[RETRIEVER] schema completo: {len(schema_full)} chars (~{len(schema_full)//4} tokens)")
     
     tentativas = estado.get("tentativas_loop", 0)
-    top_k_dinamico = 8  + (tentativas * 4) # aumenta o top_k a cada tentativa de loop, para tentar recuperar mais tabelas se necessário
+    top_k_dinamico = 8 + (tentativas * 4) # aumenta o top_k a cada tentativa de loop, para tentar recuperar mais tabelas se necessário
+    # Em retries (tentativas > 0), desliga o LLM pruner para ampliar recall via FK-Boost + top_k_dinamico
+    pruner_esta_rodada = bool(use_llm_pruner and tentativas == 0)
 
     rag = SchemaGraphRAG(
         schema={"contexto_schema": schema_full},
@@ -138,9 +154,33 @@ def nos_nodo_retriever(
         use_bm25=use_bm25,
         use_embedding=use_embedding,
         steiner_apenas_tabelas=steiner_apenas_tabelas,
+        nao_expandir_regras_tabelas=nao_expandir_regras_tabelas,
+        use_fk_boost=use_fk_boost,
+        use_llm_pruner=pruner_esta_rodada,
+        pruner_llm=pruner_llm,
+        pruner_model=pruner_model,
+        pruner_api_key=pruner_api_key,
+        pruner_fallback_api_key=pruner_fallback_api_key,
+        pruner_fallback_model_name=pruner_fallback_model_name,
+        pruner_pool_k=pruner_pool_k,
+        pruner_reasoning_effort=pruner_reasoning_effort,
     )
-    print(f"[RETRIEVER] Recuperando top_k={top_k_dinamico} tabelas (loop atual: {tentativas})...")
-    retrieved, relations = rag.retrieve(pergunta, top_k=top_k_dinamico)
+    print(
+        f"[RETRIEVER] Recuperando top_k={top_k_dinamico} tabelas "
+        f"(loop={tentativas}, fk_boost={use_fk_boost}, llm_pruner={pruner_esta_rodada})..."
+    )
+    retrieved, relations = rag.retrieve(
+        pergunta,
+        top_k=top_k_dinamico,
+        use_llm_pruner=pruner_esta_rodada,
+    )
+    token_update = retrieved.get("token_usage") or _empty_token_update()
+    pruner_tok = (token_update.get("tokens_by_node") or {}).get("retriever_pruner")
+    if pruner_tok:
+        print(
+            f"[RETRIEVER] LLM Pruner ({pruner_model}): "
+            f"{pruner_tok['input']} in + {pruner_tok['output']} out = {pruner_tok['total']} tokens"
+        )
     
     print(f"[RETRIEVER] Tabelas recuperadas: {retrieved['ids'][0]}")
     print(f"[RETRIEVER] Relations: {relations}")
@@ -149,9 +189,10 @@ def nos_nodo_retriever(
         f"[RETRIEVER] schema reduzido: {len(reduzido)} chars (~{len(reduzido)//4} tokens) "
         f"| tabelas: {retrieved['ids'][0]}"
     )
-    # Retorna o contexto novo e reseta o status
+    # Retorna o contexto novo, reseta o status e soma os tokens do pruner no estado do grafo
     return {
         "contexto_rag_schema": reduzido,
         "status": "schema_obtido",
         "tentativas_revisao_retriever": tentativas_revisao + 1,
+        **token_update,
     }

@@ -21,7 +21,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from ..retriever.embeddings import embedding_model_id, get_default_embedding_function
 from ..retriever.engine import get_chroma_client
+from ..retriever.rag_logic import _split_identifier
 from ..state import EstadoTextToInsight
 from ..token_tracking import build_token_usage_update
 from ..utils import extrair_tokens
@@ -977,9 +979,12 @@ def _parse_columns_from_rag_context(contexto_rag: str) -> list[dict[str, str]]:
             col_name = col_match.group(1)
             col_detail = col_match.group(2)
             doc_id = f"{current_table}.{col_name}"
-            # Documento semântico: inclui tabela para contexto
+            # Documento semântico: inclui tabela e identificadores expandidos (PT/EN)
+            tbl_readable = _split_identifier(current_table)
+            col_readable = _split_identifier(col_name)
             document = (
-                f"Tabela {current_table}, coluna {col_name}: {col_detail}"
+                f"Table {current_table} ({tbl_readable}), "
+                f"column {col_name} ({col_readable}): {col_detail}"
             )
             docs.append({
                 "id": doc_id,
@@ -1027,12 +1032,18 @@ def _exploration_selector_rag(
         print("[EXPLORATION_SELECTOR] Nenhuma coluna encontrada no contexto RAG.")
         return {"colunas_para_explorar": {}}
 
-    # Criar collection efêmera com hash do contexto para evitar re-indexação
+    # Criar collection efêmera com hash do contexto + embedder para evitar colisões
+    ef = get_default_embedding_function()
+    model_id = embedding_model_id(ef)
     context_hash = hashlib.md5(contexto_rag.encode("utf-8")).hexdigest()
-    collection_name = f"cols_{context_hash}"
+    collection_name = f"cols_{model_id}_{context_hash}"
 
     chroma_client = get_chroma_client(cache_dir)
-    collection = chroma_client.get_or_create_collection(name=collection_name)
+    collection = chroma_client.get_or_create_collection(
+        name=collection_name,
+        embedding_function=ef,
+        metadata={"hnsw:space": "cosine"},
+    )
 
     # Indexar se necessário
     if collection.count() == 0:

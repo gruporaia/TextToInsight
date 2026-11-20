@@ -272,3 +272,96 @@ def test_schema_graph_rag_recupera_regras_das_tabelas_retornadas(tmp_path):
     )
 
 
+def test_nao_expandir_regras_tabelas_bloqueia_expansao_tabela_para_regra(tmp_path):
+    """
+    Verifica que `nao_expandir_regras_tabelas`:
+    - É False por padrão (expande normalmente).
+    - Quando True no SchemaGraph e SchemaGraphRAG, impede a expansão Tabela -> Regra,
+      mantendo apenas regras recuperadas diretamente pelo RAG.
+    """
+    from text_to_insight.retriever.engine import SchemaGraphRAG
+    from text_to_insight.retriever.graph_logic import SchemaGraph
+
+    trechos = extrair_trechos(
+        "1. **Filtro Obrigatorio**: Ignore registros legados na `tabela_c`.\n",
+        SCHEMA_GRAFO_SAMPLE,
+        "regras.md",
+    )
+    sg_padrao = SchemaGraph(schema=SCHEMA_GRAFO_SAMPLE, schema_info=trechos)
+    assert sg_padrao.nao_expandir_regras_tabelas is False
+    assert sg_padrao.get_rules_for_tables(["tabela_c"]) == ["rule:filtro_obrigatorio"]
+
+    sg_bloqueado = SchemaGraph(
+        schema=SCHEMA_GRAFO_SAMPLE,
+        schema_info=trechos,
+        nao_expandir_regras_tabelas=True,
+    )
+    assert sg_bloqueado.get_rules_for_tables(["tabela_c"]) == []
+
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "regras.md").write_text(
+        "1. **Filtro Obrigatorio**: Ignore registros legados na `tabela_c`.\n",
+        encoding="utf-8",
+    )
+    cache_dir = tmp_path / "cache"
+
+    rag_bloqueado = SchemaGraphRAG(
+        schema={"contexto_schema": SCHEMA_GRAFO_SAMPLE},
+        docs_dir=docs_dir,
+        cache_dir=cache_dir,
+        use_bm25=True,
+        use_embedding=False,
+        nao_expandir_regras_tabelas=True,
+    )
+    retrieved, _ = rag_bloqueado.retrieve("id_a id_b", top_k=2)
+    assert "tabela_c" in retrieved["tabelas_ordenadas"]
+    assert "rule:filtro_obrigatorio" not in retrieved["ids"][0]
+    assert retrieved["regras_por_tabela"].get("tabela_c", []) == []
+
+
+def test_insight_engine_propaga_nao_expandir_regras_tabelas(monkeypatch, tmp_path):
+    """InsightEngine mantém `nao_expandir_regras_tabelas=True` por padrão e propaga até Graph/retriever."""
+    import importlib
+    from unittest.mock import MagicMock
+    from sqlalchemy import create_engine
+
+    ie_mod = importlib.import_module("text_to_insight.InsightEngine")
+    graph_mod = importlib.import_module("text_to_insight.graph")
+
+    db_engine = create_engine(f"sqlite:///{tmp_path / 'db.sqlite'}")
+    captured = []
+
+    class _FakeGraph:
+        def __init__(self, **kwargs):
+            captured.append(kwargs)
+            self.grafo_text_to_insight = MagicMock()
+
+    monkeypatch.setattr(ie_mod, "Graph", _FakeGraph)
+    try:
+        eng_default = ie_mod.InsightEngine(api_key="k", model="gemini-2.5-flash", db_engine=db_engine)
+        eng_off = ie_mod.InsightEngine(
+            api_key="k",
+            model="gemini-2.5-flash",
+            db_engine=db_engine,
+            nao_expandir_regras_tabelas=False,
+        )
+
+        assert eng_default._nao_expandir_regras_tabelas is True
+        assert captured[0]["nao_expandir_regras_tabelas"] is True
+        assert eng_off._nao_expandir_regras_tabelas is False
+        assert captured[1]["nao_expandir_regras_tabelas"] is False
+
+        monkeypatch.setattr(graph_mod, "get_model", lambda *a, **kw: MagicMock())
+        g = graph_mod.Graph(
+            api_key="k",
+            model="gemini-2.5-flash",
+            db_engine=db_engine,
+            nao_expandir_regras_tabelas=True,
+        )
+        assert g.nao_expandir_regras_tabelas is True
+    finally:
+        db_engine.dispose()
+
+
+
