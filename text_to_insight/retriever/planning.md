@@ -226,18 +226,6 @@ colunas_recuperadas = set(resultado["recommended_columns"])
 7. `state.py`:
    - Adição do campo `contexto_regras_negocio: str` no `EstadoTextToInsight`.
 
----
-
-Indicações musicais para o desenvolvimento:
-
-Development: In On It - Superheaven
-
-Bug fix: Telefone Mudo - Trio Parada Dura
-
-Refactoring: Duality - Slikpnot
-
----
-
 # Critérios de Sucesso e Verificação
 
 - [ ] **Métricas Alvo no Benchmark Automatizado BIRD:**
