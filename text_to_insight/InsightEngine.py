@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .graph import Graph
+from .retriever.reranker import DEFAULT_PRUNER_MODEL
 from .runtime import construir_estado_inicial, executar_fluxo, exibir_resultado_console, registrar_resposta_humana
 from .utils import salvar_metricas_csv
 
@@ -29,9 +30,20 @@ class InsightEngine:
         use_data_exploration: bool = True,
         use_exploration_selector: str = "off",
         use_rag: bool = True,
+        use_bm25: bool = True,
+        use_embedding: bool = True,
+        steiner_apenas_tabelas: bool = True,
+        nao_expandir_regras_tabelas: bool = True,
+        use_fk_boost: bool = True,
+        use_llm_pruner: bool = True,
+        pruner_model: str = DEFAULT_PRUNER_MODEL,
+        pruner_api_key: str | None = None,
+        pruner_pool_k: int = 12,
+        pruner_reasoning_effort: str | None = None,
         enrich_rag: bool = False,
         inferir_fks_virtuais: bool = False,
         model_kwargs: dict | None = None,
+        docs_dir: str | Path | None = None,
         cache_dir: str | Path | None = None,
     ):
         """
@@ -41,6 +53,9 @@ class InsightEngine:
         acesso ao banco passa por essa engine. Ela nunca é copiada para o
         estado do grafo (nada sobre a conexão vai para o checkpoint do
         LangGraph) e o dialeto é lido diretamente dela.
+
+        `docs_dir` é o caminho para uma pasta (ou arquivo `.md`) com
+        documentação de domínio e regras de negócio usadas pelo retriever RAG.
 
         `cache_dir` é a pasta onde ficam o schema enriquecido (enrich_rag) e
         o índice do ChromaDB. Se omitida, usa a pasta de cache do usuário
@@ -59,6 +74,7 @@ class InsightEngine:
         self._enrich_rag = enrich_rag
         self._inferir_fks_virtuais = inferir_fks_virtuais
         self._db_engine = db_engine
+        self._docs_dir = Path(docs_dir).expanduser() if docs_dir else None
         self._cache_dir = cache_dir
         self._model = model
         # Parâmetros repassados ao construtor do LLM (ex.: temperature, max_tokens).
@@ -67,6 +83,16 @@ class InsightEngine:
         self._use_data_exploration = use_data_exploration
         self._use_exploration_selector = use_exploration_selector
         self._use_rag = use_rag
+        self._use_bm25 = use_bm25
+        self._use_embedding = use_embedding
+        self._steiner_apenas_tabelas = steiner_apenas_tabelas
+        self._nao_expandir_regras_tabelas = nao_expandir_regras_tabelas
+        self._use_fk_boost = use_fk_boost
+        self._use_llm_pruner = use_llm_pruner
+        self._pruner_model = pruner_model
+        self._pruner_api_key = pruner_api_key
+        self._pruner_pool_k = pruner_pool_k
+        self._pruner_reasoning_effort = pruner_reasoning_effort
         # O grafo compila os nós/roteadores e guarda memória por thread_id.
         self._grafo = Graph(
             api_key=api_key,
@@ -77,9 +103,20 @@ class InsightEngine:
             use_data_exploration=self._use_data_exploration,
             use_exploration_selector=self._use_exploration_selector,
             use_rag=self._use_rag,
+            use_bm25=self._use_bm25,
+            use_embedding=self._use_embedding,
+            steiner_apenas_tabelas=self._steiner_apenas_tabelas,
+            nao_expandir_regras_tabelas=self._nao_expandir_regras_tabelas,
+            use_fk_boost=self._use_fk_boost,
+            use_llm_pruner=self._use_llm_pruner,
+            pruner_model=self._pruner_model,
+            pruner_api_key=self._pruner_api_key,
+            pruner_pool_k=self._pruner_pool_k,
+            pruner_reasoning_effort=self._pruner_reasoning_effort,
             enrich_rag=self._enrich_rag,
             model_kwargs=self._model_kwargs,
             db_engine=self._db_engine,
+            docs_dir=self._docs_dir,
             cache_dir=self._cache_dir,
         )
 
@@ -90,8 +127,18 @@ class InsightEngine:
         print(f"[CONFIG] DATA_EXPLORATION: {'ATIVADO' if self._use_data_exploration else 'DESATIVADO'}")
         print(f"[CONFIG] EXPLORATION_SELECTOR: {self._use_exploration_selector.upper()}")
         print(f"[CONFIG] RAG: {'ATIVADO' if self._use_rag else 'DESATIVADO'}")
+        print(f"[CONFIG] RAG BM25: {'ATIVADO' if self._use_bm25 else 'DESATIVADO'}")
+        print(f"[CONFIG] RAG EMBEDDING: {'ATIVADO' if self._use_embedding else 'DESATIVADO'}")
+        print(f"[CONFIG] RAG FK-BOOST: {'ATIVADO' if self._use_fk_boost else 'DESATIVADO'}")
+        print(
+            f"[CONFIG] RAG LLM-PRUNER: {'ATIVADO' if self._use_llm_pruner else 'DESATIVADO'}"
+            + (f" (modelo={self._pruner_model})" if self._use_llm_pruner else "")
+        )
+        print(f"[CONFIG] STEINER APENAS TABELAS: {'ATIVADO' if self._steiner_apenas_tabelas else 'DESATIVADO'}")
+        print(f"[CONFIG] NAO EXPANDIR REGRAS TABELAS: {'ATIVADO' if self._nao_expandir_regras_tabelas else 'DESATIVADO'}")
         print(f"[CONFIG] ENRICH-RAG: {'ATIVADO' if self._enrich_rag else 'DESATIVADO'}")
         print(f"[CONFIG] INFERIR-FKS-VIRTUAIS: {'ATIVADO' if self._inferir_fks_virtuais else 'DESATIVADO'}")
+        print(f"[CONFIG] DOCS_DIR: {self._docs_dir or 'NENHUM'}")
         print(f"[CONFIG] BANCO: {self._db_engine.dialect.name}")
         print(f"[CONFIG] MODEL_KWARGS: {self._model_kwargs or 'PADRÃO DO PROVEDOR'}")
 

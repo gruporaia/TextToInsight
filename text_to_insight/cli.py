@@ -14,6 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from text_to_insight.InsightEngine import InsightEngine
+from text_to_insight.retriever.reranker import DEFAULT_PRUNER_MODEL
 from text_to_insight.runtime import exibir_resultado_console
 
 load_dotenv()
@@ -78,6 +79,16 @@ def _criar_engine(db_path: str | None, db_url: str | None, timeout_segundos: int
     if not caminho.exists():
         raise SystemExit(f"Arquivo de banco não encontrado: {caminho}")
     return create_engine(f"sqlite:///file:{caminho}?mode=ro&uri=true")
+
+
+def _resolver_docs_dir(docs_dir: str | None) -> Path | None:
+    """Valida e resolve o caminho passado em `--docs-dir` (pasta ou arquivo .md)."""
+    if not docs_dir:
+        return None
+    caminho = Path(docs_dir).expanduser().resolve()
+    if not caminho.exists():
+        raise SystemExit(f"Caminho de documentação (--docs-dir) não encontrado: {caminho}")
+    return caminho
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -163,6 +174,28 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Modo de seleção de colunas para exploração. Padrão: off.",
     )
     parser.add_argument(
+        "--docs-dir",
+        default=None,
+        help="Caminho para diretório (ou arquivo .md) com documentação e regras de negócio para o RAG.",
+    )
+    parser.add_argument(
+        "--fk-boost",
+        choices=["on", "off"],
+        default="on",
+        help="Ativa/desativa o Graph-Aware FK Boost no retriever RAG. Padrão: on.",
+    )
+    parser.add_argument(
+        "--llm-pruner",
+        choices=["on", "off"],
+        default="on",
+        help="Ativa/desativa o LLM Pruner no retriever RAG. Padrão: on.",
+    )
+    parser.add_argument(
+        "--pruner-model",
+        default=DEFAULT_PRUNER_MODEL,
+        help=f"Modelo usado no LLM Pruner do retriever RAG. Padrão: {DEFAULT_PRUNER_MODEL}.",
+    )
+    parser.add_argument(
         "pergunta",
         nargs="*",
         help="Pergunta em linguagem natural. Se omitida, usa uma pergunta padrão.",
@@ -201,6 +234,7 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
 
     # O CLI constrói e é dono da Engine SQLAlchemy (inclusive do dispose() no
     # final) e a repassa pronta para a InsightEngine.
+    docs_dir_resolvido = _resolver_docs_dir(args.docs_dir)
     db_engine = _criar_engine(args.db_path, args.db_url)
     engine = InsightEngine(
         api_key=api_key,
@@ -213,7 +247,11 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         use_cot=cot_ativado,
         use_data_exploration=data_exploration_ativado,
         use_exploration_selector=exploration_selector_mode,
+        use_fk_boost=(args.fk_boost == "on"),
+        use_llm_pruner=(args.llm_pruner == "on"),
+        pruner_model=args.pruner_model,
         model_kwargs=_montar_model_kwargs(args),
+        docs_dir=docs_dir_resolvido,
     )
 
     # show_output=False para evitar prints duplicados no console, já que exibir_resultado_console é chamado manualmente.

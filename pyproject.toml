@@ -45,6 +45,7 @@ dependencies = [
     "tabulate>=0.10.0",
     "sqlalchemy>=2.0.0",
     "platformdirs>=3.0",
+    "nltk>=3.8",
 ]
 
 [project.scripts]
