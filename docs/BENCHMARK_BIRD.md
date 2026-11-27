@@ -30,7 +30,7 @@ flowchart TD
 ## 2. Preparacao do Ambiente e Download dos Dados
 
 ### 2.1. Ativacao do Ambiente Virtual
-Certifique-se de que o ambiente virtual do projeto esteja ativo antes de executar os scripts:
+Prepare a `.venv` seguindo o [setup local do guia de desenvolvimento](DESENVOLVIMENTO.md#setup-local). Ative o ambiente se for executar os exemplos abaixo com `python` diretamente:
 ```bash
 source .venv/bin/activate
 ```
@@ -78,7 +78,7 @@ Antes de iniciar execucoes com chamadas a modelos de linguagem, valide a integri
 ### 3.1. Testes Unitarios Locais
 Execute a suite de testes unitarios da integracao BIRD via pytest:
 ```bash
-pytest tests/test_bird_eval.py -v
+uv run --no-sync pytest tests/test_bird_eval.py -v
 ```
 Caracteristicas da suite:
 - Nao consome chamadas de rede nem tokens de LLM.

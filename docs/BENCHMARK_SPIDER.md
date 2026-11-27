@@ -35,7 +35,7 @@ flowchart TD
 ## 2. Environment & Spider 2.0 Lite Dataset Setup
 
 ### 2.1. Virtual Environment Activation
-Ensure that the project's virtual environment is activated before running evaluation scripts:
+Create the project's `.venv` by following the [development setup guide](DESENVOLVIMENTO.md#setup-local). Activate it if you run the examples below directly with `python`:
 ```bash
 source .venv/bin/activate
 ```
@@ -87,7 +87,7 @@ Before launching live model evaluation runs, verify system integrity using the a
 ### 3.1. Fast Isolated Unit Tests
 Execute the comprehensive Spider 2.0 test suite via `pytest`:
 ```bash
-pytest tests/test_spider2_eval.py -v
+uv run --no-sync pytest tests/test_spider2_eval.py -v
 ```
 Characteristics of this test suite:
 - **Zero API Dependencies:** Requires no active network connection, OpenAI, or Google API credits.

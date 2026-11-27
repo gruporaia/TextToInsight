@@ -159,7 +159,8 @@ text-to-insight --db-url postgresql://usuario:senha@host:5432/banco --docs-dir .
 
 ## Desenvolvimento
 
-- [Guia de desenvolvimento e testes](https://github.com/gruporaia/TextToInsight/blob/main/docs/DESENVOLVIMENTO.md)
+Para contribuir a partir de um clone, siga o [guia de desenvolvimento e testes](docs/DESENVOLVIMENTO.md). Ele usa o uv para instalar o código local e as mesmas versões de dependências que os testes do GitHub usam.
+
 - [Arquitetura](https://github.com/gruporaia/TextToInsight/blob/main/docs/ARQUITETURA.md)
 - Benchmarks: [BIRD](https://github.com/gruporaia/TextToInsight/blob/main/docs/BENCHMARK_BIRD.md), [Spider 1.0 e 2.0](https://github.com/gruporaia/TextToInsight/blob/main/docs/BENCHMARK_SPIDER.md)
 

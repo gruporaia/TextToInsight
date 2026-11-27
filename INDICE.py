@@ -17,7 +17,7 @@ TextToInsight/                             (Raiz do projeto)
 ├── 📄 DESENVOLVIMENTO.md                  Guia de setup e desenvolvimento local
 │
 ├── 🔧 pyproject.toml                      Metadados e dependências do projeto
-├── 📋 requirements.txt                    Dependências pip
+├── 📋 uv.lock                             Versões usadas no desenvolvimento e CI
 ├── .gitignore                             Padrões ignorados pelo git
 │
 ├── 🚀 main.py                             Script de execução principal

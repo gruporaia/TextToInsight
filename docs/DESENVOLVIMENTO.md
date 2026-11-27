@@ -7,46 +7,64 @@ Imports antigos via `src` nao devem mais ser usados.
 
 ## Setup local
 
-### Pré-requisitos
-
-- Python 3.10+
-- venv/conda
-- chave de API (Gemini ou OpenAI, conforme modelo escolhido)
-
 ### Instalação
 
-Cria um ambiente isolado, instala as dependências e registra o pacote local em modo editável.
+Para desenvolver e rodar os testes, use Python 3.11 e uv 0.12.19, como no CI.
+Instale o uv pelo [instalador oficial ou outro método da Astral](https://docs.astral.sh/uv/getting-started/installation/).
+No Linux ou macOS, você pode instalar essa versão assim:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-
-pip install -r requirements.txt
-pip install -e ".[dev,postgres,mysql]"
+curl -LsSf https://astral.sh/uv/0.12.19/install.sh | sh
 ```
 
-- `python -m venv .venv`: cria um ambiente isolado.
-- `source .venv/bin/activate`: ativa esse ambiente.
-- `pip install -r requirements.txt`: instala as versões fixadas de runtime e das ferramentas de teste (é o que a CI usa).
-- `pip install -e ".[dev,postgres,mysql]"`: instala o TextToInsight em modo editável, com as ferramentas de desenvolvimento e os drivers de PostgreSQL/MySQL (extras do `pyproject.toml`).
-
-### Configuração
+Abra o terminal na raiz do clone e execute:
 
 ```bash
-echo "GOOGLE_API_KEY=sua_chave" > .env
+uv --version
+uv sync --locked --python 3.11 --extra dev --extra postgres --extra mysql
+uv run --no-sync python -c "from text_to_insight import InsightEngine, Graph; print('OK')"
 ```
 
-Banco de teste (Olist, ~130 MB), usado pela suíte de testes e pelos exemplos abaixo:
+O `pyproject.toml` declara as dependências e os extras. O uv gera o `uv.lock`
+com as versões resolvidas, incluindo as dependências indiretas. A opção
+`--locked` confere a correspondência entre os arquivos e encerra com erro se o
+lock precisar ser atualizado.
+
+O sync cria a `.venv` e instala o TextToInsight em modo editável, então
+alterações no código do clone ficam disponíveis nos testes. O extra `dev`
+inclui ferramentas como pytest, e `postgres` e `mysql` incluem os drivers.
+O uv pode baixar o Python 3.11 se ele ainda não estiver disponível. Depois do
+sync, `uv run --no-sync` usa esse ambiente sem sincronizar novamente. Se quiser
+usar `python` diretamente no Bash, ative o ambiente com `source .venv/bin/activate`.
+
+Para usar a biblioteca publicada em outro projeto, siga a seção
+[Instalação do README](../README.md#instalação).
+
+### Atualizar dependências
+
+Quando mudar uma declaração no `pyproject.toml`, rode `uv lock --python 3.11`.
+Para atualizar um pacote dentro das faixas já declaradas, use
+`uv lock --python 3.11 --upgrade-package NOME_DO_PACOTE`. Revise o
+`git diff -- uv.lock`, rode `uv lock --check --python 3.11` e repita o sync e os
+testes. Inclua a atualização do lock junto com a mudança de dependências.
+
+### Bancos de teste
+
+O SQLite vem com o Python. Para os testes e exemplos que precisam do banco Olist
+(~130 MB), baixe o arquivo da release com o GitHub CLI:
 
 ```bash
 gh release download dados-teste -R gruporaia/TextToInsight -p olist_relational.db -D data/
 ```
 
-###  Verificação Rápida (Smoke) de import
+Para os testes de PostgreSQL, prepare um banco descartável e defina
+`TEXT_TO_INSIGHT_TEST_PG_URL` conforme o exemplo na seção [Testes](#testes).
 
-```bash
-python -c "from text_to_insight import InsightEngine, Graph; print('OK')"
-```
+### Credenciais de API
+
+Use `GOOGLE_API_KEY` ou `OPENAI_API_KEY` quando fizer chamadas reais, como na
+gravação de cassetes e nos testes de API real. Para conferir a instalação
+ou rodar o replay, siga o exemplo com chave fictícia na seção [Testes](#testes).
 
 ## Conexão com o banco
 
@@ -101,20 +119,20 @@ Critérios mínimos:
 
 ```bash
 # adaptador local
-python main.py --db-path data/olist_relational.db --hitl on "Quantos pedidos existem no banco?"
+uv run --no-sync python main.py --db-path data/olist_relational.db --hitl on "Quantos pedidos existem no banco?"
 
 # biblioteca instalada (entrypoint)
-text-to-insight --db-path data/olist_relational.db --hitl off "Quais categorias vendem mais?"
+uv run --no-sync text-to-insight --db-path data/olist_relational.db --hitl off "Quais categorias vendem mais?"
 
 # com modelo OpenAI
 set -a && source .env && set +a
-python main.py --db-path data/olist_relational.db --hitl off --model openai/gpt-4o-mini --api-key-env OPENAI_API_KEY "Quantos pedidos existem?"
+uv run --no-sync python main.py --db-path data/olist_relational.db --hitl off --model openai/gpt-4o-mini --api-key-env OPENAI_API_KEY "Quantos pedidos existem?"
 
 # bancos sem FK declarada (ex.: Spider 2): inferência de FKs pelo nome das colunas
-python main.py --db-path caminho/do/banco.sqlite --hitl off --infer-fks on "Qual a soma dos resultados?"
+uv run --no-sync python main.py --db-path caminho/do/banco.sqlite --hitl off --infer-fks on "Qual a soma dos resultados?"
 
 # PostgreSQL/MySQL via URL (ou variável DATABASE_URL)
-python main.py --db-url postgresql://usuario:senha@host:5432/banco --hitl off "Quantos clientes existem?"
+uv run --no-sync python main.py --db-url postgresql://usuario:senha@host:5432/banco --hitl off "Quantos clientes existem?"
 ```
 
 O resultado é exibido no terminal em formato tabular sob o bloco `RESULTADO:`, junto com SQL gerada, status de execução e resposta natural.
@@ -157,33 +175,46 @@ tests/
 
 ## Testes
 
+Para rodar os testes VCR em replay, prepare o banco Olist e selecione a mesma
+combinação de provedor e modelo usada na gravação. O exemplo usa uma chave
+fictícia, como no CI:
+
+```bash
+TEXT_TO_INSIGHT_TEST_PROVIDER=google TEXT_TO_INSIGHT_TEST_MODEL=gemini-2.5-flash \
+GOOGLE_API_KEY=dummy-key \
+uv run --no-sync pytest tests/test_nodes.py tests/test_integracao.py -v --record-mode=none -m 'not real_api'
+```
+
+Para o conjunto OpenAI, use `TEXT_TO_INSIGHT_TEST_PROVIDER=openai`,
+`TEXT_TO_INSIGHT_TEST_MODEL=gpt-4o-mini` e `OPENAI_API_KEY=dummy-key`.
+
 ### Camadas
 
 ```bash
 # camada 1 - componentes deterministicos
-pytest tests/test_componentes.py -v -s
+uv run --no-sync pytest tests/test_componentes.py -v -s
 
 # camada 2 - nos com VCR (replay, sem gravar novas cassetes)
-pytest tests/test_nodes.py -v -s --record-mode=none
+uv run --no-sync pytest tests/test_nodes.py -v -s --record-mode=none
 
 # camada 2 - nos com VCR (gravar/atualizar cassetes)
-pytest tests/test_nodes.py -v -s --record-mode=new_episodes
+uv run --no-sync pytest tests/test_nodes.py -v -s --record-mode=new_episodes
 
 # camada 3 - integracao do grafo com VCR (replay, sem gravar)
-pytest tests/test_integracao.py -v -s --record-mode=none
+uv run --no-sync pytest tests/test_integracao.py -v -s --record-mode=none
 
 # camada 3 - integracao do grafo com VCR (gravar/atualizar cassetes)
-pytest tests/test_integracao.py -v -s --record-mode=new_episodes
+uv run --no-sync pytest tests/test_integracao.py -v -s --record-mode=new_episodes
 
 # integracao main + InsightEngine
-pytest tests/test_main_engine_integracao.py -v -s
+uv run --no-sync pytest tests/test_main_engine_integracao.py -v -s
 
 # integracao do pacote como biblioteca (sem chamadas de API, testa HITL e run/resume)
-pytest tests/test_biblioteca_integracao.py -v -s
+uv run --no-sync pytest tests/test_biblioteca_integracao.py -v -s
 
 # data exploration em PostgreSQL (pulados sem TEXT_TO_INSIGHT_TEST_PG_URL)
 TEXT_TO_INSIGHT_TEST_PG_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/postgres \
-pytest tests/test_data_exploration_postgres.py -v
+uv run --no-sync pytest tests/test_data_exploration_postgres.py -v
 ```
 
 Os testes de PostgreSQL criam e apagam o schema `tti_testes` no banco da URL;
@@ -196,10 +227,10 @@ Use este fluxo quando mudar prompts, comportamento de nos ou quando adicionar te
 
 ```bash
 # 1) Grave/atualize as cassetes
-pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=new_episodes
+uv run --no-sync pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=new_episodes
 
 # 2) Rode em replay para garantir determinismo
-pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=none
+uv run --no-sync pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=none
 ```
 
 Observacões:
@@ -213,7 +244,7 @@ Observacões:
 Use `rewrite` quando quiser **substituir completamente** as cassetes existentes, por exemplo, após uma mudança grande de prompt que torna as respostas gravadas incompatíveis com os testes atuais.
 
 ```bash
-pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=rewrite
+uv run --no-sync pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=rewrite
 ```
 
 > ⚠️ **Atenção:** `rewrite` apaga e regrava **todas** as cassetes do escopo, mesmo as que ainda funcionariam.
@@ -240,9 +271,9 @@ Os testes de API real usam a fixture compartilhada em `tests/conftest.py` para r
 
 Resumo do funcionamento local:
 
-- `pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=none` faz replay apenas; se faltar cassette, o teste falha.
-- `pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=new_episodes` grava só as chamadas que ainda nao existem no YAML.
-- `pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=rewrite` regrava tudo do escopo.
+- `uv run --no-sync pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=none` faz replay apenas; se faltar cassette, o teste falha.
+- `uv run --no-sync pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=new_episodes` grava só as chamadas que ainda nao existem no YAML.
+- `uv run --no-sync pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=rewrite` regrava tudo do escopo.
 - o fixture monta o nome do cassette a partir do teste e adiciona sufixo quando o provider/modelo sai do padrao Gemini; por isso `gpt-4o-mini` usa cassettes com `__openai-gpt-4o-mini` e `gemini-2.5-flash` usa os nomes sem sufixo.
 
 Para gravar novas cassetes de forma previsível, escolha explicitamente provider e modelo:
@@ -250,13 +281,13 @@ Para gravar novas cassetes de forma previsível, escolha explicitamente provider
 ```bash
 TEXT_TO_INSIGHT_TEST_PROVIDER=google \
 TEXT_TO_INSIGHT_TEST_MODEL=gemini-2.5-flash \
-pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=new_episodes
+uv run --no-sync pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=new_episodes
 ```
 
 ```bash
 TEXT_TO_INSIGHT_TEST_PROVIDER=openai \
 TEXT_TO_INSIGHT_TEST_MODEL=gpt-4o-mini \
-pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=new_episodes
+uv run --no-sync pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=new_episodes
 ```
 
 Se voce definir as variaveis em linhas separadas no shell, use `export` para que o `pytest` e os processos filhos enxerguem os valores. Sem `export`, a atribuição fica só no shell atual e a suíte de testes não herda a configuração.
@@ -266,14 +297,14 @@ Uso recomendado:
 ```bash
 export TEXT_TO_INSIGHT_TEST_PROVIDER=openai
 export TEXT_TO_INSIGHT_TEST_MODEL=gpt-4o-mini
-pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=new_episodes
+uv run --no-sync pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=new_episodes
 ```
 
 Tambem funciona em uma linha só, sem `export`:
 
 ```bash
 TEXT_TO_INSIGHT_TEST_PROVIDER=openai TEXT_TO_INSIGHT_TEST_MODEL=gpt-4o-mini \
-pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=new_episodes
+uv run --no-sync pytest tests/test_nodes.py tests/test_integracao.py -v -s --record-mode=new_episodes
 ```
 
 Se o provider/modelo sair do padrão Gemini, os nomes dos cassetes ganham sufixo automático para evitar colisão com as cassetes existentes.
@@ -281,7 +312,7 @@ Se o provider/modelo sair do padrão Gemini, os nomes dos cassetes ganham sufixo
 ### Drift provider/modelo (opcional) para verificar se API real ainda responde conforme esperado:
 
 ```bash
-pytest tests/test_real_api_smoke.py -v -s -m real_api
+uv run --no-sync pytest tests/test_real_api_smoke.py -v -s -m real_api
 ```
 
 ### Benchmark Spider (1.0)
@@ -289,7 +320,7 @@ pytest tests/test_real_api_smoke.py -v -s -m real_api
 Requer o dataset Spider em `spider_data/` (com `dev.json` e `database/`).
 
 ```bash
-python scripts/test_spider_eval.py --sample-size 10 --seed 42 --data-dir spider_data
+uv run --no-sync python scripts/test_spider_eval.py --sample-size 10 --seed 42 --data-dir spider_data
 ```
 
 Opções úteis: `--db-filter`, `--question-filter`, `--model`, `--with-graphs`, `--report-dir`.
@@ -300,7 +331,7 @@ Requer o dataset Spider 2.0 Lite em `spider2-lite/` e os bancos SQLite em
 `spider2-lite/resource/databases/spider2-localdb`.
 
 ```bash
-python scripts/test_spider2_eval.py --sample-size 10 --seed 42 \
+uv run --no-sync python scripts/test_spider2_eval.py --sample-size 10 --seed 42 \
     --data-dir spider2-lite \
     --sqlite-dir spider2-lite/resource/databases/spider2-localdb
 ```
@@ -309,21 +340,21 @@ Opções úteis: `--db-filter`, `--question-filter`, `--model`, `--with-graphs`,
 
 ### Benchmark BIRD (Big Bench for Large-scale Database Grounded Text-to-SQL Evaluation)
 
-Requer o dataset BIRD em `data/bird/` (baixe e extraia via `python scripts/setup_bird_data.py --mini`).
+Requer o dataset BIRD em `data/bird/` (baixe e extraia via `uv run --no-sync python scripts/setup_bird_data.py --mini`).
 
 ```bash
 # 1) Testes unitários do harness BIRD (< 1s, sem consumo de API)
-pytest tests/test_bird_eval.py -v
+uv run --no-sync pytest tests/test_bird_eval.py -v
 
 # 2) Smoke test rápido sem custo de LLM (dry-run)
-python scripts/test_bird_eval.py --sample-size 3 --dry-run
+uv run --no-sync python scripts/test_bird_eval.py --sample-size 3 --dry-run
 
 # 3) Avaliação real com modelo configurado no .env
-python scripts/test_bird_eval.py --sample-size 20 --seed 42 --rag on
+uv run --no-sync python scripts/test_bird_eval.py --sample-size 20 --seed 42 --rag on
 
 # 4) Experimento de ablação: SchemaGraphRAG (Steiner Tree)
-python scripts/test_bird_eval.py --sample-size 50 --seed 123 --rag on --output reports/bird/rag_on.csv
-python scripts/test_bird_eval.py --sample-size 50 --seed 123 --rag off --output reports/bird/rag_off.csv
+uv run --no-sync python scripts/test_bird_eval.py --sample-size 50 --seed 123 --rag on --output reports/bird/rag_on.csv
+uv run --no-sync python scripts/test_bird_eval.py --sample-size 50 --seed 123 --rag off --output reports/bird/rag_off.csv
 ```
 
 Opções úteis: `--db-filter`, `--difficulty` (`simple`, `moderate`, `challenging`), `--stratify`, `--use-evidence` (`on`/`off`), `--dry-run`, `--output`.
@@ -334,6 +365,9 @@ Consulte o manual operacional completo em [BENCHMARK_BIRD.md](BENCHMARK_BIRD.md)
 
 Arquivo: `.github/workflows/ci.yml`
 
+Os três jobs instalam as dependências com o mesmo `uv sync --locked` do setup
+local e rodam o pytest no ambiente já sincronizado.
+
 - job padrão determinístico em PR/push roda em matriz com as duas combinações de cassette: `openai / gpt-4o-mini` e `google / gemini-2.5-flash`, sempre em `--record-mode=none`;
 - job manual `record-vcr-cassettes` em `workflow_dispatch` tambem roda as duas combinações e pode gravar/atualizar os dois conjuntos de cassetes;
 - job opcional real API em `workflow_dispatch` e `schedule`.
@@ -343,23 +377,25 @@ Arquivo: `.github/workflows/ci.yml`
 Esse teste garante que o pacote pode ser construído e instalado a partir do wheel, simulando o processo de distribuição real a um usuário novo instalando o pacote pela primeira vez. Se algo estiver faltando no wheel (como arquivos, dependências ou configurações), esse teste deve falhar, indicando que o pacote não está pronto para distribuição.
 
 ```bash
-python -m build
-
-python -m venv .venv-smoke
-source .venv-smoke/bin/activate
-pip install dist/*.whl
-python -c "from text_to_insight import InsightEngine; print('wheel_ok')"
+smoke_dir="$(mktemp -d)"
+uv build --python 3.11 --out-dir "$smoke_dir/dist"
+uv venv --python 3.11 --seed "$smoke_dir/venv"
+"$smoke_dir/venv/bin/python" -m pip install "$smoke_dir"/dist/*.whl
+(cd "$smoke_dir" && "$smoke_dir/venv/bin/python" -I -c "from text_to_insight import InsightEngine; print('wheel_ok')")
 ```
 
 ## Troubleshooting (diagnóstico de falhas) rápido
 
-`ModuleNotFoundError`:
+`ModuleNotFoundError` no ambiente de desenvolvimento: sincronize a venv e
+rode o comando com `uv run --no-sync`.
+
 ```bash
-pip install -r requirements.txt
-pip install -e ".[dev,postgres,mysql]"
+uv sync --locked --python 3.11 --extra dev --extra postgres --extra mysql
 ```
 
-`No module named 'psycopg2'` / `'pymysql'`: instale o extra do banco, ex.: `pip install "text-to-insight[postgres]"`.
+Para quem usa o pacote publicado, `No module named 'psycopg2'` ou `'pymysql'`
+indica que é preciso instalar o extra do banco, por exemplo,
+`pip install "text-to-insight[postgres]"`.
 
 `429 RESOURCE_EXHAUSTED`:
 - aguardar reset de quota;
